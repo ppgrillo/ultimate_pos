@@ -1,6 +1,6 @@
+import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../middleware/auth'
-import { createSupabaseClient } from '../lib/supabase/server'
 import { notFound, badRequest } from '../middleware/error'
 
 export const employeesRouter = new Hono()
@@ -8,7 +8,7 @@ export const employeesRouter = new Hono()
 employeesRouter.use('*', authMiddleware, requireRole('admin'))
 
 employeesRouter.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
 
   const { data, error } = await supabase
@@ -22,7 +22,7 @@ employeesRouter.get('/', async (c) => {
 })
 
 employeesRouter.patch('/:id/deactivate', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { data, error } = await supabase

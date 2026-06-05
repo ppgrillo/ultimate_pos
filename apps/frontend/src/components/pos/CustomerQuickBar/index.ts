@@ -1,0 +1,1 @@
+export { CustomerQuickBar } from './CustomerQuickBar'

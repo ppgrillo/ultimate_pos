@@ -1,4 +1,18 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api'
+// Always route through the Next.js middleware proxy (/api/*).
+// NEXT_PUBLIC_API_URL is used server-side only (middleware.ts) for the actual
+// backend destination. The client must never call the backend directly to
+// avoid CORS issues.
+const API_BASE = '/api'
+
+let _token: string | null = null
+
+export function setApiToken(token: string | null) {
+  _token = token
+}
+
+export function getApiToken() {
+  return _token
+}
 
 interface ApiOptions extends RequestInit {
   params?: Record<string, string>
@@ -14,17 +28,30 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     url += `?${searchParams.toString()}`
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(fetchOptions.headers as Record<string, string>),
+  }
+
+  if (_token) {
+    headers['Authorization'] = `Bearer ${_token}`
+  }
+
   const res = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...fetchOptions.headers,
-    },
+    headers,
     ...fetchOptions,
   })
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Request failed' }))
-    throw new Error(error.message || `HTTP ${res.status}`)
+    const body = await res.json().catch(() => null)
+    const err = new Error(
+      body?.error?.issues
+        ? body.error.issues.map((i: any) => i.message).join('; ')
+        : body?.error?.message || body?.message || `HTTP ${res.status}`,
+    )
+    ;(err as any).body = body
+    ;(err as any).status = res.status
+    throw err
   }
 
   return res.json()

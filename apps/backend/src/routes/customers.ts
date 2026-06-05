@@ -1,6 +1,6 @@
+import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
-import { createSupabaseClient } from '../lib/supabase/server'
 import { notFound, badRequest } from '../middleware/error'
 
 export const customersRouter = new Hono()
@@ -8,7 +8,7 @@ export const customersRouter = new Hono()
 customersRouter.use('*', authMiddleware)
 
 customersRouter.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
 
   const { data, error } = await supabase
@@ -23,7 +23,7 @@ customersRouter.get('/', async (c) => {
 })
 
 customersRouter.get('/:id', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { data, error } = await supabase
@@ -38,7 +38,7 @@ customersRouter.get('/:id', async (c) => {
 })
 
 customersRouter.post('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
   const body = await c.req.json()
 

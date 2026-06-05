@@ -41,10 +41,12 @@ export const productSchema = z.object({
 
 export const orderSchema = z.object({
   customer_id: z.string().uuid().nullable().optional(),
-  table_number: z.string().nullable().optional(),
+  table_number: z.number().int().nullable().optional(),
+  type: z.enum(['dine-in', 'takeaway', 'delivery']).default('dine-in'),
   items: z.array(z.object({
     product_id: z.string().uuid(),
     quantity: z.number().int().positive(),
+    unit_price: z.number().min(0).optional(),
     modifiers: z.array(z.string()).optional().default([]),
     notes: z.string().nullable().optional(),
   })).min(1),

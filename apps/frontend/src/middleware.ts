@@ -1,5 +1,4 @@
 import { auth } from '@/lib/auth'
-import { NextResponse } from 'next/server'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -24,7 +23,23 @@ export default auth((req) => {
 
   if (path.startsWith('/api/') && !matchesAny(path, apiRoutesWithHandlers)) {
     const destPath = path.replace('/api', '')
-    return NextResponse.rewrite(new URL(destPath, API_URL))
+    const dest = new URL(destPath + req.nextUrl.search, API_URL)
+
+    const headers = new Headers(req.headers)
+    // req.auth is the Session object; accessToken lives on session.user
+    const accessToken = (req.auth as any)?.user?.accessToken as string | undefined
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`)
+    }
+
+    const isBodyMethod = !['GET', 'HEAD'].includes(req.method)
+    return fetch(dest, {
+      method: req.method,
+      headers,
+      body: isBodyMethod ? req.body : undefined,
+      // @ts-expect-error duplex required for streaming bodies in Node
+      duplex: isBodyMethod ? 'half' : undefined,
+    })
   }
 
   if (matchesAny(path, protectedPaths) && !req.auth) {

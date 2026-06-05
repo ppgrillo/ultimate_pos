@@ -1,8 +1,8 @@
+import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { orderSchema } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
-import { createSupabaseClient } from '../lib/supabase/server'
 import { notFound, badRequest } from '../middleware/error'
 
 export const ordersRouter = new Hono()
@@ -10,7 +10,7 @@ export const ordersRouter = new Hono()
 ordersRouter.use('*', authMiddleware)
 
 ordersRouter.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
   const status = c.req.query('status')
 
@@ -29,7 +29,7 @@ ordersRouter.get('/', async (c) => {
 })
 
 ordersRouter.get('/:id', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { data, error } = await supabase
@@ -44,20 +44,62 @@ ordersRouter.get('/:id', async (c) => {
 })
 
 ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const input = c.req.valid('json')
   const storeId = c.get('storeId')
-  const employeeId = c.get('userId')
+  const userId = c.get('userId')
+
+  const { data: store } = await supabase
+    .from('stores')
+    .select('tax_rate')
+    .eq('id', storeId)
+    .single()
+
+  const taxRate = store ? Number(store.tax_rate) / 100 : 0
+
+  const productIds = input.items.map((i) => i.product_id)
+  const { data: products } = await supabase
+    .from('products')
+    .select('id, name, price')
+    .in('id', productIds)
+
+  const productMap = new Map((products || []).map((p) => [p.id, p]))
+
+  let subtotal = 0
+  const orderItems = input.items.map((item) => {
+    const product = productMap.get(item.product_id)
+    const unitPrice = item.unit_price ?? (product ? Number(product.price) : 0)
+    const itemTotal = unitPrice * item.quantity
+    subtotal += itemTotal
+    return {
+      order_id: '',
+      product_id: item.product_id,
+      product_name: product?.name || '',
+      quantity: item.quantity,
+      unit_price: unitPrice,
+      modifiers: item.modifiers,
+      notes: item.notes,
+    }
+  })
+
+  const discount = 0
+  const tax = Math.round(subtotal * taxRate * 100) / 100
+  const total = Math.round((subtotal + tax - discount) * 100) / 100
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({
       store_id: storeId,
-      employee_id: employeeId,
+      created_by: userId,
       customer_id: input.customer_id || null,
       table_number: input.table_number || null,
+      type: input.type || 'dine-in',
       status: 'pending',
       payment_status: 'unpaid',
+      subtotal,
+      tax,
+      discount,
+      total,
       notes: input.notes,
     })
     .select()
@@ -65,19 +107,34 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   if (orderError) throw badRequest(orderError.message)
 
-  const orderItems = input.items.map((item) => ({
+  const itemsToInsert = orderItems.map((item) => ({
+    ...item,
     order_id: order.id,
-    product_id: item.product_id,
-    quantity: item.quantity,
-    modifiers: item.modifiers,
-    notes: item.notes,
   }))
 
   const { error: itemsError } = await supabase
     .from('order_items')
-    .insert(orderItems)
+    .insert(itemsToInsert)
 
   if (itemsError) throw badRequest(itemsError.message)
+
+  if (input.customer_id) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('total_visits, total_spent')
+      .eq('id', input.customer_id)
+      .single()
+
+    if (cust) {
+      await supabase
+        .from('customers')
+        .update({
+          total_visits: (cust.total_visits || 0) + 1,
+          total_spent: (Number(cust.total_spent) || 0) + total,
+        })
+        .eq('id', input.customer_id)
+    }
+  }
 
   const { data: fullOrder } = await supabase
     .from('orders')
@@ -89,7 +146,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 })
 
 ordersRouter.patch('/:id/status', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
   const { status } = await c.req.json()
 

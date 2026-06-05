@@ -1,0 +1,1 @@
+export { PosSearchBar } from './PosSearchBar'

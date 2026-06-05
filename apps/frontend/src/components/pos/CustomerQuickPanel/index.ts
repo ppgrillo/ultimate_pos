@@ -1,0 +1,1 @@
+export { CustomerQuickPanel } from './CustomerQuickPanel'

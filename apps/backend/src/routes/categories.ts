@@ -1,8 +1,8 @@
+import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, requireRole } from '../middleware/auth'
-import { createSupabaseClient } from '../lib/supabase/server'
 import { notFound, badRequest } from '../middleware/error'
 
 export const categoriesRouter = new Hono()
@@ -16,7 +16,7 @@ const categorySchema = z.object({
 })
 
 categoriesRouter.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
 
   const { data, error } = await supabase
@@ -31,7 +31,7 @@ categoriesRouter.get('/', async (c) => {
 })
 
 categoriesRouter.get('/:id', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { data, error } = await supabase
@@ -46,7 +46,7 @@ categoriesRouter.get('/:id', async (c) => {
 })
 
 categoriesRouter.post('/', requireRole('admin'), zValidator('json', categorySchema), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const input = c.req.valid('json')
   const storeId = c.get('storeId')
 
@@ -62,7 +62,7 @@ categoriesRouter.post('/', requireRole('admin'), zValidator('json', categorySche
 })
 
 categoriesRouter.put('/:id', requireRole('admin'), zValidator('json', categorySchema), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
   const input = c.req.valid('json')
 
@@ -79,7 +79,7 @@ categoriesRouter.put('/:id', requireRole('admin'), zValidator('json', categorySc
 })
 
 categoriesRouter.delete('/:id', requireRole('admin'), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { error } = await supabase.from('categories').delete().eq('id', id)

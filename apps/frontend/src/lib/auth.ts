@@ -65,6 +65,7 @@ const config: NextAuthConfig = {
           token.id = user.id
           token.storeId = user.store_id
           token.role = user.role
+          token.accessToken = (user as any).access_token
         }
         if (account.provider === 'google') {
           try {
@@ -90,6 +91,7 @@ const config: NextAuthConfig = {
         session.user.id = token.id as string ?? token.sub ?? ''
         session.user.storeId = token.storeId as string
         session.user.role = token.role as string
+        ;(session.user as any).accessToken = token.accessToken as string
       }
       return session
     },

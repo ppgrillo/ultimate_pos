@@ -7,9 +7,12 @@ import { api } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { CategoryChips } from '@/components/products/CategoryChips'
+import { CreateCategoryModal } from '@/components/products/CreateCategoryModal'
 import { OptionGroupEditor } from '@/components/products/OptionGroupEditor'
 import { PointsInput } from '@/components/products/PointsInput'
+import { useAppSelector } from '@/store/hooks'
 import type { ModifierGroup } from '@ultimate-pos/shared'
+import type { CreatedCategory } from '@/components/products/CreateCategoryModal'
 
 interface ProductFormData {
   name: string
@@ -48,6 +51,10 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+
+  const userRole = useAppSelector((state) => state.auth.user?.role)
+  const isAdmin = userRole === 'admin'
 
   useEffect(() => {
     api.get<{ data: Category[] }>('/categories').then((res) => {
@@ -63,13 +70,20 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
     setError(null)
 
     try {
+      const cleanModifiers = form.modifiers
+        .map((g) => ({
+          ...g,
+          options: g.options.filter((o) => o.name.trim().length > 0),
+        }))
+        .filter((g) => g.options.length > 0)
+
       const payload = {
         name: form.name,
         price: form.price,
         description: form.description,
         category_id: form.category_id,
         image_url: form.image_url,
-        modifiers: form.modifiers,
+        modifiers: cleanModifiers,
         points: form.points ?? 0,
       }
 
@@ -82,7 +96,19 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
       router.push('/products')
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save product')
+      if (err instanceof Error) {
+        const body = (err as any).body
+        if (body?.error?.issues?.length) {
+          const messages = body.error.issues
+            .map((i: any) => `${i.path.join(' › ')}: ${i.message}`)
+            .join('\n')
+          setError(messages)
+        } else {
+          setError(err.message)
+        }
+      } else {
+        setError('Failed to save product')
+      }
     } finally {
       setSaving(false)
     }
@@ -93,6 +119,11 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
     value: ProductFormData[K],
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleCategoryCreated = (cat: CreatedCategory) => {
+    setCategories((prev) => [...prev, { id: cat.id, name: cat.name }])
+    updateField('category_id', cat.id)
   }
 
   return (
@@ -122,7 +153,7 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-error-container/20 border border-error/30 p-4 text-sm text-error">
+        <div className="rounded-lg bg-error-container/20 border border-error/30 p-4 text-sm text-error whitespace-pre-wrap">
           {error}
         </div>
       )}
@@ -180,6 +211,7 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
               categories={categories}
               selectedId={form.category_id}
               onSelect={(id) => updateField('category_id', id)}
+              onAdd={isAdmin ? () => setShowCategoryModal(true) : undefined}
             />
           </div>
         </div>
@@ -212,6 +244,12 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
           onChange={(v) => updateField('points', v)}
         />
       </div>
+
+      <CreateCategoryModal
+        open={showCategoryModal}
+        onOpenChange={setShowCategoryModal}
+        onCreated={handleCategoryCreated}
+      />
     </form>
   )
 }

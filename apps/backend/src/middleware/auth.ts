@@ -1,12 +1,14 @@
 import type { MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { unauthorized } from './error'
+import { supabaseAdmin } from '../lib/supabase/admin'
 
 declare module 'hono' {
   interface ContextVariableMap {
     userId: string
     storeId: string
     role: string
+    token: string
   }
 }
 
@@ -27,14 +29,31 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
 
   try {
     const { payload } = await jwtVerify(token, getSecret())
-
     c.set('userId', payload.sub as string)
     c.set('storeId', payload.store_id as string)
     c.set('role', payload.role as string)
-
+    c.set('token', token)
     await next()
   } catch {
-    throw unauthorized('Invalid or expired token')
+    try {
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+      if (error || !user) throw unauthorized('Invalid token')
+
+      c.set('userId', user.id)
+      c.set('token', token)
+
+      const { data: membership } = await supabaseAdmin
+        .from('store_members')
+        .select('store_id, role')
+        .eq('profile_id', user.id)
+        .maybeSingle()
+
+      c.set('storeId', membership?.store_id ?? '')
+      c.set('role', membership?.role ?? '')
+      await next()
+    } catch {
+      throw unauthorized('Invalid or expired token')
+    }
   }
 }
 

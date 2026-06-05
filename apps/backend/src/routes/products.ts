@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { productSchema } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
-import { createSupabaseClient } from '../lib/supabase/server'
+import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
 
 export const productsRouter = new Hono()
@@ -10,7 +10,7 @@ export const productsRouter = new Hono()
 productsRouter.use('*', authMiddleware)
 
 productsRouter.get('/', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const storeId = c.get('storeId')
 
   const { data, error } = await supabase
@@ -25,7 +25,7 @@ productsRouter.get('/', async (c) => {
 })
 
 productsRouter.get('/:id', async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { data, error } = await supabase
@@ -40,7 +40,7 @@ productsRouter.get('/:id', async (c) => {
 })
 
 productsRouter.post('/', requireRole('admin'), zValidator('json', productSchema), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const input = c.req.valid('json')
   const storeId = c.get('storeId')
 
@@ -56,7 +56,7 @@ productsRouter.post('/', requireRole('admin'), zValidator('json', productSchema)
 })
 
 productsRouter.put('/:id', requireRole('admin'), zValidator('json', productSchema), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
   const input = c.req.valid('json')
 
@@ -73,7 +73,7 @@ productsRouter.put('/:id', requireRole('admin'), zValidator('json', productSchem
 })
 
 productsRouter.delete('/:id', requireRole('admin'), async (c) => {
-  const supabase = createSupabaseClient(c.get('userId'))
+  const supabase = supabaseAdmin
   const id = c.req.param('id')
 
   const { error } = await supabase.from('products').delete().eq('id', id)

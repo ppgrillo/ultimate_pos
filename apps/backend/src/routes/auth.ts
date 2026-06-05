@@ -1,19 +1,37 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
+import { createClient } from '@supabase/supabase-js'
+import { SignJWT } from 'jose'
 import { loginSchema, registerSchema } from '@ultimate-pos/shared'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { badRequest, unauthorized } from '../middleware/error'
 import type { RegisterInput } from '@ultimate-pos/shared'
+
+const supabaseUrl = process.env.SUPABASE_URL!
+const anonKey = process.env.SUPABASE_ANON_KEY!
+
+function getJwtSecret() {
+  const secret = process.env.NEXTAUTH_SECRET
+  if (!secret) throw new Error('NEXTAUTH_SECRET is not set')
+  return new TextEncoder().encode(secret)
+}
+
+async function mintToken(userId: string, storeId: string | null, role: string | null) {
+  return new SignJWT({ store_id: storeId ?? '', role: role ?? '' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(getJwtSecret())
+}
 
 export const authRouter = new Hono()
 
 authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
   const { email, password } = c.req.valid('json')
 
-  const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-    email,
-    password,
-  })
+  const supabase = createClient(supabaseUrl, anonKey)
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) throw unauthorized(error.message)
 
@@ -29,6 +47,12 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
     .eq('profile_id', data.user.id)
     .maybeSingle()
 
+  const access_token = await mintToken(
+    data.user.id,
+    membership?.store_id ?? null,
+    membership?.role ?? null,
+  )
+
   return c.json({
     id: data.user.id,
     email: data.user.email,
@@ -36,7 +60,7 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
     image: data.user.user_metadata?.avatar_url,
     store_id: membership?.store_id || null,
     role: membership?.role || null,
-    access_token: data.session?.access_token,
+    access_token,
   })
 })
 

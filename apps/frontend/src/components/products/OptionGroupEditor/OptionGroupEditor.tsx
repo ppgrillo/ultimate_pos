@@ -154,7 +154,12 @@ export function OptionGroupEditor({ groups, onChange, className }: OptionGroupEd
             {group.options.map((option, oi) => (
               <div
                 key={oi}
-                className="flex items-center gap-2 rounded-lg bg-white/5 p-3 border border-white/10"
+                className={cn(
+                  'flex items-center gap-2 rounded-lg p-3 border',
+                  !option.name.trim()
+                    ? 'bg-error-container/10 border-error/40'
+                    : 'bg-white/5 border-white/10',
+                )}
               >
                 <GripVertical className="h-4 w-4 text-on-surface-variant shrink-0" />
                 <div className="flex items-center gap-1">
@@ -180,7 +185,12 @@ export function OptionGroupEditor({ groups, onChange, className }: OptionGroupEd
                   value={option.name}
                   onChange={(e) => updateOption(gi, oi, { name: e.target.value })}
                   placeholder="Option name"
-                  className="flex-1 bg-transparent border-none p-0 text-sm font-semibold text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                  className={cn(
+                    'flex-1 bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 placeholder:text-on-surface-variant/30',
+                    !option.name.trim()
+                      ? 'text-error placeholder:text-error/50'
+                      : 'text-on-surface',
+                  )}
                 />
                 <div className="flex items-center gap-1 rounded-lg bg-surface-container px-2 py-1 border border-outline-variant">
                   <span className="text-[10px] text-primary font-bold">+$</span>
