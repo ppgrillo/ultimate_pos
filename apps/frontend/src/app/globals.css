@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&family=Hanken+Grotesk:wght@400;700&display=swap');
+
+@layer base {
+  body {
+    @apply bg-background text-on-background font-body antialiased;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface bg-opacity-10 backdrop-blur-[20px];
+  }
+
+  .glass-border {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px rgba(204, 255, 0, 0.3);
+  }
+
+  .glow-secondary {
+    box-shadow: 0 0 20px rgba(255, 0, 122, 0.3);
+  }
+}

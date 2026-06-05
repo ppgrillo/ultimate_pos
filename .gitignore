@@ -1,1 +1,31 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+dist/
+out/
+
+# env
+.env
+.env.local
+.env.production
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# turbo
+.turbo/
+
+# opencode
 opencode.json

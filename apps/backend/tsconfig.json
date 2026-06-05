@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../..",
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ultimate-pos/shared": ["../../packages/shared/src"]
+    }
+  },
+  "include": ["src", "../../packages/shared/src"],
+  "exclude": ["node_modules", "dist", "tests"]
+}

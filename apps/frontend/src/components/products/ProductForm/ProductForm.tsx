@@ -1,0 +1,217 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Save, Sparkles, Package } from 'lucide-react'
+import { api } from '@/lib/api/client'
+import { Button } from '@/components/ui/Button'
+import { ImageUpload } from '@/components/products/ImageUpload'
+import { CategoryChips } from '@/components/products/CategoryChips'
+import { OptionGroupEditor } from '@/components/products/OptionGroupEditor'
+import { PointsInput } from '@/components/products/PointsInput'
+import type { ModifierGroup } from '@ultimate-pos/shared'
+
+interface ProductFormData {
+  name: string
+  price: number
+  description: string | null
+  category_id: string | null
+  image_url: string | null
+  modifiers: ModifierGroup[]
+  points: number | null
+}
+
+interface Category {
+  id: string
+  name: string
+}
+
+interface ProductFormProps {
+  productId?: string
+  initialData?: ProductFormData
+}
+
+const defaultForm: ProductFormData = {
+  name: '',
+  price: 0,
+  description: null,
+  category_id: null,
+  image_url: null,
+  modifiers: [],
+  points: null,
+}
+
+export function ProductForm({ productId, initialData }: ProductFormProps) {
+  const router = useRouter()
+  const isEditing = !!productId
+  const [form, setForm] = useState<ProductFormData>(initialData ?? defaultForm)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get<{ data: Category[] }>('/categories').then((res) => {
+      setCategories(res.data)
+    }).catch(() => {
+      // categories endpoint may not exist yet
+    })
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+
+    try {
+      const payload = {
+        name: form.name,
+        price: form.price,
+        description: form.description,
+        category_id: form.category_id,
+        image_url: form.image_url,
+        modifiers: form.modifiers,
+        points: form.points ?? 0,
+      }
+
+      if (isEditing) {
+        await api.put(`/products/${productId}`, payload)
+      } else {
+        await api.post('/products', payload)
+      }
+
+      router.push('/products')
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save product')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateField = <K extends keyof ProductFormData>(
+    key: K,
+    value: ProductFormData[K],
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="hover:opacity-80 transition-opacity"
+          >
+            <ArrowLeft className="h-6 w-6 text-on-surface" />
+          </button>
+          <div>
+            <h1 className="font-headline text-headline-md text-on-surface">
+              {isEditing ? 'Edit Product' : 'Add New Product'}
+            </h1>
+            <p className="text-sm text-on-surface-variant">
+              {isEditing ? 'Update product details' : 'Configure your new product'}
+            </p>
+          </div>
+        </div>
+        <Button type="submit" disabled={saving || !form.name || form.price <= 0} isLoading={saving}>
+          <Save className="h-4 w-4 mr-2" />
+          {isEditing ? 'Update' : 'Save'}
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-error-container/20 border border-error/30 p-4 text-sm text-error">
+          {error}
+        </div>
+      )}
+
+      <ImageUpload
+        value={form.image_url}
+        onChange={(v) => updateField('image_url', v)}
+      />
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Package className="h-5 w-5 text-primary" />
+          <h2 className="font-headline font-bold text-xl text-on-surface">Basic Info</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4 md:col-span-2">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+              Product Name
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => updateField('name', e.target.value)}
+              placeholder="e.g. Caramel Macchiato Venti"
+              required
+              className="w-full bg-transparent border-none p-0 font-headline font-semibold text-on-surface text-lg focus:ring-0 placeholder:text-on-surface-variant/30"
+            />
+          </div>
+
+          <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+              Base Price ($)
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-primary font-headline text-lg font-bold">$</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={form.price || ''}
+                onChange={(e) => updateField('price', parseFloat(e.target.value) || 0)}
+                placeholder="0.00"
+                required
+                className="w-full bg-transparent border-none p-0 text-lg font-headline font-bold text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4 md:col-span-3">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+              Category
+            </label>
+            <CategoryChips
+              categories={categories}
+              selectedId={form.category_id}
+              onSelect={(id) => updateField('category_id', id)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-secondary" />
+            <h2 className="font-headline font-bold text-xl text-on-surface">
+              Variants & Extras
+            </h2>
+          </div>
+        </div>
+
+        <OptionGroupEditor
+          groups={form.modifiers}
+          onChange={(groups) => updateField('modifiers', groups)}
+        />
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">⭐</span>
+          <h2 className="font-headline font-bold text-xl text-on-surface">Loyalty</h2>
+        </div>
+
+        <PointsInput
+          value={form.points}
+          onChange={(v) => updateField('points', v)}
+        />
+      </div>
+    </form>
+  )
+}
