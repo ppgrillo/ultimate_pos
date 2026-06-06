@@ -8,6 +8,12 @@
   body {
     @apply bg-background text-on-background font-body antialiased;
   }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 @layer components {

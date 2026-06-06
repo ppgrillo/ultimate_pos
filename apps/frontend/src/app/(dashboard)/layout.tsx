@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/Sidebar'
-import { Header } from '@/components/layout/Header'
+import { MobileDrawer } from '@/components/layout/MobileDrawer'
+import { DashboardShell } from '@/components/layout/DashboardShell'
 
 export default function DashboardLayout({
   children,
@@ -9,8 +10,9 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="ml-64 flex flex-1 flex-col">
-        <Header />
+      <MobileDrawer />
+      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
+        <DashboardShell />
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>

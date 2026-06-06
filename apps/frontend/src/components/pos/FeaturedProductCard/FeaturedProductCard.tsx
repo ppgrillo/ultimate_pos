@@ -2,6 +2,7 @@
 
 import { Bolt } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { ExpandableText } from '@/components/ui'
 import type { Product } from '@ultimate-pos/shared'
 
 interface FeaturedProductCardProps {
@@ -28,14 +29,14 @@ export function FeaturedProductCard({ product, onQuickBuy }: FeaturedProductCard
             />
           </div>
         )}
-        <div className="flex-1 p-4 flex flex-col justify-between">
-          <div>
+        <div className="flex-1 p-4 flex flex-col">
+          <div className="flex-1">
             <h3 className="font-headline font-bold text-base text-on-surface">{product.name}</h3>
             {product.description && (
-              <p className="mt-1 text-xs text-on-surface-variant line-clamp-2">{product.description}</p>
+              <ExpandableText text={product.description} className="mt-1 text-xs text-on-surface-variant" />
             )}
           </div>
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-auto pt-3 flex items-center justify-between">
             <span className="font-headline font-bold text-xl text-primary">{formatCurrency(product.price)}</span>
             <button
               onClick={() => onQuickBuy(product)}

@@ -5,6 +5,7 @@ import { X, Minus, Plus, ShoppingCart } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
+import { ExpandableText } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
 
 export function CustomizeProduct() {
@@ -108,7 +109,7 @@ export function CustomizeProduct() {
               </div>
             </div>
             {product.description && (
-              <p className="mt-2 text-sm text-on-surface-variant">{product.description}</p>
+              <ExpandableText text={product.description} className="mt-2 text-sm text-on-surface-variant" />
             )}
           </div>
 

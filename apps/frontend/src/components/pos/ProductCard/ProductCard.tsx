@@ -2,6 +2,7 @@
 
 import { Plus, ShoppingCart } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
+import { ExpandableText } from '@/components/ui'
 import type { Product } from '@ultimate-pos/shared'
 
 interface ProductCardProps {
@@ -13,9 +14,9 @@ interface ProductCardProps {
 export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCardProps) {
   if (variant === 'rich') {
     return (
-      <div className="group relative rounded-xl bg-surface-container/50 border border-outline-variant overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg">
+      <div className="group relative rounded-xl bg-surface-container/50 border border-outline-variant overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg flex flex-col">
         {product.image_url ? (
-          <div className="aspect-[4/3] bg-surface-container-high overflow-hidden">
+          <div className="aspect-[4/3] bg-surface-container-high overflow-hidden shrink-0">
             <img
               src={product.image_url}
               alt={product.name}
@@ -23,21 +24,23 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
             />
           </div>
         ) : (
-          <div className="aspect-[4/3] bg-surface-container-high flex items-center justify-center">
+          <div className="aspect-[4/3] bg-surface-container-high flex items-center justify-center shrink-0">
             <ShoppingCart className="h-8 w-8 text-on-surface-variant/30" />
           </div>
         )}
-        <div className="p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-headline font-bold text-sm text-on-surface truncate">{product.name}</h3>
-              {product.description && (
-                <p className="mt-0.5 text-[11px] text-on-surface-variant line-clamp-2">{product.description}</p>
-              )}
+        <div className="p-3 flex flex-col flex-1">
+          <div className="flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-headline font-bold text-sm text-on-surface truncate">{product.name}</h3>
+                {product.description && (
+                  <ExpandableText text={product.description} className="mt-0.5 text-[11px] text-on-surface-variant" />
+                )}
+              </div>
+              <span className="shrink-0 font-headline font-bold text-base text-primary">{formatCurrency(product.price)}</span>
             </div>
-            <span className="shrink-0 font-headline font-bold text-base text-primary">{formatCurrency(product.price)}</span>
           </div>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-auto pt-3 flex items-center gap-2">
             <button
               onClick={() => onAdd(product)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-xs font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"

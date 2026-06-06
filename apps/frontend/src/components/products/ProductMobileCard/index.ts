@@ -1,0 +1,1 @@
+export { ProductMobileCard } from './ProductMobileCard'

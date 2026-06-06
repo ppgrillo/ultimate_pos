@@ -155,65 +155,69 @@ export function OptionGroupEditor({ groups, onChange, className }: OptionGroupEd
               <div
                 key={oi}
                 className={cn(
-                  'flex items-center gap-2 rounded-lg p-3 border',
+                  'rounded-lg p-3 border',
                   !option.name.trim()
                     ? 'bg-error-container/10 border-error/40'
                     : 'bg-white/5 border-white/10',
                 )}
               >
-                <GripVertical className="h-4 w-4 text-on-surface-variant shrink-0" />
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveOption(gi, oi, -1)}
-                    disabled={oi === 0}
-                    className="text-on-surface-variant hover:text-on-surface disabled:opacity-30"
-                  >
-                    <ArrowUp className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveOption(gi, oi, 1)}
-                    disabled={oi === group.options.length - 1}
-                    className="text-on-surface-variant hover:text-on-surface disabled:opacity-30"
-                  >
-                    <ArrowDown className="h-3 w-3" />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={option.name}
-                  onChange={(e) => updateOption(gi, oi, { name: e.target.value })}
-                  placeholder="Option name"
-                  className={cn(
-                    'flex-1 bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 placeholder:text-on-surface-variant/30',
-                    !option.name.trim()
-                      ? 'text-error placeholder:text-error/50'
-                      : 'text-on-surface',
-                  )}
-                />
-                <div className="flex items-center gap-1 rounded-lg bg-surface-container px-2 py-1 border border-outline-variant">
-                  <span className="text-[10px] text-primary font-bold">+$</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <GripVertical className="h-4 w-4 shrink-0 text-on-surface-variant" />
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveOption(gi, oi, -1)}
+                      disabled={oi === 0}
+                      className="text-on-surface-variant hover:text-on-surface disabled:opacity-30"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveOption(gi, oi, 1)}
+                      disabled={oi === group.options.length - 1}
+                      className="text-on-surface-variant hover:text-on-surface disabled:opacity-30"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={option.price_adjustment}
-                    onChange={(e) =>
-                      updateOption(gi, oi, {
-                        price_adjustment: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-14 bg-transparent border-none p-0 text-xs font-bold text-on-surface focus:ring-0 text-center"
+                    type="text"
+                    value={option.name}
+                    onChange={(e) => updateOption(gi, oi, { name: e.target.value })}
+                    placeholder="Option name"
+                    className={cn(
+                      'min-w-0 flex-1 bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 placeholder:text-on-surface-variant/30',
+                      !option.name.trim()
+                        ? 'text-error placeholder:text-error/50'
+                        : 'text-on-surface',
+                    )}
                   />
+                  <button
+                    type="button"
+                    onClick={() => removeOption(gi, oi)}
+                    className="shrink-0 text-on-surface-variant hover:text-error transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeOption(gi, oi)}
-                  className="text-on-surface-variant hover:text-error transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <div className="mt-2 flex items-center gap-2 pl-6">
+                  <div className="flex items-center gap-1 rounded-lg bg-surface-container px-2 py-1 border border-outline-variant">
+                    <span className="text-[10px] text-primary font-bold">+$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={option.price_adjustment}
+                      onChange={(e) =>
+                        updateOption(gi, oi, {
+                          price_adjustment: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-14 bg-transparent border-none p-0 text-xs font-bold text-on-surface focus:ring-0 text-center"
+                    />
+                  </div>
+                </div>
               </div>
             ))}
             <button

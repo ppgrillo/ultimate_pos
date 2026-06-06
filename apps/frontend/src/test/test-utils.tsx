@@ -8,6 +8,7 @@ import posReducer from '@/store/slices/posSlice'
 import storeReducer from '@/store/slices/storeSlice'
 import productsReducer from '@/store/slices/productsSlice'
 import customersReducer from '@/store/slices/customersSlice'
+import uiReducer from '@/store/slices/uiSlice'
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -16,6 +17,7 @@ const rootReducer = combineReducers({
   storeConfig: storeReducer,
   products: productsReducer,
   customers: customersReducer,
+  ui: uiReducer,
 })
 
 export function createTestStore(preloadedState?: Partial<ReturnType<typeof rootReducer>>) {

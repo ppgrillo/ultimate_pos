@@ -1,6 +1,16 @@
 import { render, screen } from '@/test/test-utils'
 import { PosLayout } from './PosLayout'
 
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: null, status: 'unauthenticated' }),
+  signOut: vi.fn(),
+}))
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/pos',
+}))
+
 describe('PosLayout', () => {
   it('renders header, menu content, and bottom nav', () => {
     render(
@@ -89,5 +99,4 @@ describe('PosLayout', () => {
     )
     expect(screen.getByText('Drawer Open')).toBeInTheDocument()
   })
-
 })

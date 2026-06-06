@@ -37,3 +37,5 @@ export {
 } from './Select'
 
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table'
+
+export { ExpandableText } from './ExpandableText'

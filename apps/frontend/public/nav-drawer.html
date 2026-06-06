@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&amp;family=Hanken+Grotesk:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary": "#ffffff",
+                    "surface-bright": "#373b2c",
+                    "on-primary-container": "#556d00",
+                    "on-background": "#e2e4cf",
+                    "on-secondary-container": "#590026",
+                    "surface-dim": "#111508",
+                    "on-tertiary": "#480081",
+                    "surface-container-lowest": "#0c0f04",
+                    "on-secondary": "#66002c",
+                    "error": "#ffb4ab",
+                    "inverse-on-surface": "#2f3223",
+                    "tertiary-fixed": "#efdbff",
+                    "outline-variant": "#444933",
+                    "tertiary-fixed-dim": "#dcb8ff",
+                    "surface-container-low": "#1a1d10",
+                    "on-primary-fixed-variant": "#3c4d00",
+                    "surface-tint": "#abd600",
+                    "outline": "#8e9379",
+                    "on-secondary-fixed-variant": "#8f0041",
+                    "on-primary-fixed": "#161e00",
+                    "on-error-container": "#ffdad6",
+                    "error-container": "#93000a",
+                    "on-primary": "#283500",
+                    "on-error": "#690005",
+                    "on-surface": "#e2e4cf",
+                    "surface-container-highest": "#333627",
+                    "surface": "#111508",
+                    "secondary-fixed": "#ffd9e0",
+                    "on-tertiary-fixed": "#2c0051",
+                    "primary-container": "#c3f400",
+                    "secondary-container": "#ff4b89",
+                    "surface-container-high": "#282b1d",
+                    "secondary": "#ffb1c3",
+                    "on-tertiary-container": "#8b2ce3",
+                    "tertiary": "#ffffff",
+                    "background": "#111508",
+                    "secondary-fixed-dim": "#ffb1c3",
+                    "primary-fixed-dim": "#abd600",
+                    "surface-variant": "#333627",
+                    "primary-fixed": "#c3f400",
+                    "on-surface-variant": "#c4c9ac",
+                    "surface-container": "#1e2113",
+                    "inverse-surface": "#e2e4cf",
+                    "tertiary-container": "#efdbff",
+                    "on-tertiary-fixed-variant": "#6700b5",
+                    "on-secondary-fixed": "#3f0019",
+                    "inverse-primary": "#506600"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "8px",
+                    "container-margin": "24px",
+                    "gutter": "16px",
+                    "bento-gap": "20px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-xl": ["Lexend"],
+                    "headline-lg-mobile": ["Lexend"],
+                    "headline-lg": ["Lexend"],
+                    "label-bold": ["Hanken Grotesk"],
+                    "headline-md": ["Lexend"],
+                    "body-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "label-bold": ["14px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(17, 21, 8, 0.85);
+            backdrop-filter: blur(24px);
+            border-right: 1px solid rgba(195, 244, 0, 0.1);
+        }
+        .glowing-border {
+            position: relative;
+        }
+        .glowing-border::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(195, 244, 0, 0.3), rgba(255, 255, 255, 0.05));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+        .active-glow {
+            box-shadow: 0 0 20px rgba(195, 244, 0, 0.25);
+        }
+        .sidebar-transition {
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container overflow-hidden">
+<!-- Main Content Mockup (Background) -->
+<div class="fixed inset-0 p-container-margin grid grid-cols-4 gap-bento-gap opacity-30">
+<div class="col-span-4 h-24 rounded-xl bg-surface-container-high glowing-border"></div>
+<div class="col-span-2 h-64 rounded-xl bg-surface-container-high glowing-border"></div>
+<div class="col-span-2 h-64 rounded-xl bg-surface-container-high glowing-border"></div>
+</div>
+<!-- Navigation Overlay Backdrop -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] transition-opacity duration-300" id="drawer-backdrop"></div>
+<!-- Navigation Drawer -->
+<aside class="fixed top-0 left-0 h-full w-[80%] md:w-[320px] glass-panel z-[70] flex flex-col sidebar-transition" id="main-drawer">
+<!-- Profile Header -->
+<div class="p-8 pb-6 flex flex-col items-start gap-4">
+<div class="relative">
+<img alt="Admin User" class="w-16 h-16 rounded-xl object-cover glowing-border active-glow" data-alt="A professional high-resolution profile portrait of a confident store administrator in a modern office. The lighting is dramatic and cinematic with electric lime and deep violet neon reflections against a dark glass background. The aesthetic is clean, premium, and technologically advanced, matching a high-end POS system dashboard style with sharp focus and rich textures." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUnJ3htptzq1a55mmNXmWq6UmTUyU3fttsqazNhEHSNoKTatP8HK7kb0rmj4sA5Y5RKGbipuYnn03LiI-JAaI_jpSn4JGL-pDNebuwtvmCO6K82lphbFirFxEK6ERqsGNaGtXgrNiy0lT_8lSWuGRWHlglDS8JAwmbct0xYm_FDztRnfHhdYKcU-rbj38K96cv4AEJHxb824vGhtmapFNjJ0FfZh_OJdEdMMvP57YvMYjBb_08-BKWuvBlAW7yxRMaUhDmKbuAdu1a"/>
+<div class="absolute -bottom-1 -right-1 w-4 h-4 bg-primary-container border-2 border-surface rounded-full"></div>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-md text-headline-md text-primary-fixed tracking-tight">Admin User</h2>
+<span class="font-label-bold text-label-bold text-on-primary-fixed-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">shield_person</span>
+                    Store Admin
+                </span>
+<p class="font-body-md text-body-md text-on-surface-variant opacity-70 mt-1">admin@quickcharge.pos</p>
+</div>
+</div>
+<!-- Divider -->
+<div class="px-8 h-px w-full bg-gradient-to-r from-white/10 to-transparent mb-6"></div>
+<!-- Menu Items -->
+<nav class="flex-1 overflow-y-auto px-4 space-y-2 custom-scrollbar">
+<!-- Dashboard -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">grid_view</span>
+<span>Dashboard</span>
+</a>
+<!-- Point of Sale (Active) -->
+<a class="flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold bg-primary-container text-on-primary-fixed active-glow transition-all duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">shopping_cart</span>
+<span>Point of Sale</span>
+<span class="ml-auto w-2 h-2 rounded-full bg-on-primary-fixed animate-pulse"></span>
+</a>
+<!-- Orders -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">receipt_long</span>
+<span>Orders</span>
+</a>
+<!-- Products -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">inventory_2</span>
+<span>Products</span>
+</a>
+<!-- Customers -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">group</span>
+<span>Customers</span>
+</a>
+<!-- Employees -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">badge</span>
+<span>Employees</span>
+</a>
+<!-- Settings -->
+<a class="group flex items-center gap-4 px-4 py-3 rounded-xl font-label-bold text-label-bold text-on-surface-variant hover:bg-white/5 hover:text-primary-fixed transition-all duration-200" href="#">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<!-- Footer -->
+<div class="p-8 space-y-6">
+<div class="rounded-xl p-4 bg-surface-container-low glowing-border space-y-1">
+<h4 class="font-label-bold text-label-bold text-primary-fixed-dim uppercase tracking-widest text-[10px]">Current Location</h4>
+<p class="font-body-md text-body-md text-on-surface font-bold">QuickCharge POS</p>
+<p class="font-body-md text-body-md text-on-surface-variant text-sm opacity-60">Main Store - Floor 1</p>
+</div>
+<button class="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border border-secondary-container/30 text-secondary hover:bg-secondary-container/10 transition-all duration-300 font-label-bold text-label-bold active:scale-95 group">
+<span class="material-symbols-outlined group-hover:rotate-12 transition-transform">logout</span>
+                Sign out
+            </button>
+</div>
+<!-- Close Button (For UX in Demo) -->
+<button class="absolute top-4 -right-12 w-10 h-10 rounded-full bg-primary-container text-on-primary-fixed flex items-center justify-center shadow-2xl active:scale-90 transition-transform" id="close-drawer">
+<span class="material-symbols-outlined">close</span>
+</button>
+</aside>
+<script>
+        const drawer = document.getElementById('main-drawer');
+        const backdrop = document.getElementById('drawer-backdrop');
+        const closeBtn = document.getElementById('close-drawer');
+
+        function toggleDrawer(isOpen) {
+            if (isOpen) {
+                drawer.style.transform = 'translateX(0)';
+                backdrop.style.opacity = '1';
+                backdrop.style.pointerEvents = 'auto';
+            } else {
+                drawer.style.transform = 'translateX(-100%)';
+                backdrop.style.opacity = '0';
+                backdrop.style.pointerEvents = 'none';
+            }
+        }
+
+        closeBtn.onclick = () => toggleDrawer(false);
+        backdrop.onclick = () => toggleDrawer(false);
+
+        // Add haptic-like scaling to menu items
+        document.querySelectorAll('nav a').forEach(item => {
+            item.addEventListener('mousedown', () => {
+                item.style.transform = 'scale(0.97)';
+            });
+            item.addEventListener('mouseup', () => {
+                item.style.transform = 'scale(1)';
+            });
+            item.addEventListener('mouseleave', () => {
+                item.style.transform = 'scale(1)';
+            });
+        });
+    </script>
+</body></html>

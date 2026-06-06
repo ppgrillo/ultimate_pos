@@ -214,6 +214,19 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
               onAdd={isAdmin ? () => setShowCategoryModal(true) : undefined}
             />
           </div>
+
+          <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4 md:col-span-3">
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+              Description
+            </label>
+            <textarea
+              value={form.description ?? ''}
+              onChange={(e) => updateField('description', e.target.value || null)}
+              placeholder="Describe the product for digital menus, allergens, or serving suggestions..."
+              rows={3}
+              className="w-full resize-none bg-transparent border-none p-0 text-sm text-on-body placeholder:text-on-surface-variant/30 focus:ring-0"
+            />
+          </div>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { CustomerQuickBar } from '@/components/pos/CustomerQuickBar'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView } from '@/store/slices/posSlice'
+import { openDrawer } from '@/store/slices/uiSlice'
 
 interface PosLayoutProps {
   menu: ReactNode
@@ -25,6 +26,7 @@ export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutPro
   return (
     <div className="flex min-h-screen flex-col bg-surface">
       <PosHeader
+        onMenuClick={() => dispatch(openDrawer())}
         onCartClick={() => dispatch(setActiveView(cartOpen ? 'menu' : 'cart'))}
       />
 
@@ -56,12 +58,7 @@ export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutPro
 
       {customerDrawer}
 
-      <PosBottomNav
-        activeTab={activeView === 'menu' ? 'shop' : activeView === 'cart' ? 'customers' : 'profile'}
-        onTabChange={(tab: 'shop' | 'customers' | 'stats' | 'profile') => {
-          if (tab === 'shop') dispatch(setActiveView('menu'))
-        }}
-      />
+      <PosBottomNav />
     </div>
   )
 }
