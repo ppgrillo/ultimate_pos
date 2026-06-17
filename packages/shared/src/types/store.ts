@@ -1,3 +1,13 @@
+export interface StoreSettings {
+  hasVariants: boolean
+  hasLoyalty: boolean
+  taxEnabled: boolean
+  taxLabel: string
+  taxInclusive: boolean
+  taxExemptEnabled: boolean
+  specialInstructionsEnabled: boolean
+}
+
 export interface Store {
   id: string
   name: string
@@ -8,6 +18,7 @@ export interface Store {
   currency: string
   owner_id: string
   is_active: boolean
+  settings: StoreSettings
   created_at: string
   updated_at: string
 }

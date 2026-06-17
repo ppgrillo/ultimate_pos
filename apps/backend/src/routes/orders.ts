@@ -51,26 +51,33 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const { data: store } = await supabase
     .from('stores')
-    .select('tax_rate')
+    .select('tax_rate, settings')
     .eq('id', storeId)
     .single()
 
   const taxRate = store ? Number(store.tax_rate) / 100 : 0
+  const settings = store?.settings as Record<string, unknown> | null
+  const taxEnabled = (settings?.taxEnabled as boolean) ?? false
+  const taxInclusive = (settings?.taxInclusive as boolean) ?? false
+  const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
 
   const productIds = input.items.map((i) => i.product_id)
   const { data: products } = await supabase
     .from('products')
-    .select('id, name, price')
+    .select('id, name, price, tax_exempt')
     .in('id', productIds)
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
   let subtotal = 0
+  let taxableSubtotal = 0
   const orderItems = input.items.map((item) => {
     const product = productMap.get(item.product_id)
     const unitPrice = item.unit_price ?? (product ? Number(product.price) : 0)
     const itemTotal = unitPrice * item.quantity
     subtotal += itemTotal
+    const isExempt = taxExemptEnabled && product?.tax_exempt === true
+    if (!isExempt) taxableSubtotal += itemTotal
     return {
       order_id: '',
       product_id: item.product_id,
@@ -83,8 +90,19 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   })
 
   const discount = 0
-  const tax = Math.round(subtotal * taxRate * 100) / 100
-  const total = Math.round((subtotal + tax - discount) * 100) / 100
+
+  let tax = 0
+  if (taxEnabled && taxRate > 0) {
+    if (taxInclusive) {
+      tax = Math.round((taxableSubtotal - taxableSubtotal / (1 + taxRate)) * 100) / 100
+    } else {
+      tax = Math.round(taxableSubtotal * taxRate * 100) / 100
+    }
+  }
+
+  const total = taxInclusive
+    ? Math.round((subtotal - discount) * 100) / 100
+    : Math.round((subtotal + tax - discount) * 100) / 100
 
   const { data: order, error: orderError } = await supabase
     .from('orders')

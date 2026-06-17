@@ -47,6 +47,7 @@ export default function EditProductPage() {
         image_url: product.image_url,
         modifiers: product.modifiers,
         points: product.points,
+        tax_exempt: product.tax_exempt,
       }}
     />
   )

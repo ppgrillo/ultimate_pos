@@ -37,6 +37,7 @@ export const productSchema = z.object({
   modifiers: z.array(modifierGroupSchema).optional().default([]),
   points: z.number().int().min(0).nullable().optional(),
   is_active: z.boolean().optional().default(true),
+  tax_exempt: z.boolean().optional().default(false),
 })
 
 export const orderSchema = z.object({

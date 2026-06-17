@@ -18,6 +18,7 @@ export function CustomizeProduct() {
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
+  const specialInstructionsEnabled = useAppSelector((s) => s.storeConfig.currentStore?.settings?.specialInstructionsEnabled ?? true)
 
   useEffect(() => {
     if (product?.modifiers) {
@@ -94,23 +95,34 @@ export function CustomizeProduct() {
         </div>
 
         <div className="p-4 space-y-5">
-          <div>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  {product.points && product.points > 0 && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-secondary/20 px-2 py-0.5 text-[10px] font-label font-bold text-secondary">
-                      +{product.points} pts
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-headline font-bold text-xl text-on-surface">{product.name}</h3>
-                <p className="font-headline font-bold text-lg text-primary mt-1">{formatCurrency(product.price)}</p>
+          <div className="flex gap-4">
+            {product.image_url && (
+              <div className="shrink-0">
+                <img
+                  src={product.image_url}
+                  alt={product.name}
+                  className="h-24 w-24 rounded-xl object-cover"
+                />
               </div>
-            </div>
-            {product.description && (
-              <ExpandableText text={product.description} className="mt-2 text-sm text-on-surface-variant" />
             )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    {(product.points ?? 0) > 0 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-secondary/20 px-2 py-0.5 text-[10px] font-label font-bold text-secondary">
+                        +{product.points} pts
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-headline font-bold text-xl text-on-surface">{product.name}</h3>
+                  <p className="font-headline font-bold text-lg text-primary mt-1">{formatCurrency(product.price)}</p>
+                </div>
+              </div>
+              {product.description && (
+                <ExpandableText text={product.description} className="mt-2 text-sm text-on-surface-variant" />
+              )}
+            </div>
           </div>
 
           {product.modifiers?.map((group) => (
@@ -152,7 +164,6 @@ export function CustomizeProduct() {
                       {option.price_adjustment > 0 && (
                         <span className="text-xs text-on-surface-variant">+{formatCurrency(option.price_adjustment)}</span>
                       )}
-                      {option.price_adjustment === 0 && <span className="text-xs text-on-surface-variant">Free</span>}
                     </button>
                   )
                 })}
@@ -160,19 +171,21 @@ export function CustomizeProduct() {
             </div>
           ))}
 
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <h4 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant">
-                Special Instructions
-              </h4>
+          {specialInstructionsEnabled && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant">
+                  Special Instructions
+                </h4>
+              </div>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any special requests?"
+                className="w-full rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[60px] resize-none"
+              />
             </div>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Any special requests?"
-              className="w-full rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2 text-sm text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary min-h-[60px] resize-none"
-            />
-          </div>
+          )}
 
           <div>
             <div className="flex items-center gap-2 mb-2">

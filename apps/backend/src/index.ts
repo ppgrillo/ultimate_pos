@@ -10,6 +10,7 @@ import { categoriesRouter } from './routes/categories'
 import { ordersRouter } from './routes/orders'
 import { employeesRouter } from './routes/employees'
 import { customersRouter } from './routes/customers'
+import { storesRouter } from './routes/stores'
 
 const app = new Hono()
 
@@ -25,6 +26,7 @@ app.route('/categories', categoriesRouter)
 app.route('/orders', ordersRouter)
 app.route('/employees', employeesRouter)
 app.route('/customers', customersRouter)
+app.route('/stores', storesRouter)
 
 const port = Number(process.env.PORT) || 3001
 

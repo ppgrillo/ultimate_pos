@@ -128,7 +128,7 @@ authRouter.get('/me', async (c) => {
     .maybeSingle()
 
   if (!profile) {
-    return c.json({ profile_id: null, store_id: null, role: null })
+    return c.json({ profile_id: null, store_id: null, role: null, access_token: null })
   }
 
   const { data: membership } = await supabaseAdmin
@@ -137,10 +137,15 @@ authRouter.get('/me', async (c) => {
     .eq('profile_id', profile.id)
     .maybeSingle()
 
+  const store_id = membership?.store_id || null
+  const role = membership?.role || null
+  const access_token = await mintToken(profile.id, store_id, role)
+
   return c.json({
     profile_id: profile.id,
-    store_id: membership?.store_id || null,
-    role: membership?.role || null,
+    store_id,
+    role,
+    access_token,
   })
 })
 

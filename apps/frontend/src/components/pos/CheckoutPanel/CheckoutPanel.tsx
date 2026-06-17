@@ -16,6 +16,11 @@ export function CheckoutPanel() {
   const dispatch = useAppDispatch()
   const router = useRouter()
   const { items, customer_id, order_type, discount, discount_label, notes } = useAppSelector((s) => s.cart)
+  const store = useAppSelector((s) => s.storeConfig.currentStore)
+  const settings = store?.settings
+  const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
+  const taxLabel = settings?.taxLabel || 'Tax'
+  const taxInclusive = settings?.taxInclusive ?? false
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -95,6 +100,9 @@ export function CheckoutPanel() {
             subtotal={subtotal}
             discount={discount}
             discountLabel={discount_label || undefined}
+            taxRate={taxRate}
+            taxLabel={taxLabel}
+            taxInclusive={taxInclusive}
             showTotal
           />
         </div>

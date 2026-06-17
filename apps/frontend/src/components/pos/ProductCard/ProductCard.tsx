@@ -48,7 +48,7 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
               <ShoppingCart className="h-3.5 w-3.5" />
               Add to Cart
             </button>
-            {product.points && product.points > 0 && (
+            {(product.points ?? 0) > 0 && (
               <span className="shrink-0 rounded-md bg-secondary/10 px-2 py-1 text-[10px] font-label font-bold text-secondary">
                 +{product.points} pts
               </span>
@@ -73,7 +73,7 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
       <div className="flex-1 min-w-0">
         <h3 className="font-headline font-bold text-sm text-on-surface truncate">{product.name}</h3>
         <p className="font-headline font-bold text-primary">{formatCurrency(product.price)}</p>
-        {product.points && product.points > 0 && (
+        {(product.points ?? 0) > 0 && (
           <span className="inline-flex items-center gap-0.5 mt-0.5 text-[10px] font-label font-bold text-secondary">
             +{product.points} pts
           </span>

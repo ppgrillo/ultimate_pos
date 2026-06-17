@@ -22,6 +22,7 @@ interface ProductFormData {
   image_url: string | null
   modifiers: ModifierGroup[]
   points: number | null
+  tax_exempt: boolean
 }
 
 interface Category {
@@ -42,6 +43,7 @@ const defaultForm: ProductFormData = {
   image_url: null,
   modifiers: [],
   points: null,
+  tax_exempt: false,
 }
 
 export function ProductForm({ productId, initialData }: ProductFormProps) {
@@ -55,6 +57,10 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
 
   const userRole = useAppSelector((state) => state.auth.user?.role)
   const isAdmin = userRole === 'admin'
+  const storeSettings = useAppSelector((state) => state.storeConfig.currentStore?.settings)
+  const hasVariants = storeSettings?.hasVariants ?? false
+  const hasLoyalty = storeSettings?.hasLoyalty ?? false
+  const taxExemptEnabled = storeSettings?.taxExemptEnabled ?? false
 
   useEffect(() => {
     api.get<{ data: Category[] }>('/categories').then((res) => {
@@ -85,6 +91,7 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
         image_url: form.image_url,
         modifiers: cleanModifiers,
         points: form.points ?? 0,
+        tax_exempt: form.tax_exempt,
       }
 
       if (isEditing) {
@@ -227,36 +234,57 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
               className="w-full resize-none bg-transparent border-none p-0 text-sm text-on-body placeholder:text-on-surface-variant/30 focus:ring-0"
             />
           </div>
+
+          {taxExemptEnabled && (
+            <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4 md:col-span-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.tax_exempt}
+                  onChange={(e) => updateField('tax_exempt', e.target.checked)}
+                  className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                />
+                <div>
+                  <span className="block text-sm font-bold text-on-surface">Tax Exempt</span>
+                  <span className="block text-xs text-on-surface-variant mt-0.5">This product is not subject to sales tax</span>
+                </div>
+              </label>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-secondary" />
-            <h2 className="font-headline font-bold text-xl text-on-surface">
-              Variants & Extras
-            </h2>
+      {hasVariants && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-secondary" />
+              <h2 className="font-headline font-bold text-xl text-on-surface">
+                Variants & Extras
+              </h2>
+            </div>
           </div>
+
+          <OptionGroupEditor
+            groups={form.modifiers}
+            onChange={(groups) => updateField('modifiers', groups)}
+          />
         </div>
+      )}
 
-        <OptionGroupEditor
-          groups={form.modifiers}
-          onChange={(groups) => updateField('modifiers', groups)}
-        />
-      </div>
+      {hasLoyalty && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⭐</span>
+            <h2 className="font-headline font-bold text-xl text-on-surface">Loyalty</h2>
+          </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">⭐</span>
-          <h2 className="font-headline font-bold text-xl text-on-surface">Loyalty</h2>
+          <PointsInput
+            value={form.points}
+            onChange={(v) => updateField('points', v)}
+          />
         </div>
-
-        <PointsInput
-          value={form.points}
-          onChange={(v) => updateField('points', v)}
-        />
-      </div>
+      )}
 
       <CreateCategoryModal
         open={showCategoryModal}

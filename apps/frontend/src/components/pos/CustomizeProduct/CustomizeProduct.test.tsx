@@ -173,6 +173,5 @@ describe('CustomizeProduct', () => {
       },
     })
     expect(screen.getByText('+$0.50')).toBeInTheDocument()
-    expect(screen.getByText('Free')).toBeInTheDocument()
   })
 })

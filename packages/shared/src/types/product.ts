@@ -27,6 +27,7 @@ export interface Product {
   modifiers: ModifierGroup[]
   points: number | null
   is_active: boolean
+  tax_exempt: boolean
   created_at: string
   updated_at: string
 }

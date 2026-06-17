@@ -214,7 +214,240 @@ const handleCategoryCreated = (cat: CreatedCategory) => {
 
 ---
 
-## UI component conventions
+---
+
+## Store settings — how to add a new global configuration parameter
+
+Store-level settings are stored as a **JSONB column** (`stores.settings`) so new parameters can be added without migrations.
+
+### Architecture
+
+```
+packages/shared/src/types/store.ts   → StoreSettings interface (TypeScript contract)
+Supabase stores.settings column      → JSONB persistence (no migration needed for new keys)
+apps/backend/src/routes/stores.ts    → PUT /stores/settings (admin-only, merge strategy)
+apps/frontend/src/store/slices/storeSlice.ts → updateStoreSettings thunk (persists + updates Redux)
+```
+
+### Adding a new setting — step by step
+
+**1. Add the key to `StoreSettings`** in `packages/shared/src/types/store.ts`:
+```ts
+export interface StoreSettings {
+  hasVariants: boolean
+  hasLoyalty: boolean
+  myNewSetting: boolean  // ← add here
+  someStringSetting: string
+}
+```
+
+**2. Wire the toggle UI** in `apps/frontend/src/app/(dashboard)/settings/page.tsx` (Store tab):
+```tsx
+<label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+  <input
+    type="checkbox"
+    checked={settings?.myNewSetting ?? false}
+    onChange={(e) => dispatch(updateStoreSettings({ myNewSetting: e.target.checked }))}
+    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+  />
+  <div>
+    <span className="block text-sm font-bold text-on-surface">My New Setting</span>
+    <span className="block text-xs text-on-surface-variant mt-0.5">Description of what it does</span>
+  </div>
+</label>
+```
+
+**3. Read the setting** wherever it's needed (e.g. in a component):
+```tsx
+const settings = useAppSelector((state) => state.storeConfig.currentStore?.settings)
+const mySetting = settings?.myNewSetting ?? false  // safe default
+```
+
+**No migration needed** — the JSONB column accepts any keys. No backend changes either — `PUT /stores/settings` already does a deep merge (`{ ...current, ...incoming }`).
+
+### Data flow
+
+```
+User toggles checkbox
+  → dispatch(updateStoreSettings({ myNewSetting: true }))
+  → fetch PUT /api/stores/settings  (proxied to backend)
+  → backend reads current settings, merges, writes JSONB
+  → returns { settings: { ...merged } }
+  → fulfilled reducer updates state.storeConfig.currentStore.settings
+  → all selectors re-render
+```
+
+Settings are loaded automatically on app start via `fetchStore()` dispatched from `SessionSyncProvider` in `provider.tsx`.
+
+### Critical: migrations for column-backed settings
+
+If a new setting needs a **dedicated DB column** (not JSONB), you **must**:
+
+1. Create the migration SQL and apply it immediately with `supabase_apply_migration`
+2. Verify with `supabase_execute_sql` → `SELECT column_name FROM information_schema.columns WHERE table_name = 'stores'`
+3. Add the column to the `Store` type in `packages/shared/src/types/store.ts`
+4. Update the `PUT /stores/settings` handler in `apps/backend/src/routes/stores.ts` to extract the value from the request body and update the column (same pattern as `tax_rate`)
+
+**Do not write backend code referencing a column that hasn't been migrated.** Always apply the migration before writing code that reads/writes it.
+
+### Files involved
+
+| File | Role |
+|---|---|
+| `packages/shared/src/types/store.ts` | `StoreSettings` interface — add new keys here |
+| `apps/backend/src/routes/stores.ts` | `PUT /stores/settings` — merge + persist (no changes needed for new keys) |
+| `apps/frontend/src/store/slices/storeSlice.ts` | `updateStoreSettings` thunk + reducer (no changes needed for new keys) |
+| `apps/frontend/src/app/(dashboard)/settings/page.tsx` | Toggle UI in Store tab — add new checkbox here |
+| `apps/frontend/src/store/provider.tsx` | `dispatch(fetchStore())` — loads settings on auth (no changes needed) |
+
+---
+
+## Tax configuration — adding new tax-related settings
+
+Tax settings live partly in `stores.settings` (JSONB) and partly in `stores.tax_rate` (separate DB column).
+
+### Special case: `taxRate`
+
+Unlike other settings that live entirely in JSONB, `tax_rate` is a **dedicated DB column** because the backend queries it directly for order processing. The `PUT /stores/settings` endpoint auto-extracts `taxRate` from the JSONB payload and updates the column:
+
+```ts
+// apps/backend/src/routes/stores.ts (inside PUT /stores/settings)
+const settings = { ...currentSettings, ...incomingSettings }
+if (incomingSettings?.taxRate !== undefined) {
+  await supabase.from('stores').update({ settings, tax_rate: incomingSettings.taxRate }).eq('id', storeId)
+} else {
+  await supabase.from('stores').update({ settings }).eq('id', storeId)
+}
+```
+
+When reading, merge both sources in the Redux reducer:
+
+```ts
+// storeSlice.ts fulfilled reducer
+state.currentStore = {
+  ...data,
+  settings: { ...data.settings, taxRate: data.tax_rate },
+}
+```
+
+**This is the only setting that needs this treatment.** All others live entirely in JSONB.
+
+### Current tax settings in `StoreSettings`
+
+Defined in `packages/shared/src/types/store.ts`:
+
+```ts
+export interface StoreSettings {
+  // Product defaults
+  hasVariants: boolean
+  hasLoyalty: boolean
+  // Tax configuration
+  taxEnabled: boolean       // master toggle — when off, no tax is calculated
+  taxLabel: string          // display label (e.g. "VAT", "Sales Tax", "IVA")
+  taxInclusive: boolean     // true = prices already include tax (extract it)
+  taxExemptEnabled: boolean // true = show per-product "Tax Exempt" checkbox
+  taxRate?: number          // note: stored in DB column, mapped here for Redux convenience
+}
+```
+
+### Frontend consumption pattern
+
+Components read tax settings from Redux store:
+
+```ts
+const store = useAppSelector((s) => s.storeConfig.currentStore)
+const settings = store?.settings
+const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
+const taxLabel = settings?.taxLabel || 'Tax'
+const taxInclusive = settings?.taxInclusive ?? false
+const taxEnabled = settings?.taxEnabled ?? false
+const taxExemptEnabled = settings?.taxExemptEnabled ?? false
+```
+
+Then pass them as props to `OrderSummary`:
+
+```tsx
+<OrderSummary
+  subtotal={total}
+  discount={discount}
+  discountLabel={discountLabel}
+  taxRate={taxRate}
+  taxLabel={taxLabel}
+  taxInclusive={taxInclusive}
+  showTotal
+/>
+```
+
+### OrderSummary props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `subtotal` | `number` | required | Sum of all line item prices |
+| `discount` | `number` | required | Discount amount |
+| `discountLabel` | `string` | `'Discount'` | Discount line label |
+| `tax` | `number` | optional | Tax override (if not provided, calculated from taxRate) |
+| `taxRate` | `number` | `0.08` | Tax rate as decimal (e.g. 0.08 for 8%) |
+| `taxLabel` | `string` | `'Tax'` | Tax line label |
+| `taxInclusive` | `boolean` | `false` | If true, tax is extracted from subtotal, not added on top |
+| `showTotal` | `boolean` | `false` | Show total line (used only in CheckoutPanel) |
+
+### Per-product tax exemption
+
+When `taxExemptEnabled` is true, ProductForm shows a "Tax Exempt" checkbox:
+
+```tsx
+{settings?.taxExemptEnabled && (
+  <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
+    <label className="flex items-center gap-3 cursor-pointer">
+      <input type="checkbox" checked={form.tax_exempt} onChange={...} />
+      <div>
+        <span className="block text-sm font-bold text-on-surface">Tax Exempt</span>
+        <span className="block text-xs text-on-surface-variant mt-0.5">Not subject to sales tax</span>
+      </div>
+    </label>
+  </div>
+)}
+```
+
+The `tax_exempt` field is included in:
+- `Product` interface (`packages/shared/src/types/product.ts`)
+- `productSchema` Zod validation (`packages/shared/src/validations.ts`)
+- `EditProductPage` `initialData` (`apps/frontend/src/app/(dashboard)/products/[id]/edit/page.tsx`)
+
+### Backend tax calculation
+
+In `apps/backend/src/routes/orders.ts` (`POST /orders`):
+
+```ts
+// Read store settings
+const storeData = await supabase.from('stores').select('settings, tax_rate').eq('id', storeId).single()
+const settings = storeData.settings || {}
+const taxRate = settings.taxEnabled ? (storeData.tax_rate || 0) / 100 : 0
+
+// Calculate taxable subtotal (excluding tax-exempt products when feature is on)
+const taxableSubtotal = settings.taxExemptEnabled
+  ? items.filter(i => !i.tax_exempt).reduce(...)
+  : subtotal
+
+// Tax calculation
+let tax = 0
+if (settings.taxInclusive) {
+  tax = taxableSubtotal - (taxableSubtotal / (1 + taxRate))
+} else {
+  tax = taxableSubtotal * taxRate
+}
+
+// Total
+const total = settings.taxInclusive
+  ? subtotal - discount
+  : subtotal + tax - discount
+```
+
+### Adding a new tax-related parameter (same as any other setting)
+
+Follow the same steps in the "Store settings" section above. Special cases (like `taxRate` requiring a DB column) are rare — most parameters go entirely into JSONB.
+
+---
 
 - Base components live in `apps/frontend/src/components/ui/` — `Modal`, `Button`, `Input`, `Select`, `Table`, `Card`, `Tabs`
 - `ui/Modal` exports: `Modal`, `ModalTrigger`, `ModalClose`, `ModalContent`, `ModalHeader`, `ModalTitle`, `ModalDescription`, `ModalFooter` (Radix Dialog primitives)

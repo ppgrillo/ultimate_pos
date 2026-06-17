@@ -7,6 +7,7 @@ import { store } from './index'
 import type { AppDispatch } from './index'
 import { setApiToken } from '@/lib/api/client'
 import { setUser } from './slices/authSlice'
+import { fetchStore } from './slices/storeSlice'
 import type { User } from '@ultimate-pos/shared'
 
 /**
@@ -36,6 +37,7 @@ function SessionSyncProvider({ children }: { children: React.ReactNode }) {
         created_at: '',
       }
       dispatch(setUser(user))
+      dispatch(fetchStore())
     } else {
       dispatch(setUser(null))
     }

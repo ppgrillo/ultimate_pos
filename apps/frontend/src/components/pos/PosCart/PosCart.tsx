@@ -11,6 +11,11 @@ export function PosCart() {
   const items = useAppSelector((s) => s.cart.items)
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
+  const store = useAppSelector((s) => s.storeConfig.currentStore)
+  const settings = store?.settings
+  const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
+  const taxLabel = settings?.taxLabel || 'Tax'
+  const taxInclusive = settings?.taxInclusive ?? false
 
   if (items.length === 0) {
     return (
@@ -51,6 +56,9 @@ export function PosCart() {
           subtotal={total}
           discount={0}
           discountLabel=""
+          taxRate={taxRate}
+          taxLabel={taxLabel}
+          taxInclusive={taxInclusive}
         />
         <button
           onClick={() => {

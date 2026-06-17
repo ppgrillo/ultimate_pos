@@ -8,6 +8,8 @@ interface OrderSummaryProps {
   discountLabel?: string
   tax?: number
   taxRate?: number
+  taxLabel?: string
+  taxInclusive?: boolean
   showTotal?: boolean
 }
 
@@ -17,10 +19,19 @@ export function OrderSummary({
   discountLabel,
   tax: taxOverride,
   taxRate = 0.08,
+  taxLabel = 'Tax',
+  taxInclusive = false,
   showTotal = false,
 }: OrderSummaryProps) {
-  const tax = taxOverride ?? Math.round(subtotal * taxRate * 100) / 100
-  const total = Math.round((subtotal + tax - discount) * 100) / 100
+  const tax = taxOverride ?? (
+    taxInclusive
+      ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
+      : Math.round(subtotal * taxRate * 100) / 100
+  )
+
+  const total = taxInclusive
+      ? Math.round((subtotal - discount) * 100) / 100
+      : Math.round((subtotal + tax - discount) * 100) / 100
 
   return (
     <div className="space-y-1.5 text-sm">
@@ -34,10 +45,12 @@ export function OrderSummary({
           <span>-{formatCurrency(discount)}</span>
         </div>
       )}
-      <div className="flex justify-between text-on-surface-variant">
-        <span>Tax ({(taxRate * 100).toFixed(0)}%)</span>
-        <span>{formatCurrency(tax)}</span>
-      </div>
+      {tax > 0 && (
+        <div className="flex justify-between text-on-surface-variant">
+          <span>{taxLabel} ({(taxRate * 100).toFixed(0)}%){taxInclusive ? ' incl.' : ''}</span>
+          <span>{formatCurrency(tax)}</span>
+        </div>
+      )}
       {showTotal && (
         <div className="flex justify-between border-t border-outline-variant pt-1.5 font-headline font-bold text-lg text-on-surface">
           <span>Total</span>

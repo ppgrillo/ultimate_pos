@@ -25,7 +25,9 @@ export function PosMenu() {
     if (selectedCategory && p.category_id !== selectedCategory) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
-      return p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false)
+      const category = categories.find((c) => c.id === p.category_id)
+      const matchesCategory = category?.name.toLowerCase().includes(q) ?? false
+      return p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false) || matchesCategory
     }
     return true
   })
