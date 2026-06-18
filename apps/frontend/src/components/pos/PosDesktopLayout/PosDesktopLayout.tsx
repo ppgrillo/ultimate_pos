@@ -5,11 +5,12 @@ import { RightPanelCustomer } from '@/components/pos/RightPanelCustomer'
 import { OrderActionBar } from '@/components/pos/OrderActionBar'
 import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
+import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PaymentModal } from '@/components/pos/PaymentModal'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { clearCart } from '@/store/slices/cartSlice'
+import { clearCart, setOrderType } from '@/store/slices/cartSlice'
 import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { ShoppingBag, Search, QrCode } from 'lucide-react'
@@ -114,25 +115,25 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar with search and categories */}
         <div className="border-b border-outline-variant bg-surface-container-low/80">
-          <div className="flex items-center gap-3 px-4 py-2.5">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-on-surface-variant" />
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-on-surface-variant" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => dispatch(setSearchQuery(e.target.value))}
-                placeholder="Search products..."
-                className="h-8 w-full rounded-md border border-outline-variant bg-surface-container pl-8 pr-2 text-xs text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                placeholder="Search..."
+                className="h-7 w-full rounded-md border border-outline-variant bg-surface-container pl-7 pr-2 text-[11px] text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               />
             </div>
-            <button className="flex items-center gap-1.5 rounded-md border border-outline-variant bg-surface-container px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
-              <QrCode className="h-3.5 w-3.5" />
-              Scan Barcode
+            <button className="flex items-center gap-1 rounded-md border border-outline-variant bg-surface-container px-2 py-1 text-[11px] text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+              <QrCode className="h-3 w-3" />
+              Scan
             </button>
           </div>
 
           {/* Category Pills */}
-          <div className="flex items-center gap-1.5 px-4 pb-2.5 overflow-x-auto hide-scrollbar">
+          <div className="flex items-center gap-1 px-3 pb-1.5 overflow-x-auto hide-scrollbar">
             <button
               onClick={() => dispatch(setSelectedCategory(null))}
               className={cn(
@@ -162,7 +163,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         </div>
 
         {/* Product Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {featuredProduct && (
             <div>
               {featuredProduct}
@@ -181,6 +182,18 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
           <>
             {/* Customer Section */}
             <RightPanelCustomer />
+
+            {settings?.hasKitchen && (
+              <div className="px-3 pt-3">
+                <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2 px-1">
+                  Dining Option
+                </h3>
+                <DiningOptionToggle
+                  value={order_type}
+                  onChange={(v) => dispatch(setOrderType(v))}
+                />
+              </div>
+            )}
 
             {/* Order Items */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2">

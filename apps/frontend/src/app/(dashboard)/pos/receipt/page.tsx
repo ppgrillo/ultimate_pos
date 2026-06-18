@@ -33,7 +33,8 @@ export default function ReceiptPage() {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/20 mb-6">
           <CheckCircle2 className="h-10 w-10 text-primary" />
         </div>
-        <h1 className="font-headline font-bold text-2xl text-on-surface mb-2">Order Placed!</h1>
+        <h1 className="font-headline font-bold text-2xl text-on-surface mb-2">Thank you for your order!</h1>
+        <h3 className="font-headline font-bold">Order Placed</h3>
         <p className="text-on-surface-variant mb-8">
           {hasKitchen
             ? 'Your order has been sent to the kitchen.'

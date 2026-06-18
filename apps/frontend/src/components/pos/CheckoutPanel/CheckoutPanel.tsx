@@ -4,8 +4,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCheckoutView, setCartOpen } from '@/store/slices/posSlice'
-import { clearCart } from '@/store/slices/cartSlice'
+import { setCheckoutView, setCartOpen, setActiveView } from '@/store/slices/posSlice'
+import { clearCart, setOrderType } from '@/store/slices/cartSlice'
 import { api } from '@/lib/api/client'
 import { formatCurrency, cn } from '@/lib/utils'
 import { CartItemRow } from '@/components/pos/CartItemRow'
@@ -117,7 +117,11 @@ export function CheckoutPanel() {
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 p-4 border-b border-outline-variant">
         <button
-          onClick={() => dispatch(setCheckoutView(false))}
+          onClick={() => {
+            dispatch(setCheckoutView(false))
+            dispatch(setCartOpen(false))
+            dispatch(setActiveView('menu'))
+          }}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -138,15 +142,17 @@ export function CheckoutPanel() {
           ))}
         </div>
 
-        <div>
-          <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">
-            Dining Option
-          </h3>
-          <DiningOptionToggle
-            value={order_type}
-            onChange={() => {}}
-          />
-        </div>
+        {settings?.hasKitchen && (
+          <div>
+            <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">
+              Dining Option
+            </h3>
+            <DiningOptionToggle
+              value={order_type}
+              onChange={(v) => dispatch(setOrderType(v))}
+            />
+          </div>
+        )}
 
         <div>
           <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">

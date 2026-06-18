@@ -91,13 +91,13 @@ export default function PosPage() {
                 <p className="text-on-surface-variant">No products found</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                 {filtered.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                     onAdd={handleAdd}
-                    variant="rich"
+                    variant="dense"
                   />
                 ))}
               </div>

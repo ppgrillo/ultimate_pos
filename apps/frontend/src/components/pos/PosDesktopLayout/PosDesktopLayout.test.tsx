@@ -32,8 +32,8 @@ describe('PosDesktopLayout', () => {
         products={<div>Products Grid</div>}
       />,
     )
-    expect(screen.getByPlaceholderText('Search products...')).toBeInTheDocument()
-    expect(screen.getByText('Scan Barcode')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
+    expect(screen.getByText('Scan')).toBeInTheDocument()
   })
 
   it('renders empty cart state', () => {

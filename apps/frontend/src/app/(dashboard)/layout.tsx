@@ -1,6 +1,8 @@
 import { Sidebar } from '@/components/layout/Sidebar'
+import { SidebarProvider } from '@/components/layout/Sidebar/SidebarContext'
 import { MobileDrawer } from '@/components/layout/MobileDrawer'
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { DashboardContent } from '@/components/layout/DashboardContent'
 
 export default function DashboardLayout({
   children,
@@ -8,13 +10,15 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <MobileDrawer />
-      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
-        <DashboardShell />
-        <main className="flex-1 p-6">{children}</main>
+    <SidebarProvider>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <MobileDrawer />
+        <DashboardContent>
+          <DashboardShell />
+          <main className="flex-1 p-6">{children}</main>
+        </DashboardContent>
       </div>
-    </div>
+    </SidebarProvider>
   )
 }

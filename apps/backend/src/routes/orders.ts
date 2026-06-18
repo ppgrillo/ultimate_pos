@@ -1,31 +1,76 @@
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { orderSchema } from '@ultimate-pos/shared'
+import { orderSchema, canTransition } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
+import { orderBus } from '../events'
 
 export const ordersRouter = new Hono()
 
 ordersRouter.use('*', authMiddleware)
 
+function enrichOrder(order: Record<string, unknown>) {
+  const customer = order.customer as { name?: string } | null
+  return {
+    ...order,
+    customer_name: customer?.name || null,
+    customer: undefined,
+    metadata: order.metadata || {},
+  }
+}
+
 ordersRouter.get('/', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
   const status = c.req.query('status')
+  const tab = c.req.query('tab')
 
   let query = supabase
     .from('orders')
-    .select('*, items:order_items(*)')
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .eq('store_id', storeId)
 
-  if (status) query = query.eq('status', status)
+  if (status) {
+    query = query.eq('status', status)
+  } else if (tab === 'active') {
+    query = query.in('status', ['pending', 'preparing', 'ready'])
+  } else if (tab === 'completed') {
+    query = query.in('status', ['served', 'paid', 'cancelled'])
+  }
 
   const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data })
+  return c.json({ data: (data || []).map(enrichOrder) })
+})
+
+ordersRouter.get('/realtime', async (c) => {
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
+  const encoder = new TextEncoder()
+
+  const encoderFn = (data: unknown) => {
+    writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)).catch(() => {})
+  }
+
+  orderBus.on('order:created', encoderFn)
+  orderBus.on('order:status-changed', encoderFn)
+
+  c.req.raw.signal.addEventListener('abort', () => {
+    orderBus.off('order:created', encoderFn)
+    orderBus.off('order:status-changed', encoderFn)
+    writer.close().catch(() => {})
+  })
+
+  return c.newResponse(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 })
 
 ordersRouter.get('/:id', async (c) => {
@@ -34,13 +79,13 @@ ordersRouter.get('/:id', async (c) => {
 
   const { data, error } = await supabase
     .from('orders')
-    .select('*, items:order_items(*)')
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .eq('id', id)
     .single()
 
   if (error || !data) throw notFound('Order not found')
 
-  return c.json({ data })
+  return c.json({ data: enrichOrder(data) })
 })
 
 ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
@@ -117,7 +162,19 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     ? Math.round((subtotal - discount) * 100) / 100
     : Math.round((subtotal + tax - discount) * 100) / 100
 
+  const hasKitchen = (settings?.hasKitchen as boolean) ?? false
+  const initialStatus = !hasKitchen && paymentMethod ? 'paid' : 'pending'
   const paymentStatus = paymentMethod ? 'paid' : 'unpaid'
+
+  const { data: seqData } = await supabase
+    .from('orders')
+    .select('order_number')
+    .eq('store_id', storeId)
+    .gte('created_at', new Date().toISOString().slice(0, 10))
+    .order('order_number', { ascending: false })
+    .limit(1)
+
+  const nextOrderNumber = (seqData?.[0]?.order_number ?? 0) + 1
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
@@ -127,7 +184,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       customer_id: input.customer_id || null,
       table_number: input.table_number || null,
       type: input.type || 'dine-in',
-      status: 'pending',
+      order_number: nextOrderNumber,
+      status: initialStatus,
       payment_status: paymentStatus,
       subtotal,
       tax,
@@ -195,26 +253,53 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const { data: fullOrder } = await supabase
     .from('orders')
-    .select('*, items:order_items(*), payments(*)')
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .eq('id', order.id)
     .single()
 
-  return c.json({ data: fullOrder }, 201)
+  const enriched = enrichOrder(fullOrder!)
+  orderBus.emit('order:created', enriched)
+
+  return c.json({ data: enriched }, 201)
 })
 
 ordersRouter.patch('/:id/status', async (c) => {
   const supabase = supabaseAdmin
   const id = c.req.param('id')
-  const { status } = await c.req.json()
+  const storeId = c.get('storeId')
+  const { status: newStatus } = await c.req.json()
+
+  const { data: store } = await supabase
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  const hasKitchen = (store?.settings as Record<string, unknown> | null)?.hasKitchen === true
+
+  const { data: order } = await supabase
+    .from('orders')
+    .select('status')
+    .eq('id', id)
+    .single()
+
+  if (!order) throw notFound('Order not found')
+
+  if (!canTransition(order.status, newStatus, hasKitchen)) {
+    throw badRequest(`Cannot transition from ${order.status} to ${newStatus}`)
+  }
 
   const { data, error } = await supabase
     .from('orders')
-    .update({ status })
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select()
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .single()
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data })
+  const enriched = enrichOrder(data!)
+  orderBus.emit('order:status-changed', enriched)
+
+  return c.json({ data: enriched })
 })

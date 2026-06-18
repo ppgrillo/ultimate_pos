@@ -9,12 +9,60 @@ import type { Product } from '@ultimate-pos/shared'
 interface ProductCardProps {
   product: Product
   onAdd: (product: Product) => void
-  variant?: 'compact' | 'rich'
+  variant?: 'compact' | 'rich' | 'dense'
 }
 
 export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCardProps) {
   const [imgError, setImgError] = useState(false)
   const showImg = product.image_url && !imgError
+
+  if (variant === 'dense') {
+    // Entire card is clickable for faster POS interactions. Add button still works and stops propagation.
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onAdd(product)
+          }
+        }}
+        onClick={() => onAdd(product)}
+        className="group relative flex flex-col rounded-lg bg-surface-container/40 border border-outline-variant/60 overflow-hidden transition-all hover:border-primary/40 hover:shadow-md active:scale-[0.97] cursor-pointer"
+      >
+        <div className="aspect-[4/3] bg-surface-container-high overflow-hidden">
+          {showImg ? (
+            <img
+              src={product.image_url ?? undefined}
+              alt={product.name}
+              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <ShoppingCart className="h-5 w-5 text-on-surface-variant/25" />
+            </div>
+          )}
+        </div>
+        <div className="p-1.5 space-y-0.5 flex flex-col flex-1">
+          <h3 className="font-headline font-bold text-[11px] text-on-surface leading-tight line-clamp-2">{product.name}</h3>
+          <p className="font-headline font-semibold text-[11px] text-primary">{formatCurrency(product.price)}</p>
+        </div>
+        <button
+          onClick={(e) => {
+            // prevent the root click from firing when pressing the Add button
+            e.stopPropagation()
+            onAdd(product)
+          }}
+          className="flex items-center justify-center gap-1 rounded-b-lg bg-primary/10 py-2 text-[10px] font-label font-bold text-primary hover:bg-primary/20 transition-colors active:bg-primary/30"
+        >
+          <Plus className="h-3 w-3" />
+          Add
+        </button>
+      </div>
+    )
+  }
 
   if (variant === 'rich') {
     return (

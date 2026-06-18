@@ -49,7 +49,7 @@ export function PosMenu() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-24 lg:pb-4">
+    <div className="flex flex-col gap-2 p-2 pb-24 lg:pb-2">
       <PosSearchBar
         value={searchQuery}
         onChange={(v: string) => dispatch(setSearchQuery(v))}
@@ -71,12 +71,17 @@ export function PosMenu() {
           <p className="text-on-surface-variant">No products found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          className="grid gap-2"
+          // Use auto-fit so the grid automatically fills available width like marketplaces (AliExpress)
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}
+        >
           {filtered.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
               onAdd={handleAdd}
+              variant="dense"
             />
           ))}
         </div>

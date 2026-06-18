@@ -31,6 +31,11 @@ const defaultPreload = {
     notes: null,
     discount_label: null,
   },
+  storeConfig: {
+    currentStore: {
+      settings: { hasKitchen: true },
+    },
+  },
 }
 
 describe('CheckoutPanel', () => {
