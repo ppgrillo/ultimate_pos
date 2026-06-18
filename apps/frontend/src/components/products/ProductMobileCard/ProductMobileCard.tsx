@@ -1,7 +1,5 @@
 'use client'
 
-import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 
 interface ProductMobileCardProps {
@@ -10,14 +8,35 @@ interface ProductMobileCardProps {
   price: number
   category: string
   isActive: boolean
+  selected?: boolean
+  onToggle?: (id: string) => void
+  selectionMode?: boolean
 }
 
-export function ProductMobileCard({ id, name, price, category, isActive }: ProductMobileCardProps) {
+export function ProductMobileCard({
+  id, name, price, category, isActive,
+  selected, onToggle, selectionMode,
+}: ProductMobileCardProps) {
   return (
-    <Link
-      href={`/products/${id}/edit`}
-      className="flex w-full items-center gap-4 rounded-xl border border-outline-variant bg-surface-container-low p-4 transition-colors hover:bg-surface-container-high active:scale-[0.98]"
+    <div
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low p-4 transition-colors',
+        selectionMode
+          ? selected
+            ? 'border-primary bg-primary/5'
+            : 'hover:bg-surface-container-high'
+          : 'hover:bg-surface-container-high active:scale-[0.98]',
+      )}
+      onClick={() => onToggle?.(id)}
     >
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={() => onToggle?.(id)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-5 w-5 shrink-0 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+      />
+
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-surface-container-highest text-lg font-headline font-bold text-on-surface-variant">
         {name.charAt(0).toUpperCase()}
       </div>
@@ -46,8 +65,6 @@ export function ProductMobileCard({ id, name, price, category, isActive }: Produ
           )}
         </div>
       </div>
-
-      <ChevronRight className="h-5 w-5 shrink-0 text-on-surface-variant" />
-    </Link>
+    </div>
   )
 }

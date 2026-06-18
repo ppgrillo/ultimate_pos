@@ -60,6 +60,19 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const taxEnabled = (settings?.taxEnabled as boolean) ?? false
   const taxInclusive = (settings?.taxInclusive as boolean) ?? false
   const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
+  const checkoutMode = (settings?.checkoutMode as string) ?? 'order-only'
+  const acceptedMethods = (settings?.acceptedPaymentMethods as string[]) ?? ['cash', 'card']
+
+  const paymentMethod = input.payment_method
+  const cashAmountGiven = input.cash_amount_given
+
+  if (checkoutMode === 'payment-required' && !paymentMethod) {
+    throw badRequest('Payment method is required')
+  }
+
+  if (paymentMethod && !acceptedMethods.includes(paymentMethod)) {
+    throw badRequest(`Payment method "${paymentMethod}" is not accepted`)
+  }
 
   const productIds = input.items.map((i) => i.product_id)
   const { data: products } = await supabase
@@ -89,7 +102,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   })
 
-  const discount = 0
+  const discount = input.discount || 0
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -104,6 +117,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     ? Math.round((subtotal - discount) * 100) / 100
     : Math.round((subtotal + tax - discount) * 100) / 100
 
+  const paymentStatus = paymentMethod ? 'paid' : 'unpaid'
+
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .insert({
@@ -113,10 +128,11 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       table_number: input.table_number || null,
       type: input.type || 'dine-in',
       status: 'pending',
-      payment_status: 'unpaid',
+      payment_status: paymentStatus,
       subtotal,
       tax,
       discount,
+      discount_label: input.discount_label || null,
       total,
       notes: input.notes,
     })
@@ -135,6 +151,29 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     .insert(itemsToInsert)
 
   if (itemsError) throw badRequest(itemsError.message)
+
+  if (paymentMethod) {
+    const paymentData: Record<string, unknown> = {
+      order_id: order.id,
+      amount: total,
+      method: paymentMethod,
+      status: 'completed',
+    }
+
+    if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
+      if (cashAmountGiven < total) {
+        throw badRequest('Amount given must be at least the total')
+      }
+      paymentData.amount_given = cashAmountGiven
+      paymentData.change_due = Math.round((cashAmountGiven - total) * 100) / 100
+    }
+
+    const { error: paymentError } = await supabase
+      .from('payments')
+      .insert(paymentData)
+
+    if (paymentError) throw badRequest(paymentError.message)
+  }
 
   if (input.customer_id) {
     const { data: cust } = await supabase
@@ -156,7 +195,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const { data: fullOrder } = await supabase
     .from('orders')
-    .select('*, items:order_items(*)')
+    .select('*, items:order_items(*), payments(*)')
     .eq('id', order.id)
     .single()
 

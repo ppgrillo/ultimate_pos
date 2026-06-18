@@ -5,6 +5,7 @@ import { RightPanelCustomer } from '@/components/pos/RightPanelCustomer'
 import { OrderActionBar } from '@/components/pos/OrderActionBar'
 import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
+import { PaymentModal } from '@/components/pos/PaymentModal'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
@@ -13,7 +14,7 @@ import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { ShoppingBag, Search, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ProductCategory } from '@ultimate-pos/shared'
+import type { ProductCategory, PaymentMethod } from '@ultimate-pos/shared'
 
 interface PosDesktopLayoutProps {
   categories: ProductCategory[]
@@ -26,6 +27,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const dispatch = useAppDispatch()
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   const items = useAppSelector((s) => s.cart.items)
   const customer_id = useAppSelector((s) => s.cart.customer_id)
@@ -44,8 +46,19 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
+  const taxEnabled = settings?.taxEnabled ?? false
+  const checkoutMode = settings?.checkoutMode ?? 'order-only'
+  const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
 
-  const handleSubmit = async () => {
+  const computedTax = !taxEnabled ? 0 : taxInclusive
+    ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
+    : Math.round(subtotal * taxRate * 100) / 100
+
+  const totalAmount = taxInclusive
+    ? Math.round((subtotal - discount) * 100) / 100
+    : Math.round((subtotal + computedTax - discount) * 100) / 100
+
+  const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number) => {
     setSubmitting(true)
     try {
       const orderItems = items.map((item) => ({
@@ -55,19 +68,44 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         modifiers: item.modifiers,
         notes: item.notes,
       }))
+      const isCash = paymentMethod === 'cash'
       await api.post('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
         notes,
+        discount,
+        discount_label,
+        payment_method: paymentMethod,
+        cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
       dispatch(clearCart())
-      router.push('/pos/receipt')
+      const params = new URLSearchParams()
+      if (paymentMethod) {
+        params.set('paymentMethod', paymentMethod)
+        params.set('total', String(totalAmount))
+        if (isCash && cashAmountGiven !== undefined && cashAmountGiven > totalAmount) {
+          params.set('changeDue', String(Math.round((cashAmountGiven - totalAmount) * 100) / 100))
+        }
+      }
+      router.push(`/pos/receipt?${params.toString()}`)
     } catch {
-      // error handled by OrderActionBar
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleSubmit = async () => {
+    if (checkoutMode === 'payment-required') {
+      setShowPaymentModal(true)
+      return
+    }
+    await doSubmit()
+  }
+
+  const handlePaymentConfirm = async (method: PaymentMethod, cashGiven?: number) => {
+    setShowPaymentModal(false)
+    await doSubmit(method, cashGiven)
   }
 
   return (
@@ -163,6 +201,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
                   taxRate={taxRate}
                   taxLabel={taxLabel}
                   taxInclusive={taxInclusive}
+                  taxEnabled={taxEnabled}
                   showTotal
                 />
               </div>
@@ -179,6 +218,14 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
           </div>
         )}
       </aside>
+
+      <PaymentModal
+        open={showPaymentModal}
+        onOpenChange={setShowPaymentModal}
+        total={totalAmount}
+        onConfirm={handlePaymentConfirm}
+        acceptedMethods={acceptedMethods}
+      />
 
       {customizeModal}
     </div>

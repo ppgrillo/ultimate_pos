@@ -22,10 +22,14 @@ export interface Product {
   price: number
   cost: number | null
   sku: string | null
+  barcode: string | null
   category_id: string | null
   image_url: string | null
   modifiers: ModifierGroup[]
   points: number | null
+  stock_qty: number | null
+  track_inventory: boolean
+  low_stock_threshold: number | null
   is_active: boolean
   tax_exempt: boolean
   created_at: string

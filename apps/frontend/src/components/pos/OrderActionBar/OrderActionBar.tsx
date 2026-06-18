@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { Percent, PauseCircle, CreditCard } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
+import { PromoModal } from '@/components/pos/PromoModal'
 
 interface OrderActionBarProps {
   onCheckout: () => void
@@ -11,22 +13,34 @@ interface OrderActionBarProps {
 
 export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps) {
   const items = useAppSelector((s) => s.cart.items)
+  const discount = useAppSelector((s) => s.cart.discount)
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
   const itemsExist = items.length > 0
+  const [showPromo, setShowPromo] = useState(false)
 
   return (
     <div className="border-t border-outline-variant p-3 space-y-2">
       <div className="flex items-center justify-between text-sm">
         <span className="text-on-surface-variant">Total</span>
-        <span className="font-headline font-bold text-lg text-on-surface">{formatCurrency(subtotal)}</span>
+        <span className="font-headline font-bold text-lg text-on-surface">
+          {discount > 0 ? (
+            <span>
+              <span className="line-through text-on-surface-variant/50 mr-1.5 text-sm">{formatCurrency(subtotal)}</span>
+              {formatCurrency(subtotal - discount)}
+            </span>
+          ) : (
+            formatCurrency(subtotal)
+          )}
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <button
           disabled={!itemsExist}
+          onClick={() => setShowPromo(true)}
           className="flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant px-3 py-2 text-xs font-label font-bold text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
         >
           <Percent className="h-4 w-4" />
-          Promo
+          {discount > 0 ? 'Edit Promo' : 'Promo'}
         </button>
         <button
           disabled={!itemsExist}
@@ -53,6 +67,8 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
           </>
         )}
       </button>
+
+      <PromoModal open={showPromo} onOpenChange={setShowPromo} />
     </div>
   )
 }

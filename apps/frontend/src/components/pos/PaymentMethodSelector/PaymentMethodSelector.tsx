@@ -1,22 +1,47 @@
 'use client'
 
-import { Contact, QrCode, CreditCard } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Banknote, CreditCard, Building } from 'lucide-react'
+import { cn, formatCurrency } from '@/lib/utils'
+import type { PaymentMethod } from '@ultimate-pos/shared'
 
 interface PaymentMethodSelectorProps {
-  selected: string | null
-  onSelect: (method: string) => void
+  selected: PaymentMethod | null
+  onSelect: (method: PaymentMethod) => void
+  acceptedMethods?: PaymentMethod[]
+  amount?: number
+  layout?: 'horizontal' | 'vertical'
 }
 
-const methods = [
-  { id: 'nfc', label: 'NFC TAP', icon: Contact },
-  { id: 'qr', label: 'QR PAY', icon: QrCode },
-  { id: 'chip', label: 'CHIP', icon: CreditCard },
-]
+const methodConfig: Partial<Record<PaymentMethod, { label: string; icon: typeof Banknote }>> = {
+  cash: { label: 'Cash', icon: Banknote },
+  card: { label: 'Card', icon: CreditCard },
+  transfer: { label: 'Transfer', icon: Building },
+}
 
-export function PaymentMethodSelector({ selected, onSelect }: PaymentMethodSelectorProps) {
+export function PaymentMethodSelector({
+  selected,
+  onSelect,
+  acceptedMethods = ['cash', 'card', 'transfer'],
+  amount,
+  layout = 'horizontal',
+}: PaymentMethodSelectorProps) {
+  const methods = acceptedMethods
+    .filter((m): m is keyof typeof methodConfig => m in methodConfig)
+    .map((m) => ({ id: m, ...methodConfig[m]! }))
+
+  if (methods.length === 0) {
+    return (
+      <p className="text-xs text-on-surface-variant text-center py-2">
+        No payment methods configured.
+      </p>
+    )
+  }
+
   return (
-    <div className="flex gap-2">
+    <div className={cn(
+      'flex gap-2',
+      layout === 'vertical' && 'flex-col',
+    )}>
       {methods.map((method) => {
         const Icon = method.icon
         const isSelected = selected === method.id
@@ -25,14 +50,22 @@ export function PaymentMethodSelector({ selected, onSelect }: PaymentMethodSelec
             key={method.id}
             onClick={() => onSelect(method.id)}
             className={cn(
-              'flex flex-1 flex-col items-center gap-1.5 rounded-lg border px-3 py-3 text-xs font-label font-bold transition-all',
+              'flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-label font-bold transition-all',
+              layout === 'horizontal' && 'flex-1 flex-col gap-1.5 py-3 text-xs',
               isSelected
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-outline-variant text-on-surface-variant hover:border-on-surface-variant hover:text-on-surface',
             )}
           >
-            <Icon className="h-5 w-5" />
-            {method.label}
+            <Icon className={cn(layout === 'horizontal' ? 'h-5 w-5' : 'h-5 w-5 shrink-0')} />
+            <span className="flex flex-col items-center">
+              <span>{method.label}</span>
+              {amount !== undefined && isSelected && (
+                <span className="text-[10px] font-normal opacity-70">
+                  {formatCurrency(amount)}
+                </span>
+              )}
+            </span>
           </button>
         )
       })}

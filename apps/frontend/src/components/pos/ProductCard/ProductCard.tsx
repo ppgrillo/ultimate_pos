@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Plus, ShoppingCart } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import { ExpandableText } from '@/components/ui'
@@ -12,15 +13,19 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCardProps) {
+  const [imgError, setImgError] = useState(false)
+  const showImg = product.image_url && !imgError
+
   if (variant === 'rich') {
     return (
       <div className="group relative rounded-xl bg-surface-container/50 border border-outline-variant overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg flex flex-col">
-        {product.image_url ? (
+        {showImg ? (
           <div className="aspect-[4/3] bg-surface-container-high overflow-hidden shrink-0">
             <img
-              src={product.image_url}
+              src={product.image_url ?? undefined}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              onError={() => setImgError(true)}
             />
           </div>
         ) : (
@@ -61,12 +66,13 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
 
   return (
     <div className="group relative flex items-center gap-3 rounded-xl bg-surface-container/50 border border-outline-variant p-3 transition-all hover:border-primary/30">
-      {product.image_url && (
+      {showImg && (
         <div className="h-14 w-14 shrink-0 rounded-lg bg-surface-container-high overflow-hidden">
           <img
-            src={product.image_url}
+            src={product.image_url ?? undefined}
             alt={product.name}
             className="h-full w-full object-cover"
+            onError={() => setImgError(true)}
           />
         </div>
       )}

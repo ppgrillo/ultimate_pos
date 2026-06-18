@@ -1,0 +1,1 @@
+export { PromoModal } from './PromoModal'

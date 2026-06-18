@@ -22,4 +22,9 @@ describe('OrderSummary', () => {
     render(<OrderSummary subtotal={30} discount={5} discountLabel="Coupon" showTotal />)
     expect(screen.getByText('$27.40')).toBeInTheDocument()
   })
+
+  it('shows zero tax when taxEnabled is false', () => {
+    render(<OrderSummary subtotal={30} discount={5} discountLabel="Coupon" taxEnabled={false} showTotal />)
+    expect(screen.getByText('$25.00')).toBeInTheDocument()
+  })
 })

@@ -15,6 +15,7 @@ export function CustomizeProduct() {
     s.products.items.find((p) => p.id === productId),
   )
 
+  const [imgError, setImgError] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
@@ -96,12 +97,13 @@ export function CustomizeProduct() {
 
         <div className="p-4 space-y-5">
           <div className="flex gap-4">
-            {product.image_url && (
+            {product.image_url && !imgError && (
               <div className="shrink-0">
                 <img
-                  src={product.image_url}
+                  src={product.image_url ?? undefined}
                   alt={product.name}
                   className="h-24 w-24 rounded-xl object-cover"
+                  onError={() => setImgError(true)}
                 />
               </div>
             )}

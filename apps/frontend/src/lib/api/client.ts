@@ -57,6 +57,32 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   return res.json()
 }
 
+async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  const url = `${API_BASE}${path}`
+  const headers: Record<string, string> = {}
+  if (_token) {
+    headers['Authorization'] = `Bearer ${_token}`
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const err = new Error(
+      body?.error?.message || body?.message || `HTTP ${res.status}`,
+    )
+    ;(err as any).body = body
+    ;(err as any).status = res.status
+    throw err
+  }
+
+  return res.json()
+}
+
 export const api = {
   get: <T>(path: string, options?: ApiOptions) =>
     request<T>(path, { ...options, method: 'GET' }),
@@ -67,6 +93,12 @@ export const api = {
   put: <T>(path: string, body?: unknown, options?: ApiOptions) =>
     request<T>(path, { ...options, method: 'PUT', body: JSON.stringify(body) }),
 
-  delete: <T>(path: string, options?: ApiOptions) =>
-    request<T>(path, { ...options, method: 'DELETE' }),
+  patch: <T>(path: string, body?: unknown, options?: ApiOptions) =>
+    request<T>(path, { ...options, method: 'PATCH', body: JSON.stringify(body) }),
+
+  delete: <T>(path: string, body?: unknown, options?: ApiOptions) =>
+    request<T>(path, { ...options, method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
+
+  upload: <T>(path: string, formData: FormData) =>
+    uploadRequest<T>(path, formData),
 }

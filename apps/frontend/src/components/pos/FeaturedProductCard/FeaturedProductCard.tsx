@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Bolt } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { ExpandableText } from '@/components/ui'
@@ -11,6 +12,9 @@ interface FeaturedProductCardProps {
 }
 
 export function FeaturedProductCard({ product, onQuickBuy }: FeaturedProductCardProps) {
+  const [imgError, setImgError] = useState(false)
+  const showImg = product.image_url && !imgError
+
   return (
     <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 via-surface-container/50 to-surface-container border border-primary/30">
       <div className="absolute top-3 left-3 z-10">
@@ -20,12 +24,13 @@ export function FeaturedProductCard({ product, onQuickBuy }: FeaturedProductCard
         </span>
       </div>
       <div className="flex flex-col sm:flex-row">
-        {product.image_url && (
+        {showImg && (
           <div className="sm:w-48 h-40 sm:h-auto bg-surface-container-high overflow-hidden shrink-0">
             <img
-              src={product.image_url}
+              src={product.image_url ?? undefined}
               alt={product.name}
               className="h-full w-full object-cover"
+              onError={() => setImgError(true)}
             />
           </div>
         )}

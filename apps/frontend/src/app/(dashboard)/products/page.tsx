@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Search, X } from 'lucide-react'
+import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
+import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { DataTable } from '@/components/ui/DataTable'
 import { ProductMobileCard } from '@/components/products/ProductMobileCard'
+import { ImportModal } from '@/components/products/ImportModal'
+import { BulkImageUpload } from '@/components/products/BulkImageUpload'
 import { api } from '@/lib/api/client'
 import { formatCurrency } from '@/lib/utils'
+import { useAppSelector } from '@/store/hooks'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Product, ProductCategory } from '@ultimate-pos/shared'
 
@@ -16,9 +20,34 @@ interface ProductRow {
   id: string
   name: string
   price: number
+  image_url: string | null
   modifiers: number
   category: string
   is_active: boolean
+  stock_qty: number | null
+  track_inventory: boolean
+  low_stock_threshold: number | null
+}
+
+function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
+  const [error, setError] = useState(false)
+  const showImg = imageUrl && !error
+  return (
+    <>
+      {showImg ? (
+        <img
+          src={imageUrl ?? undefined}
+          alt=""
+          className="h-9 w-9 rounded-lg object-cover bg-surface-container-high shrink-0"
+          onError={() => setError(true)}
+        />
+      ) : (
+        <div className="h-9 w-9 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
+          <PackageOpen className="h-4 w-4 text-on-surface-variant/40" />
+        </div>
+      )}
+    </>
+  )
 }
 
 export default function ProductsPage() {
@@ -26,14 +55,18 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showBulkImageUpload, setShowBulkImageUpload] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  const categoryMap = useMemo(() => {
-    const map = new Map<string, string>()
-    categories.forEach((c) => map.set(c.id, c.name))
-    return map
-  }, [categories])
+  const userRole = useAppSelector((state) => state.auth.user?.role)
+  const isAdmin = userRole === 'admin'
+  const trackInventoryGlobal = useAppSelector((s) => s.storeConfig.currentStore?.settings?.trackInventory ?? false)
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setLoading(true)
     Promise.all([
       api.get<{ data: Product[] }>('/products'),
       api.get<{ data: ProductCategory[] }>('/categories'),
@@ -46,15 +79,29 @@ export default function ProductsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, string>()
+    categories.forEach((c) => map.set(c.id, c.name))
+    return map
+  }, [categories])
+
   const rows: ProductRow[] = useMemo(
     () =>
       products.map((p) => ({
         id: p.id,
         name: p.name,
         price: p.price,
+        image_url: p.image_url,
         modifiers: p.modifiers?.length ?? 0,
         category: p.category_id ? categoryMap.get(p.category_id) ?? '-' : '-',
         is_active: p.is_active,
+        stock_qty: p.stock_qty,
+        track_inventory: p.track_inventory,
+        low_stock_threshold: p.low_stock_threshold,
       })),
     [products, categoryMap],
   )
@@ -71,6 +118,52 @@ export default function ProductsPage() {
     [rows, search],
   )
 
+  const pageProductIds = useMemo(() => filtered.map((r) => r.id), [filtered])
+
+  const allSelected = pageProductIds.length > 0 && pageProductIds.every((id) => selectedIds.has(id))
+  const someSelected = pageProductIds.some((id) => selectedIds.has(id))
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        pageProductIds.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        pageProductIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBulkDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.delete('/products/batch', { ids: Array.from(selectedIds) })
+      clearSelection()
+      setShowDeleteConfirm(false)
+      loadData()
+    } catch {
+      // error handled silently
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const groupedByCategory = useMemo(() => {
     const groups = new Map<string, ProductRow[]>()
     for (const p of filtered) {
@@ -86,11 +179,44 @@ export default function ProductsPage() {
       .sort((a, b) => a.category.localeCompare(b.category))
   }, [filtered])
 
+  const selectColumn: ColumnDef<ProductRow, any> = {
+    id: 'select',
+    header: () => (
+      <input
+        type="checkbox"
+        checked={allSelected}
+        ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected }}
+        onChange={toggleSelectAll}
+        className="h-4 w-4 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+      />
+    ),
+    cell: ({ row }) => (
+      <input
+        type="checkbox"
+        checked={selectedIds.has(row.original.id)}
+        onChange={() => toggleSelect(row.original.id)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-4 w-4 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+      />
+    ),
+    enableSorting: false,
+  }
+
   const columns: ColumnDef<ProductRow, any>[] = [
+    selectColumn,
     {
       accessorKey: 'name',
       header: 'Name',
       enableSorting: true,
+      cell: ({ row }) => {
+        const p = row.original as ProductRow
+        return (
+          <div className="flex items-center gap-3">
+            <ProductAvatar imageUrl={p.image_url} />
+            <span className="font-bold text-on-surface truncate">{p.name}</span>
+          </div>
+        )
+      },
     },
     {
       accessorKey: 'category',
@@ -103,13 +229,39 @@ export default function ProductsPage() {
       enableSorting: true,
       cell: ({ row }) => formatCurrency(row.getValue('price')),
     },
+    ...(trackInventoryGlobal
+      ? [
+          {
+            accessorKey: 'stock_qty',
+            header: 'Stock',
+            enableSorting: true,
+            cell: ({ row }: { row: any }) => {
+              const p = row.original as ProductRow
+              if (!p.track_inventory) return <span className="text-on-surface-variant/40">—</span>
+              const isLow = p.low_stock_threshold != null && p.stock_qty != null && p.stock_qty <= p.low_stock_threshold
+              return (
+                <div className="flex items-center gap-2">
+                  <span className={isLow ? 'text-error font-bold' : ''}>
+                    {p.stock_qty ?? 0}
+                  </span>
+                  {isLow && (
+                    <span className="inline-flex items-center rounded-full bg-error/15 px-2 py-0.5 text-[10px] font-bold text-error">
+                      Low
+                    </span>
+                  )}
+                </div>
+              )
+            },
+          } as ColumnDef<ProductRow, any>,
+        ]
+      : []),
     {
       accessorKey: 'modifiers',
-      header: 'Modifiers',
+      header: 'Var.',
       enableSorting: true,
       cell: ({ row }) => (
         <span className="text-on-surface-variant text-xs">
-          {row.getValue<number>('modifiers')} groups
+          {row.getValue<number>('modifiers')}
         </span>
       ),
     },
@@ -153,12 +305,26 @@ export default function ProductsPage() {
           <h1 className="font-headline text-headline-lg text-on-surface">Products</h1>
           <p className="text-on-surface-variant text-sm">Manage your product catalog</p>
         </div>
-        <Link href="/products/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Product
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <>
+              <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV
+              </Button>
+              <Button variant="outline" onClick={() => setShowBulkImageUpload(true)}>
+                <ImagePlus className="h-4 w-4 mr-2" />
+                Upload Images
+              </Button>
+            </>
+          )}
+          <Link href="/products/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Mobile header */}
@@ -173,7 +339,12 @@ export default function ProductsPage() {
               <Plus className="h-4 w-4" />
             </Link>
           </div>
-          <span className="text-sm text-on-surface-variant">{products.length} total</span>
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <span className="text-sm text-on-surface-variant">{selectedIds.size} selected</span>
+            )}
+            <span className="text-sm text-on-surface-variant">{products.length} total</span>
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-on-surface-variant" />
@@ -193,6 +364,34 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-surface-container-high border border-outline-variant px-5 py-3">
+          <div className="flex items-center gap-3">
+            <button onClick={clearSelection} className="text-on-surface-variant hover:text-on-surface">
+              <X className="h-4 w-4" />
+            </button>
+            <span className="text-sm font-bold text-on-surface">
+              {selectedIds.size} product{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={clearSelection}
+              className="text-xs text-primary hover:underline"
+            >
+              Clear selection
+            </button>
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
+          </Button>
+        </div>
+      )}
 
       {/* Mobile view */}
       <div className="lg:hidden space-y-3 pb-6">
@@ -215,28 +414,45 @@ export default function ProductsPage() {
             )}
           </div>
         ) : (
-          groupedByCategory.map(({ category, products }) => (
-            <div key={category}>
-              <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1 py-2">
-                {category}
-                <span className="ml-2 font-normal text-on-surface-variant/60">
-                  {products.length}
-                </span>
-              </h3>
-              <div className="space-y-2">
-                {products.map((p) => (
-                  <ProductMobileCard
-                    key={p.id}
-                    id={p.id}
-                    name={p.name}
-                    price={p.price}
-                    category=""
-                    isActive={p.is_active}
-                  />
-                ))}
+          <>
+            {filtered.length > 1 && (
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center gap-2 text-xs text-on-surface-variant hover:text-on-surface px-1"
+              >
+                {allSelected ? (
+                  <CheckSquare className="h-4 w-4 text-primary" />
+                ) : (
+                  <Square className="h-4 w-4" />
+                )}
+                {allSelected ? 'Deselect all' : 'Select all'}
+              </button>
+            )}
+            {groupedByCategory.map(({ category, products }) => (
+              <div key={category}>
+                <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1 py-2">
+                  {category}
+                  <span className="ml-2 font-normal text-on-surface-variant/60">
+                    {products.length}
+                  </span>
+                </h3>
+                <div className="space-y-2">
+                  {products.map((p) => (
+                    <ProductMobileCard
+                      key={p.id}
+                      id={p.id}
+                      name={p.name}
+                      price={p.price}
+                      category=""
+                      isActive={p.is_active}
+                      selected={selectedIds.has(p.id)}
+                      onToggle={toggleSelect}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </>
         )}
       </div>
 
@@ -265,7 +481,7 @@ export default function ProductsPage() {
             ) : (
               <DataTable
                 columns={columns}
-                data={rows}
+                data={filtered}
                 searchable
                 searchPlaceholder="Search products..."
                 pageSize={10}
@@ -274,6 +490,39 @@ export default function ProductsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ImportModal
+        open={showImportModal}
+        onOpenChange={setShowImportModal}
+        onComplete={loadData}
+      />
+
+      <BulkImageUpload
+        open={showBulkImageUpload}
+        onOpenChange={setShowBulkImageUpload}
+        onComplete={loadData}
+      />
+
+      {/* Delete confirmation modal */}
+      <Modal open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>Delete {selectedIds.size} product{selectedIds.size !== 1 ? 's' : ''}?</ModalTitle>
+            <ModalDescription>
+              This action cannot be undone. The selected products will be permanently removed from your catalog.
+            </ModalDescription>
+          </ModalHeader>
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleBulkDelete} isLoading={deleting}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   )
 }

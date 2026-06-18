@@ -1,11 +1,17 @@
+import type { PaymentMethod } from './customer'
+
 export interface StoreSettings {
   hasVariants: boolean
   hasLoyalty: boolean
+  trackInventory: boolean
+  hasKitchen: boolean
   taxEnabled: boolean
   taxLabel: string
   taxInclusive: boolean
   taxExemptEnabled: boolean
   specialInstructionsEnabled: boolean
+  checkoutMode: 'order-only' | 'payment-required'
+  acceptedPaymentMethods: PaymentMethod[]
 }
 
 export interface Store {

@@ -42,11 +42,17 @@ export default function EditProductPage() {
       initialData={{
         name: product.name,
         price: product.price,
+        cost: product.cost,
+        sku: product.sku,
+        barcode: product.barcode,
         description: product.description,
         category_id: product.category_id,
         image_url: product.image_url,
         modifiers: product.modifiers,
         points: product.points,
+        stock_qty: product.stock_qty,
+        track_inventory: product.track_inventory,
+        low_stock_threshold: product.low_stock_threshold,
         tax_exempt: product.tax_exempt,
       }}
     />

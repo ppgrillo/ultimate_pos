@@ -76,7 +76,7 @@ export function DataTable<TData>({
                     <th
                       key={header.id}
                       className={cn(
-                        'h-12 px-4 text-left align-middle font-label font-bold text-on-surface-variant text-xs uppercase tracking-wider',
+                        'h-10 px-3 text-left align-middle font-label font-bold text-on-surface-variant text-xs uppercase tracking-wider',
                         canSort && 'cursor-pointer select-none hover:text-on-surface',
                       )}
                       onClick={header.column.getToggleSortingHandler()}
@@ -115,7 +115,7 @@ export function DataTable<TData>({
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="border-b border-outline-variant transition-colors hover:bg-surface-container-high">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-4 align-middle text-on-surface">
+                    <td key={cell.id} className="px-3 py-2.5 align-middle text-on-surface">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

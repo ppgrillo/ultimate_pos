@@ -32,10 +32,14 @@ export const productSchema = z.object({
   price: z.number().positive(),
   cost: z.number().positive().nullable().optional(),
   sku: z.string().nullable().optional(),
+  barcode: z.string().nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
   image_url: z.string().url().nullable().optional(),
   modifiers: z.array(modifierGroupSchema).optional().default([]),
   points: z.number().int().min(0).nullable().optional(),
+  stock_qty: z.number().int().min(0).nullable().optional(),
+  track_inventory: z.boolean().optional().default(false),
+  low_stock_threshold: z.number().int().min(0).nullable().optional(),
   is_active: z.boolean().optional().default(true),
   tax_exempt: z.boolean().optional().default(false),
 })
@@ -51,7 +55,11 @@ export const orderSchema = z.object({
     modifiers: z.array(z.string()).optional().default([]),
     notes: z.string().nullable().optional(),
   })).min(1),
+  discount: z.number().min(0).optional().default(0),
+  discount_label: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
+  cash_amount_given: z.number().min(0).optional(),
 })
 
 export const employeeInviteSchema = z.object({

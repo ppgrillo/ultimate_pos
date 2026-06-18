@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { ImagePlus, X } from 'lucide-react'
+import { ImagePlus, X, Loader2 } from 'lucide-react'
+import { api } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 
 interface ImageUploadProps {
@@ -13,19 +14,26 @@ interface ImageUploadProps {
 export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(value ?? null)
+  const [uploading, setUploading] = useState(false)
 
   const handleFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (!file.type.startsWith('image/')) return
       if (file.size > 5 * 1024 * 1024) return
 
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const result = e.target?.result as string
-        setPreview(result)
-        onChange(result)
+      setUploading(true)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const res = await api.upload<{ data: { url: string } }>('/products/upload-image', formData)
+        setPreview(res.data.url)
+        onChange(res.data.url)
+      } catch {
+        // error silently handled
+      } finally {
+        setUploading(false)
       }
-      reader.readAsDataURL(file)
     },
     [onChange],
   )
@@ -43,6 +51,7 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (value) api.delete('/products/upload-image', { url: value }).catch(() => {})
     setPreview(null)
     onChange(null)
     if (inputRef.current) inputRef.current.value = ''
@@ -50,12 +59,13 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
 
   return (
     <div
-      onClick={handleClick}
+      onClick={uploading ? undefined : handleClick}
       onDrop={handleDrop}
       onDragOver={(e) => e.preventDefault()}
       className={cn(
         'relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary/30 bg-surface-container/50 p-8 transition-colors hover:border-primary/60 min-h-[200px] group',
         preview && 'border-solid border-primary/60',
+        uploading && 'pointer-events-none opacity-60',
         className,
       )}
     >
@@ -70,7 +80,12 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
         }}
       />
 
-      {preview ? (
+      {uploading ? (
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-on-surface-variant">Uploading image...</p>
+        </div>
+      ) : preview ? (
         <>
           <img
             src={preview}

@@ -16,6 +16,7 @@ export function PosCart() {
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
+  const taxEnabled = settings?.taxEnabled ?? false
 
   if (items.length === 0) {
     return (
@@ -59,6 +60,7 @@ export function PosCart() {
           taxRate={taxRate}
           taxLabel={taxLabel}
           taxInclusive={taxInclusive}
+          taxEnabled={taxEnabled}
         />
         <button
           onClick={() => {

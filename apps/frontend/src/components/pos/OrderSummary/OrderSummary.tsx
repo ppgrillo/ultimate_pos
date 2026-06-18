@@ -10,6 +10,7 @@ interface OrderSummaryProps {
   taxRate?: number
   taxLabel?: string
   taxInclusive?: boolean
+  taxEnabled?: boolean
   showTotal?: boolean
 }
 
@@ -21,13 +22,16 @@ export function OrderSummary({
   taxRate = 0.08,
   taxLabel = 'Tax',
   taxInclusive = false,
+  taxEnabled = true,
   showTotal = false,
 }: OrderSummaryProps) {
-  const tax = taxOverride ?? (
-    taxInclusive
-      ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
-      : Math.round(subtotal * taxRate * 100) / 100
-  )
+  const tax = !taxEnabled
+    ? 0
+    : taxOverride ?? (
+      taxInclusive
+        ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
+        : Math.round(subtotal * taxRate * 100) / 100
+    )
 
   const total = taxInclusive
       ? Math.round((subtotal - discount) * 100) / 100
