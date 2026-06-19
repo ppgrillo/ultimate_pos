@@ -11,6 +11,7 @@ import { ordersRouter } from './routes/orders'
 import { employeesRouter } from './routes/employees'
 import { customersRouter } from './routes/customers'
 import { storesRouter } from './routes/stores'
+import { webhooksRouter } from './routes/webhooks'
 
 const app = new Hono()
 
@@ -27,6 +28,7 @@ app.route('/orders', ordersRouter)
 app.route('/employees', employeesRouter)
 app.route('/customers', customersRouter)
 app.route('/stores', storesRouter)
+app.route('/webhooks', webhooksRouter)
 
 const port = Number(process.env.PORT) || 3001
 

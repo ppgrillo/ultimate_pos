@@ -28,8 +28,8 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const ModalContent = forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
+>(({ className, children, hideClose, ...props }, ref) => (
   <ModalPortal>
     <ModalOverlay />
     <DialogPrimitive.Content
@@ -41,9 +41,11 @@ const ModalContent = forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-on-surface-variant hover:text-on-surface">
-        <X className="h-4 w-4" />
-      </DialogPrimitive.Close>
+      {!hideClose && (
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-on-surface-variant hover:text-on-surface">
+          <X className="h-4 w-4" />
+        </DialogPrimitive.Close>
+      )}
     </DialogPrimitive.Content>
   </ModalPortal>
 ))

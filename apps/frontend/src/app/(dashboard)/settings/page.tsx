@@ -6,7 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppSelector, useAppDispatch } from '@/store/hooks'
 import { updateStoreSettings } from '@/store/slices/storeSlice'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot } from 'lucide-react'
+import { api } from '@/lib/api/client'
+import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function SettingsPage() {
@@ -29,8 +30,18 @@ export default function SettingsPage() {
   const [cashEnabled, setCashEnabled] = useState(true)
   const [cardEnabled, setCardEnabled] = useState(true)
   const [transferEnabled, setTransferEnabled] = useState(true)
+  const [mpPointEnabled, setMpPointEnabled] = useState(false)
+  const [mpPointTerminalId, setMpPointTerminalId] = useState('')
+  const [mpPointAccessToken, setMpPointAccessToken] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(false)
+  const [terminals, setTerminals] = useState<Array<{ id: string; model: string; operating_mode: string }> | null>(null)
+  const [listingTerminals, setListingTerminals] = useState(false)
+  const [listError, setListError] = useState('')
+  const [settingUpPdv, setSettingUpPdv] = useState<string | null>(null)
+  const [cancellingMpOrder, setCancellingMpOrder] = useState(false)
+  const [cancelMpMessage, setCancelMpMessage] = useState('')
+  const [cancelMpSuccess, setCancelMpSuccess] = useState(false)
 
   useEffect(() => {
     setHasVariants(settings?.hasVariants ?? false)
@@ -48,6 +59,8 @@ export default function SettingsPage() {
     setCashEnabled(methods.includes('cash'))
     setCardEnabled(methods.includes('card'))
     setTransferEnabled(methods.includes('transfer'))
+    setMpPointEnabled(settings?.mpPointEnabled ?? false)
+    setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
   }, [settings, taxRate])
 
   const currentMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -69,9 +82,12 @@ export default function SettingsPage() {
     specialInstructionsEnabled !== (settings?.specialInstructionsEnabled ?? true) ||
     hasKitchen !== (settings?.hasKitchen ?? true) ||
     checkoutMode !== (settings?.checkoutMode ?? 'order-only') ||
-    JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods)
+    JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods) ||
+    mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
+    mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
+    mpPointAccessToken !== ''
 
-  const handleSave = async () => {
+  const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
     try {
       await dispatch(updateStoreSettings({
         hasVariants,
@@ -86,12 +102,67 @@ export default function SettingsPage() {
         hasKitchen,
         checkoutMode,
         acceptedPaymentMethods: enabledMethods,
+        mpPointEnabled,
+        mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
+        ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
       })).unwrap()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch {
       setError(true)
       setTimeout(() => setError(false), 3000)
+    }
+  }
+
+  const handleListTerminals = async () => {
+    setListingTerminals(true)
+    setListError('')
+    setTerminals(null)
+    try {
+      const result = await api.get<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }>('/stores/terminals')
+      setTerminals(result.terminals)
+    } catch (err: any) {
+      setListError(err.message || 'Failed to list terminals')
+    } finally {
+      setListingTerminals(false)
+    }
+  }
+
+  const handleSetupPdv = async (terminalId: string) => {
+    setSettingUpPdv(terminalId)
+    setListError('')
+    try {
+      await api.post('/stores/terminals/setup-pdv', { terminalId })
+      setTerminals((prev) =>
+        prev
+          ? prev.map((t) => (t.id === terminalId ? { ...t, operating_mode: 'PDV' } : t))
+          : null,
+      )
+    } catch (err: any) {
+      setListError(err.message || 'Failed to set PDV mode')
+    } finally {
+      setSettingUpPdv(null)
+    }
+  }
+
+  const handleCancelQueued = async () => {
+    setCancellingMpOrder(true)
+    setCancelMpMessage('')
+    try {
+      const result = await api.post<{ cancelled: number; message?: string; errors?: string[] }>('/stores/terminals/cancel-queued')
+      if (result.cancelled > 0) {
+        setCancelMpMessage(`Orden cancelada exitosamente`)
+        setCancelMpSuccess(true)
+      } else {
+        setCancelMpMessage(result.message || 'No se encontraron órdenes pendientes')
+        setCancelMpSuccess(false)
+      }
+    } catch (err: any) {
+      setCancelMpMessage(err.message || 'Error al cancelar la orden')
+      setCancelMpSuccess(false)
+    } finally {
+      setCancellingMpOrder(false)
+      setTimeout(() => { setCancelMpMessage('') }, 5000)
     }
   }
 
@@ -110,7 +181,7 @@ export default function SettingsPage() {
               <Check className="h-4 w-4" /> Saved
             </span>
           )}
-          <Button onClick={handleSave} disabled={!hasChanges || settingsLoading} isLoading={settingsLoading}>
+          <Button onClick={() => handleSave()} disabled={!hasChanges || settingsLoading} isLoading={settingsLoading}>
             <Save className="h-4 w-4 mr-2" />
             Save
           </Button>
@@ -361,6 +432,144 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Mercado Pago Point</CardTitle>
+                <CardDescription>Accept credit and debit card payments via Mercado Pago Point Smart terminal</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={mpPointEnabled}
+                    onChange={(e) => setMpPointEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <Smartphone className="h-5 w-5 text-on-surface-variant" />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Enable MP Point</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Mercado Pago Point Smart 2 terminal for in-person processing</span>
+                  </div>
+                </label>
+
+                {mpPointEnabled && (
+                  <>
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                          Terminal ID
+                        </label>
+                        <Button
+                          onClick={handleListTerminals}
+                          isLoading={listingTerminals}
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px]"
+                        >
+                          <List className="h-3 w-3 mr-1" />
+                          Listar
+                        </Button>
+                      </div>
+                      <input
+                        type="text"
+                        value={mpPointTerminalId}
+                        onChange={(e) => setMpPointTerminalId(e.target.value)}
+                        placeholder="Seleccioná una terminal de la lista"
+                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                      />
+                    </div>
+
+                    {listError && (
+                      <div className="flex items-start gap-2 rounded-xl bg-error/10 border border-error/30 p-4">
+                        <AlertCircle className="h-4 w-4 text-error shrink-0 mt-0.5" />
+                        <p className="text-xs text-error">{listError}</p>
+                      </div>
+                    )}
+
+                    {terminals && terminals.length === 0 && (
+                      <p className="text-xs text-on-surface-variant">No se encontraron terminales para esta cuenta.</p>
+                    )}
+
+                    {terminals && terminals.length > 0 && (
+                      <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 divide-y divide-outline-variant/30">
+                        {terminals.map((t) => (
+                          <div key={t.id} className="flex items-center justify-between p-4">
+                            <div>
+                              <p className="text-sm font-mono text-on-surface">{t.id}</p>
+                              <p className="text-[10px] text-on-surface-variant mt-0.5">
+                                {t.model} &middot; {t.operating_mode}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {t.operating_mode === 'STANDALONE' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  isLoading={settingUpPdv === t.id}
+                                  onClick={() => handleSetupPdv(t.id)}
+                                  className="text-[10px]"
+                                >
+                                  Set PDV
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setMpPointTerminalId(t.id)
+                                  setTerminals(null)
+                                  handleSave({ mpPointTerminalId: t.id })
+                                }}
+                              >
+                                Use
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Access Token
+                      </label>
+                      <input
+                        type="password"
+                        value={mpPointAccessToken}
+                        onChange={(e) => setMpPointAccessToken(e.target.value)}
+                        placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current token' : 'Enter your Mercado Pago access token'}
+                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                      />
+                      <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                        Your access token is stored securely and never exposed to the frontend.
+                        {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
+                      <div>
+                        <p className="text-sm font-bold text-on-surface">Orden atorada en la terminal</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">Cancela la orden MP Point activa si no se puede crear una nueva</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        isLoading={cancellingMpOrder}
+                        onClick={handleCancelQueued}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                    {cancelMpMessage && (
+                      <p className={`text-xs ${cancelMpSuccess ? 'text-primary' : 'text-error'}`}>
+                        {cancelMpMessage}
+                      </p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
         <TabsContent value="loyalty">

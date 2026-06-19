@@ -12,6 +12,9 @@ export interface StoreSettings {
   specialInstructionsEnabled: boolean
   checkoutMode: 'order-only' | 'payment-required'
   acceptedPaymentMethods: PaymentMethod[]
+  mpPointEnabled: boolean
+  mpPointTerminalId: string
+  mpPointAccessToken: string
 }
 
 export interface Store {

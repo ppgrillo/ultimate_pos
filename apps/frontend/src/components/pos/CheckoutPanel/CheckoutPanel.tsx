@@ -13,6 +13,7 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PromoModal } from '@/components/pos/PromoModal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
+import { MPPointPayment } from '@/components/pos/MPPointPayment'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
 export function CheckoutPanel() {
@@ -32,6 +33,7 @@ export function CheckoutPanel() {
   const [showPromo, setShowPromo] = useState(false)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState<string>('')
+  const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
 
   useEffect(() => {
     const methods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -56,17 +58,40 @@ export function CheckoutPanel() {
   const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - totalAmount) * 100) / 100) : 0
   const cashValid = parsedCashGiven >= totalAmount
   const canSubmit = !paymentRequired || (selectedMethod !== null && (!isCash || cashValid))
+  const mpPointEnabled = settings?.mpPointEnabled ?? false
 
   const handleMethodChange = useCallback((method: PaymentMethod) => {
     setSelectedMethod(method)
     if (method !== 'cash') setCashGiven('')
   }, [])
 
+  const handleMpPaid = () => {
+    dispatch(clearCart())
+    dispatch(setCheckoutView(false))
+    dispatch(setCartOpen(false))
+    setMpPaymentOrderId(null)
+    router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
+  }
+
+  const handleMpCancel = async () => {
+    if (mpPaymentOrderId && mpPaymentOrderId !== '__creating__') {
+      try { await api.post(`/orders/${mpPaymentOrderId}/cancel-mp`) } catch {}
+    }
+    setMpPaymentOrderId(null)
+  }
+
   const handleSubmit = async () => {
     if (paymentRequired && !selectedMethod) return
     if (isCash && !cashValid) return
     setSubmitting(true)
     setError(null)
+
+    const isMpPoint = selectedMethod === 'card' && mpPointEnabled
+
+    if (isMpPoint) {
+      setSubmitting(false)
+      setMpPaymentOrderId('__creating__')
+    }
 
     try {
       const orderItems = items.map((item) => ({
@@ -77,7 +102,7 @@ export function CheckoutPanel() {
         notes: item.notes,
       }))
 
-      await api.post('/orders', {
+      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string } } }>('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
@@ -87,6 +112,11 @@ export function CheckoutPanel() {
         payment_method: paymentRequired ? selectedMethod : undefined,
         cash_amount_given: isCash ? parsedCashGiven : undefined,
       })
+
+      if (isMpPoint && res.data?.metadata?.mpOrderId) {
+        setMpPaymentOrderId(res.data.id)
+        return
+      }
 
       dispatch(clearCart())
       dispatch(setCheckoutView(false))
@@ -101,6 +131,7 @@ export function CheckoutPanel() {
       }
       router.push(`/pos/receipt?${params.toString()}`)
     } catch (err) {
+      setMpPaymentOrderId(null)
       setError(err instanceof Error ? err.message : 'Failed to create order')
     } finally {
       setSubmitting(false)
@@ -189,6 +220,7 @@ export function CheckoutPanel() {
                 onSelect={handleMethodChange}
                 acceptedMethods={acceptedMethods}
                 amount={totalAmount}
+                mpPointEnabled={mpPointEnabled}
               />
             </div>
 
@@ -285,6 +317,16 @@ export function CheckoutPanel() {
       </div>
 
       <PromoModal open={showPromo} onOpenChange={setShowPromo} />
+
+      <MPPointPayment
+        open={mpPaymentOrderId !== null}
+        onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
+        orderId={mpPaymentOrderId && mpPaymentOrderId !== '__creating__' ? mpPaymentOrderId : null}
+        isCreating={mpPaymentOrderId === '__creating__'}
+        total={totalAmount}
+        onPaid={handleMpPaid}
+        onCancel={handleMpCancel}
+      />
     </div>
   )
 }

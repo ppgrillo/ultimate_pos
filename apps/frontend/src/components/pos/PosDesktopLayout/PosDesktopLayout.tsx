@@ -7,6 +7,7 @@ import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PaymentModal } from '@/components/pos/PaymentModal'
+import { MPPointPayment } from '@/components/pos/MPPointPayment'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
@@ -29,6 +30,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
 
   const items = useAppSelector((s) => s.cart.items)
   const customer_id = useAppSelector((s) => s.cart.customer_id)
@@ -50,6 +52,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const taxEnabled = settings?.taxEnabled ?? false
   const checkoutMode = settings?.checkoutMode ?? 'order-only'
   const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
+  const mpPointEnabled = settings?.mpPointEnabled ?? false
 
   const computedTax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
@@ -60,7 +63,16 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
     : Math.round((subtotal + computedTax - discount) * 100) / 100
 
   const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number) => {
-    setSubmitting(true)
+    const isCash = paymentMethod === 'cash'
+    const isMpPoint = paymentMethod === 'card' && mpPointEnabled
+
+    if (isMpPoint) {
+      setSubmitting(false)
+      setMpPaymentOrderId('__creating__')
+    } else {
+      setSubmitting(true)
+    }
+
     try {
       const orderItems = items.map((item) => ({
         product_id: item.product_id,
@@ -69,8 +81,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         modifiers: item.modifiers,
         notes: item.notes,
       }))
-      const isCash = paymentMethod === 'cash'
-      await api.post('/orders', {
+      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string } } }>('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
@@ -80,6 +91,10 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
+      if (isMpPoint && res.data?.metadata?.mpOrderId) {
+        setMpPaymentOrderId(res.data.id)
+        return
+      }
       dispatch(clearCart())
       const params = new URLSearchParams()
       if (paymentMethod) {
@@ -91,6 +106,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       }
       router.push(`/pos/receipt?${params.toString()}`)
     } catch {
+      setMpPaymentOrderId(null)
     } finally {
       setSubmitting(false)
     }
@@ -107,6 +123,19 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const handlePaymentConfirm = async (method: PaymentMethod, cashGiven?: number) => {
     setShowPaymentModal(false)
     await doSubmit(method, cashGiven)
+  }
+
+  const handleMpPaid = () => {
+    dispatch(clearCart())
+    setMpPaymentOrderId(null)
+    router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
+  }
+
+  const handleMpCancel = async () => {
+    if (mpPaymentOrderId && mpPaymentOrderId !== '__creating__') {
+      try { await api.post(`/orders/${mpPaymentOrderId}/cancel-mp`) } catch {}
+    }
+    setMpPaymentOrderId(null)
   }
 
   return (
@@ -238,6 +267,17 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         total={totalAmount}
         onConfirm={handlePaymentConfirm}
         acceptedMethods={acceptedMethods}
+        mpPointEnabled={mpPointEnabled}
+      />
+
+      <MPPointPayment
+        open={mpPaymentOrderId !== null}
+        onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
+        orderId={mpPaymentOrderId && mpPaymentOrderId !== '__creating__' ? mpPaymentOrderId : null}
+        isCreating={mpPaymentOrderId === '__creating__'}
+        total={totalAmount}
+        onPaid={handleMpPaid}
+        onCancel={handleMpCancel}
       />
 
       {customizeModal}

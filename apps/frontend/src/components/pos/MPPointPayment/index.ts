@@ -1,0 +1,1 @@
+export { MPPointPayment } from './MPPointPayment'

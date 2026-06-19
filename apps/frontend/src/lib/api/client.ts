@@ -44,11 +44,12 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    const err = new Error(
-      body?.error?.issues
+    const errMsg = typeof body?.error === 'string'
+      ? body.error
+      : body?.error?.issues
         ? body.error.issues.map((i: any) => i.message).join('; ')
-        : body?.error?.message || body?.message || `HTTP ${res.status}`,
-    )
+        : body?.error?.message || body?.message || `HTTP ${res.status}`
+    const err = new Error(errMsg)
     ;(err as any).body = body
     ;(err as any).status = res.status
     throw err
