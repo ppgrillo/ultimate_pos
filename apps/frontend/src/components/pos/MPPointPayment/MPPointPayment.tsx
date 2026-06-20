@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Loader2,
   Smartphone,
+  ChevronLeft,
 } from 'lucide-react'
 
 interface MPPointPaymentProps {
@@ -179,7 +180,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent className="max-w-sm text-center" hideClose>
+      <ModalContent className="max-w-sm text-center" onInteractOutside={(e) => e.preventDefault()}>
         <div className="flex flex-col items-center gap-4 py-6">
           <div className={`rounded-full p-4 ${config.bg}`}>
             <Icon className={`h-10 w-10 ${config.color} ${currentState === 'created' || currentState === 'processing' ? 'animate-spin' : ''}`} />
@@ -200,13 +201,13 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
                 <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                 Esperando pago en la terminal...
               </div>
-              {currentState !== 'processing' && (
-                <button
-                  onClick={onCancel}
-                  className="rounded-xl border border-outline-variant px-4 py-2 text-xs font-label font-bold text-on-surface hover:bg-surface-container transition-colors"
-                >
-                  Cancelar
-                </button>
+              {(currentState === 'created' || currentState === 'at_terminal') && (
+                <div className="mt-2 w-full rounded-xl bg-surface-container/40 border border-outline-variant/50 p-3 text-left flex items-center gap-2.5">
+                  <ChevronLeft className="h-5 w-5 text-on-surface shrink-0" />
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    para cancelar presiona el botón <span className="font-bold text-on-surface">◀</span> (<span className="font-bold text-on-surface">inferior izq</span>) en la terminal
+                  </p>
+                </div>
               )}
             </div>
           )}

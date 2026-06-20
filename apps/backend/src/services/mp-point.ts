@@ -97,12 +97,16 @@ class MPService {
     const amountStr = params.totalAmount.toFixed(2)
     return this.request<MPOrderResponse>(accessToken, 'POST', '/v1/orders', {
       type: 'point',
+      expiration_time: 'PT3M',
       external_reference: params.externalReference,
       description: params.description || 'Ultimate POS payment',
       config: {
         point: {
           terminal_id: params.terminalId,
           print_on_terminal: 'no_ticket',
+        },
+        payment_method: {
+          default_type: 'debit_card',
         },
       },
       transactions: {
