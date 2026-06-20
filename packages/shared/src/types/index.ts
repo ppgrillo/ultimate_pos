@@ -4,3 +4,9 @@ export { KITCHEN_FLOW, getNextKitchenTransitions, getNextRetailTransitions, canT
 export type { User, UserRole } from './user'
 export type { Store, StoreMember, StoreSettings } from './store'
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod } from './customer'
+export type {
+  TerminalProvider, TerminalPaymentStatus, TerminalConfig,
+  CreateTerminalPaymentParams, TerminalPaymentResponse, TerminalInfo,
+  TerminalPaymentMetadata, WebhookEvent,
+} from './payment-terminal'
+export { TERMINAL_PROVIDERS } from './payment-terminal'

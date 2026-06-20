@@ -5,8 +5,8 @@ import { orderSchema, canTransition } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
 import { orderBus } from '../events'
-import { mpService } from '../services/mp-point'
-import type { OrderMetadata } from '@ultimate-pos/shared'
+import { terminalRegistry } from '../services/terminal'
+import type { TerminalConfig, TerminalPaymentMetadata } from '@ultimate-pos/shared'
 
 export const ordersRouter = new Hono()
 
@@ -19,6 +19,25 @@ function enrichOrder(order: Record<string, unknown>) {
     customer_name: customer?.name || null,
     customer: undefined,
     metadata: order.metadata || {},
+  }
+}
+
+function getTerminalConfig(settings: Record<string, unknown> | null): TerminalConfig | null {
+  const configs = settings?.terminalConfigs as TerminalConfig[] | undefined
+  if (!configs || configs.length === 0) return null
+  return configs.find((c) => c.enabled) || null
+}
+
+async function getStoreSettings(storeId: string): Promise<{ settings: Record<string, unknown> | null; taxRate: number }> {
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('tax_rate, settings')
+    .eq('id', storeId)
+    .single()
+
+  return {
+    settings: store?.settings as Record<string, unknown> | null,
+    taxRate: store ? Number(store.tax_rate) / 100 : 0,
   }
 }
 
@@ -88,52 +107,32 @@ ordersRouter.get('/:id', async (c) => {
   if (error || !data) throw notFound('Order not found')
 
   const meta = (data.metadata as Record<string, unknown> | null) || {}
-  const mpOrderId = meta.mpOrderId as string | undefined
-  const mpOrderStatus = meta.mpOrderStatus as string | undefined
-  const needsSync = mpOrderId && (mpOrderStatus === 'created' || mpOrderStatus === 'at_terminal')
+  const terminalPayment = meta.terminalPayment as TerminalPaymentMetadata | undefined
+  const needsSync = terminalPayment && (terminalPayment.normalizedStatus === 'created' || terminalPayment.normalizedStatus === 'awaiting_terminal')
 
-  if (needsSync) {
+  if (needsSync && terminalPayment) {
     try {
-      const { data: store } = await supabase
-        .from('stores')
-        .select('settings')
-        .eq('id', data.store_id)
-        .single()
+      const { settings } = await getStoreSettings(data.store_id)
+      const config = getTerminalConfig(settings)
+      const providerConfig = config?.provider === terminalPayment.provider ? config : null
 
-      const accessToken = (store?.settings as Record<string, unknown> | null)?.mpPointAccessToken as string | undefined
+      if (providerConfig) {
+        const provider = terminalRegistry.get(terminalPayment.provider)
+        const result = await provider.getPayment(providerConfig.credentials, terminalPayment.providerId)
 
-      if (accessToken) {
-        const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
-        const mpStatus = mpOrder.status
-
-        if (mpStatus !== 'created' && mpStatus !== 'at_terminal') {
+        if (result.normalizedStatus !== 'created' && result.normalizedStatus !== 'awaiting_terminal') {
           let orderStatus: string
           let orderPaymentStatus: string
           let paymentStatus: string
-          let mpStatusMapped: string
 
-          if (mpStatus === 'processed') {
+          if (result.normalizedStatus === 'paid') {
             orderStatus = 'paid'
             orderPaymentStatus = 'paid'
             paymentStatus = 'completed'
-            mpStatusMapped = 'processed'
-          } else if (mpStatus === 'canceled') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'canceled'
-          } else if (mpStatus === 'expired') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'expired'
-          } else if (mpStatus === 'failed') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'failed'
           } else {
-            throw new Error(`Unhandled MP status: ${mpStatus}`)
+            orderStatus = 'cancelled'
+            orderPaymentStatus = 'unpaid'
+            paymentStatus = 'failed'
           }
 
           await supabase
@@ -141,7 +140,15 @@ ordersRouter.get('/:id', async (c) => {
             .update({
               status: orderStatus,
               payment_status: orderPaymentStatus,
-              metadata: { ...meta, mpOrderStatus: mpStatusMapped },
+              metadata: {
+                ...meta,
+                terminalPayment: {
+                  ...terminalPayment,
+                  normalizedStatus: result.normalizedStatus,
+                  providerStatus: result.providerStatus,
+                  statusDetail: result.statusDetail,
+                },
+              },
               updated_at: new Date().toISOString(),
             })
             .eq('id', id)
@@ -153,7 +160,6 @@ ordersRouter.get('/:id', async (c) => {
         }
       }
     } catch {
-      // MP sync failed — return order as-is; next poll will retry
     }
 
     const { data: refreshed } = await supabase
@@ -174,22 +180,13 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const storeId = c.get('storeId')
   const userId = c.get('userId')
 
-  const { data: store } = await supabase
-    .from('stores')
-    .select('tax_rate, settings')
-    .eq('id', storeId)
-    .single()
-
-  const taxRate = store ? Number(store.tax_rate) / 100 : 0
-  const settings = store?.settings as Record<string, unknown> | null
+  const { settings, taxRate } = await getStoreSettings(storeId)
   const taxEnabled = (settings?.taxEnabled as boolean) ?? false
   const taxInclusive = (settings?.taxInclusive as boolean) ?? false
   const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
   const checkoutMode = (settings?.checkoutMode as string) ?? 'order-only'
   const acceptedMethods = (settings?.acceptedPaymentMethods as string[]) ?? ['cash', 'card']
-  const mpPointEnabled = (settings?.mpPointEnabled as boolean) ?? false
-  const mpPointTerminalId = (settings?.mpPointTerminalId as string) ?? ''
-  const mpPointAccessToken = (settings?.mpPointAccessToken as string) ?? ''
+  const terminalConfig = getTerminalConfig(settings)
 
   const paymentMethod = input.payment_method
   const cashAmountGiven = input.cash_amount_given
@@ -202,7 +199,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     throw badRequest(`Payment method "${paymentMethod}" is not accepted`)
   }
 
-  const isMpPoint = paymentMethod === 'card' && mpPointEnabled && mpPointAccessToken && mpPointTerminalId
+  const useTerminal = paymentMethod === 'card' && terminalConfig !== null
 
   const productIds = input.items.map((i) => i.product_id)
   const { data: products } = await supabase
@@ -248,8 +245,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     : Math.round((subtotal + tax - discount) * 100) / 100
 
   const hasKitchen = (settings?.hasKitchen as boolean) ?? false
-  const initialStatus = !hasKitchen && paymentMethod && !isMpPoint ? 'paid' : 'pending'
-  const paymentStatus = paymentMethod && !isMpPoint ? 'paid' : 'unpaid'
+  const initialStatus = !hasKitchen && paymentMethod && !useTerminal ? 'paid' : 'pending'
+  const paymentStatus = paymentMethod && !useTerminal ? 'paid' : 'unpaid'
 
   const { data: seqData } = await supabase
     .from('orders')
@@ -300,7 +297,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       order_id: order.id,
       amount: total,
       method: paymentMethod,
-      status: isMpPoint ? 'pending' : 'completed',
+      status: useTerminal ? 'pending' : 'completed',
     }
 
     if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
@@ -318,38 +315,40 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     if (paymentError) throw badRequest(paymentError.message)
   }
 
-  let mpOrderId: string | null = null
+  let providerPaymentId: string | null = null
+  let terminalProvider: string | null = null
 
-  if (isMpPoint) {
-    let mpOrder: Awaited<ReturnType<typeof mpService.createOrder>> | null = null
-    let mpAttempt = 0
+  if (useTerminal && terminalConfig) {
+    const provider = terminalRegistry.get(terminalConfig.provider)
+    let result: Awaited<ReturnType<typeof provider.createPayment>> | null = null
+    let attempt = 0
 
-    while (mpAttempt < 2) {
-      mpAttempt++
+    while (attempt < 2) {
+      attempt++
       try {
-        mpOrder = await mpService.createOrder(mpPointAccessToken, {
+        result = await provider.createPayment(terminalConfig.credentials, {
           totalAmount: total,
           externalReference: order.id,
           description: `Ultimate POS - ${input.items.length} items`,
-          terminalId: mpPointTerminalId,
+          terminalId: terminalConfig.terminalId,
         })
         break
       } catch (err: unknown) {
-        const mpErr = err as { status?: number; body?: unknown; message?: string }
+        const mpErr = err as { status?: number; body?: unknown; message?: string; code?: string }
         const body = mpErr?.body as { errors?: Array<{ code: string }> } | undefined
         const isQueued = body?.errors?.some((e) => e.code === 'already_queued_order_on_terminal')
 
-        if (isQueued && mpAttempt === 1) {
-          await clearStuckMpOrders(supabaseAdmin, mpPointAccessToken, storeId)
+        if (isQueued && attempt === 1) {
+          await clearStuckTerminalPayments(supabaseAdmin, terminalConfig, storeId)
           await new Promise((r) => setTimeout(r, 1000))
           continue
         }
 
-        const detail = body ? JSON.stringify(body) : (mpErr?.message || 'MP Point error')
+        const detail = body ? JSON.stringify(body) : (mpErr?.message || 'Terminal payment error')
 
         await supabaseAdmin
           .from('orders')
-          .update({ status: 'cancelled', metadata: { mpError: detail } })
+          .update({ status: 'cancelled', metadata: { terminalError: detail } })
           .eq('id', order.id)
 
         await supabaseAdmin
@@ -357,17 +356,26 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
           .update({ status: 'failed' })
           .eq('order_id', order.id)
 
-        throw badRequest(`MP Point payment failed: ${detail}`)
+        throw badRequest(`Terminal payment failed: ${detail}`)
       }
     }
 
-    if (!mpOrder) {
-      throw badRequest('MP Point payment failed: could not create order after retry')
+    if (!result) {
+      throw badRequest('Terminal payment failed: could not create order after retry')
     }
 
-    mpOrderId = mpOrder.id
+    providerPaymentId = result.providerId
+    terminalProvider = terminalConfig.provider
 
-    const metadata = { mpOrderId: mpOrder.id, mpOrderStatus: 'created' as const }
+    const metadata = {
+      terminalPayment: {
+        provider: terminalConfig.provider,
+        providerId: result.providerId,
+        providerStatus: result.providerStatus,
+        normalizedStatus: result.normalizedStatus,
+      } satisfies TerminalPaymentMetadata,
+    }
+
     await supabaseAdmin
       .from('orders')
       .update({ metadata })
@@ -375,11 +383,11 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
     await supabaseAdmin
       .from('payments')
-      .update({ reference: mpOrder.id })
+      .update({ reference: result.providerId, terminal_provider: terminalConfig.provider })
       .eq('order_id', order.id)
   }
 
-  if (input.customer_id && !isMpPoint) {
+  if (input.customer_id && !useTerminal) {
     const { data: cust } = await supabase
       .from('customers')
       .select('total_visits, total_spent')
@@ -409,19 +417,14 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   return c.json({ data: enriched }, 201)
 })
 
-ordersRouter.post('/:id/cancel-mp', async (c) => {
+ordersRouter.post('/:id/cancel-terminal-payment', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
   const orderId = c.req.param('id')
 
-  const { data: store } = await supabase
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
-    .single()
-
-  const accessToken = (store?.settings as Record<string, unknown> | null)?.mpPointAccessToken as string | undefined
-  if (!accessToken) throw badRequest('MP Point access token not configured')
+  const { settings } = await getStoreSettings(storeId)
+  const terminalConfig = getTerminalConfig(settings)
+  if (!terminalConfig) throw badRequest('No terminal provider configured')
 
   const { data: order } = await supabase
     .from('orders')
@@ -432,19 +435,20 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
 
   if (!order) throw notFound('Order not found')
 
-  const meta = (order.metadata as OrderMetadata | null) || {}
-  const mpOrderId = meta.mpOrderId
-  let mpCancelError: string | null = null
+  const meta = (order.metadata as Record<string, unknown> | null) || {}
+  const terminalPayment = meta.terminalPayment as TerminalPaymentMetadata | undefined
+  let cancelError: string | null = null
 
-  if (mpOrderId) {
+  if (terminalPayment?.providerId) {
     try {
-      await mpService.cancelOrder(accessToken, mpOrderId)
+      const provider = terminalRegistry.get(terminalPayment.provider)
+      await provider.cancelPayment(terminalConfig.credentials, terminalPayment.providerId)
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || ''
       if (code === 'cannot_cancel_order') {
-        mpCancelError = 'expired'
+        cancelError = 'expired'
       } else {
-        throw badRequest(`Failed to cancel MP Point order: ${(err as { message?: string })?.message || code}`)
+        throw badRequest(`Failed to cancel terminal payment: ${(err as { message?: string })?.message || code}`)
       }
     }
   }
@@ -455,12 +459,17 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
       status: 'cancelled',
       metadata: {
         ...meta,
-        mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled',
+        terminalPayment: terminalPayment
+          ? {
+              ...terminalPayment,
+              normalizedStatus: cancelError === 'expired' ? 'expired' : 'cancelled',
+            }
+          : undefined,
       },
     })
     .eq('id', orderId)
 
-  return c.json({ success: true, meta: { mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled' } })
+  return c.json({ success: true })
 })
 
 ordersRouter.patch('/:id/status', async (c) => {
@@ -469,13 +478,8 @@ ordersRouter.patch('/:id/status', async (c) => {
   const storeId = c.get('storeId')
   const { status: newStatus } = await c.req.json()
 
-  const { data: store } = await supabase
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
-    .single()
-
-  const hasKitchen = (store?.settings as Record<string, unknown> | null)?.hasKitchen === true
+  const { settings } = await getStoreSettings(storeId)
+  const hasKitchen = (settings?.hasKitchen as boolean) ?? false
 
   const { data: order } = await supabase
     .from('orders')
@@ -504,7 +508,12 @@ ordersRouter.patch('/:id/status', async (c) => {
   return c.json({ data: enriched })
 })
 
-async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: string, storeId: string) {
+async function clearStuckTerminalPayments(
+  supabase: typeof supabaseAdmin,
+  terminalConfig: TerminalConfig,
+  storeId: string,
+) {
+  const provider = terminalRegistry.get(terminalConfig.provider)
   const seen = new Set<string>()
   const candidates: Array<{ id: string; metadata: Record<string, unknown> | null }> = []
 
@@ -521,31 +530,32 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
     if (!seen.has(o.id)) { seen.add(o.id); candidates.push(o) }
   }
 
-  const { data: byMpStatus } = await supabase
+  const terminalProvider = terminalConfig.provider
+  const { data: byTerminalStatus } = await supabase
     .from('orders')
     .select('id, metadata')
     .eq('store_id', storeId)
     .not('metadata', 'is', null)
-    .or('metadata->>mpOrderStatus.eq.created,metadata->>mpOrderStatus.eq.at_terminal')
+    .filter('metadata->terminalPayment->provider', 'eq', terminalProvider)
+    .or('metadata->>terminalPayment->normalizedStatus.eq.created,metadata->>terminalPayment->normalizedStatus.eq.awaiting_terminal')
     .limit(50)
 
-  for (const o of byMpStatus || []) {
+  for (const o of byTerminalStatus || []) {
     if (!seen.has(o.id)) { seen.add(o.id); candidates.push(o) }
   }
 
   for (const order of candidates) {
-    const meta = order.metadata as OrderMetadata | null
-    const mpId = meta?.mpOrderId
-    if (!mpId) continue
+    const meta = order.metadata as Record<string, unknown> | null
+    const tp = meta?.terminalPayment as TerminalPaymentMetadata | undefined
+    if (!tp?.providerId) continue
 
     try {
-      const mpOrder = await mpService.getOrder(accessToken, mpId)
-      const mpStatus = mpOrder.status
+      const result = await provider.getPayment(terminalConfig.credentials, tp.providerId)
 
-      if (mpStatus === 'processed') {
+      if (result.normalizedStatus === 'paid') {
         await supabase
           .from('orders')
-          .update({ status: 'paid', payment_status: 'paid', metadata: { ...meta, mpOrderStatus: 'processed' } })
+          .update({ status: 'paid', payment_status: 'paid', metadata: { ...meta, terminalPayment: { ...tp, normalizedStatus: 'paid', providerStatus: result.providerStatus } } })
           .eq('id', order.id)
         await supabase
           .from('payments')
@@ -554,10 +564,10 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
         continue
       }
 
-      if (mpStatus === 'canceled' || mpStatus === 'expired' || mpStatus === 'failed') {
+      if (result.normalizedStatus === 'cancelled' || result.normalizedStatus === 'expired' || result.normalizedStatus === 'failed') {
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: mpStatus } })
+          .update({ status: 'cancelled', metadata: { ...meta, terminalPayment: { ...tp, normalizedStatus: result.normalizedStatus } } })
           .eq('id', order.id)
         await supabase
           .from('payments')
@@ -566,11 +576,11 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
         continue
       }
 
-      if (mpStatus === 'created' || mpStatus === 'at_terminal') {
-        await mpService.cancelOrder(accessToken, mpId)
+      if (result.normalizedStatus === 'created' || result.normalizedStatus === 'awaiting_terminal') {
+        await provider.cancelPayment(terminalConfig.credentials, tp.providerId)
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: 'canceled' } })
+          .update({ status: 'cancelled', metadata: { ...meta, terminalPayment: { ...tp, normalizedStatus: 'cancelled' } } })
           .eq('id', order.id)
       }
     } catch {

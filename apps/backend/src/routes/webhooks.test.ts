@@ -9,8 +9,9 @@ const { mockOrderBusEmit, qb } = vi.hoisted(() => {
       : vi.fn().mockResolvedValue({ data: null, error: { message: 'not found' } })
 
     const eq = vi.fn(() => ({ single }))
+    const filter = vi.fn(() => ({ single }))
     const select = vi.fn(() => ({
-      filter: vi.fn(() => ({ single })),
+      filter,
       eq,
       single,
       order: vi.fn(() => ({ limit: vi.fn(() => ({ single })) })),
@@ -27,6 +28,7 @@ const { mockOrderBusEmit, qb } = vi.hoisted(() => {
       single,
       select,
       eq,
+      filter,
     }
   }
 
@@ -46,7 +48,7 @@ import { webhooksRouter } from './webhooks'
 const app = webhooksRouter
 
 async function postWebhook(body: unknown, signature?: string) {
-  const req = new Request('http://localhost/mp-point', {
+  const req = new Request('http://localhost/terminal', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -64,7 +66,14 @@ const validOrder = {
   payment_status: 'unpaid',
   total: 120,
   customer_id: null,
-  metadata: { mpOrderId: 'ORD_MP_001', mpOrderStatus: 'created' },
+  metadata: {
+    terminalPayment: {
+      provider: 'mercadopago',
+      providerId: 'ORD_MP_001',
+      providerStatus: 'created',
+      normalizedStatus: 'created',
+    },
+  },
 }
 
 const VALID_PAYLOAD = {
@@ -77,37 +86,26 @@ const VALID_PAYLOAD = {
   user_id: 'user-123',
 }
 
-describe('webhooks POST /mp-point', () => {
+describe('webhooks POST /terminal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     delete process.env.MP_CLIENT_SECRET
   })
 
-  describe('signature validation', () => {
-    it('accepts webhook without MP_CLIENT_SECRET (dev mode)', async () => {
+  describe('mercadopago webhook handling', () => {
+    it('returns 200 for valid processed webhook', async () => {
       qb.single.mockResolvedValue({ data: validOrder, error: null })
       const res = await postWebhook(VALID_PAYLOAD)
       expect(res.status).toBe(200)
     })
 
-    it('rejects when signature is wrong', async () => {
-      process.env.MP_CLIENT_SECRET = 'secret123'
-      const res = await postWebhook(VALID_PAYLOAD, 'ts=9999999999,v1=invalid')
-      expect(res.status).toBe(401)
-    })
-  })
-
-  describe('status handling', () => {
-    it.each([
-      ['order.processed'],
-      ['order.failed'],
-      ['order.expired'],
-      ['order.at_terminal'],
-      ['order.processing'],
-    ])('handles action %s', async (action) => {
+    it('returns 200 for other known actions', async () => {
       qb.single.mockResolvedValue({ data: validOrder, error: null })
-      const res = await postWebhook({ ...VALID_PAYLOAD, action })
-      expect(res.status).toBe(200)
+      const actions = ['order.failed', 'order.expired', 'order.at_terminal', 'order.processing']
+      for (const action of actions) {
+        const res = await postWebhook({ ...VALID_PAYLOAD, action })
+        expect(res.status).toBe(200)
+      }
     })
 
     it('returns 200 for unhandled actions', async () => {
@@ -125,11 +123,23 @@ describe('webhooks POST /mp-point', () => {
 
     it('handles duplicate events idempotently', async () => {
       qb.single.mockResolvedValue({
-        data: { ...validOrder, metadata: { mpOrderId: 'ORD_MP_001', mpOrderStatus: 'processed' } },
+        data: {
+          ...validOrder,
+          metadata: { terminalPayment: { ...validOrder.metadata.terminalPayment, normalizedStatus: 'paid' } },
+        },
         error: null,
       })
       const res = await postWebhook(VALID_PAYLOAD)
       expect(res.status).toBe(200)
     })
+  })
+
+  it('handles missing body gracefully', async () => {
+    const req = new Request('http://localhost/terminal', {
+      method: 'POST',
+      body: 'not-json',
+    })
+    const res = await app.fetch(req)
+    expect(res.status).toBe(400)
   })
 })

@@ -18,26 +18,95 @@ import {
   Smartphone,
   ChevronLeft,
 } from 'lucide-react'
+import type { TerminalProvider } from '@ultimate-pos/shared'
 
-interface MPPointPaymentProps {
+interface TerminalPaymentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   orderId: string | null
   isCreating?: boolean
   total: number
+  provider: TerminalProvider
+  label: string
   onPaid: () => void
   onCancel: () => void
 }
 
-type PaymentState = 'created' | 'at_terminal' | 'processing' | 'paid' | 'failed' | 'expired' | 'canceled' | 'action_required'
+type PaymentState = 'created' | 'awaiting_terminal' | 'processing' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'action_required'
 
-const STATE_CONFIG: Record<PaymentState, {
+interface StateConfig {
   icon: typeof CreditCard
   title: string
   description: string
   color: string
   bg: string
-}> = {
+}
+
+interface ProviderStateConfig {
+  [key: string]: StateConfig
+}
+
+const DEFAULT_STATE_CONFIG: ProviderStateConfig = {
+  created: {
+    icon: Loader2,
+    title: 'Creating payment order...',
+    description: 'Sending order to the terminal',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+  },
+  awaiting_terminal: {
+    icon: Smartphone,
+    title: 'Tap or insert card on the terminal',
+    description: 'The terminal is ready to process the payment',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+  },
+  processing: {
+    icon: Loader2,
+    title: 'Processing payment...',
+    description: 'Please wait while the payment is processed',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+  },
+  paid: {
+    icon: CheckCircle2,
+    title: 'Payment successful!',
+    description: 'The payment was processed successfully',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+  },
+  failed: {
+    icon: XCircle,
+    title: 'Payment failed',
+    description: 'The terminal could not process the payment',
+    color: 'text-error',
+    bg: 'bg-error/10',
+  },
+  expired: {
+    icon: Clock,
+    title: 'Payment time expired',
+    description: 'The payment order expired. Create a new order.',
+    color: 'text-warning',
+    bg: 'bg-warning/10',
+  },
+  cancelled: {
+    icon: XCircle,
+    title: 'Payment cancelled',
+    description: 'The payment order was cancelled',
+    color: 'text-on-surface-variant',
+    bg: 'bg-surface-container',
+  },
+  action_required: {
+    icon: AlertTriangle,
+    title: 'Check the terminal',
+    description: 'The terminal needs attention. Please check it.',
+    color: 'text-warning',
+    bg: 'bg-warning/10',
+  },
+}
+
+const MP_STATE_CONFIG: ProviderStateConfig = {
+  ...DEFAULT_STATE_CONFIG,
   created: {
     icon: Loader2,
     title: 'Creando orden de pago...',
@@ -45,7 +114,7 @@ const STATE_CONFIG: Record<PaymentState, {
     color: 'text-primary',
     bg: 'bg-primary/10',
   },
-  at_terminal: {
+  awaiting_terminal: {
     icon: Smartphone,
     title: 'Acerca la tarjeta a la terminal Point',
     description: 'La terminal está lista para recibir el pago',
@@ -80,7 +149,7 @@ const STATE_CONFIG: Record<PaymentState, {
     color: 'text-warning',
     bg: 'bg-warning/10',
   },
-  canceled: {
+  cancelled: {
     icon: XCircle,
     title: 'Pago cancelado',
     description: 'La orden de pago fue cancelada',
@@ -99,19 +168,28 @@ const STATE_CONFIG: Record<PaymentState, {
 type OrderResponse = {
   status?: string
   payment_status?: string
-  metadata?: { mpOrderStatus?: string }
+  metadata?: { terminalPayment?: { normalizedStatus?: string } }
+}
+
+function getStateConfig(provider: TerminalProvider): ProviderStateConfig {
+  if (provider === 'mercadopago') return MP_STATE_CONFIG
+  return DEFAULT_STATE_CONFIG
 }
 
 function toPaymentState(res: OrderResponse | undefined): PaymentState | undefined {
   if (!res) return undefined
   if (res.status === 'paid' || res.payment_status === 'paid') return 'paid'
-  const raw = res.metadata?.mpOrderStatus
-  if (raw === 'processed') return 'paid'
-  if (raw && (STATE_CONFIG as Record<string, unknown>)[raw]) return raw as PaymentState
+  const raw = res.metadata?.terminalPayment?.normalizedStatus
+  if (raw === 'paid') return 'paid'
+  if (raw === 'awaiting_terminal') return 'awaiting_terminal'
+  if (raw === 'cancelled') return 'cancelled'
+  if (raw && DEFAULT_STATE_CONFIG[raw]) return raw as PaymentState
   return undefined
 }
 
-export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total, onPaid, onCancel }: MPPointPaymentProps) {
+export function TerminalPaymentModal({
+  open, onOpenChange, orderId, isCreating, total, provider, onPaid, onCancel,
+}: TerminalPaymentModalProps) {
   const orderFromStore = useAppSelector((s) => {
     if (!orderId) return undefined
     const state = s as { order?: { items?: Array<{ id: string; metadata?: Record<string, unknown> }> } }
@@ -119,6 +197,9 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
   })
   const [localState, setLocalState] = useState<PaymentState>('created')
   const hasRedirected = useRef(false)
+  const TIMEOUT_MS = 3 * 60 * 1000
+
+  const stateConfig = getStateConfig(provider)
 
   useEffect(() => {
     hasRedirected.current = false
@@ -156,7 +237,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
 
   useEffect(() => {
     if (isCreating || !orderId) return
-    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired' || currentState === 'canceled') return
+    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired' || currentState === 'cancelled') return
 
     const interval = setInterval(() => {
       poll()
@@ -165,7 +246,6 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
     return () => clearInterval(interval)
   }, [open, currentState, poll, isCreating, orderId])
 
-  const TIMEOUT_MS = 3 * 60 * 1000
   useEffect(() => {
     if (isCreating || !orderId) return
     if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired') return
@@ -173,9 +253,9 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
       setLocalState('expired')
     }, TIMEOUT_MS)
     return () => clearTimeout(timer)
-  }, [open, currentState, isCreating, orderId])
+  }, [open, currentState, isCreating, orderId, TIMEOUT_MS])
 
-  const config = STATE_CONFIG[currentState]
+  const config = stateConfig[currentState]
   const Icon = config.icon
 
   return (
@@ -195,17 +275,17 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             {formatCurrency(total)}
           </div>
 
-          {(currentState === 'created' || currentState === 'at_terminal' || currentState === 'processing') && (
+          {(currentState === 'created' || currentState === 'awaiting_terminal' || currentState === 'processing') && (
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                 <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Esperando pago en la terminal...
+                Waiting for payment on the terminal...
               </div>
-              {(currentState === 'created' || currentState === 'at_terminal') && (
+              {(currentState === 'created' || currentState === 'awaiting_terminal') && provider === 'mercadopago' && (
                 <div className="mt-2 w-full rounded-xl bg-surface-container/40 border border-outline-variant/50 p-3 text-left flex items-center gap-2.5">
                   <ChevronLeft className="h-5 w-5 text-on-surface shrink-0" />
                   <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    para cancelar presiona el botón <span className="font-bold text-on-surface">◀</span> (<span className="font-bold text-on-surface">inferior izq</span>) en la terminal
+                    To cancel, press the <span className="font-bold text-on-surface">◀</span> (<span className="font-bold text-on-surface">bottom left</span>) button on the terminal
                   </p>
                 </div>
               )}
@@ -216,10 +296,10 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             <div className="w-full rounded-xl bg-surface-container/50 border border-outline-variant/50 p-3 text-left">
               <div className="flex items-center gap-2 text-sm text-on-surface">
                 <CheckCircle2 className="h-4 w-4 text-primary" />
-                <span className="font-bold">Pago confirmado</span>
+                <span className="font-bold">Payment confirmed</span>
               </div>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Redirigiendo al recibo...
+                Redirecting to receipt...
               </p>
             </div>
           )}
@@ -228,7 +308,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             <div className="w-full space-y-2">
               <div className="rounded-xl bg-error/10 border border-error/30 p-3 text-left">
                 <p className="text-xs text-error">
-                  El pago no pudo ser procesado. Verifica la terminal e intenta de nuevo.
+                  The payment could not be processed. Check the terminal and try again.
                 </p>
               </div>
               <div className="flex gap-2">
@@ -236,7 +316,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
                   onClick={onCancel}
                   className="flex-1 rounded-xl border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container transition-colors"
                 >
-                  Cancelar
+                  Cancel
                 </button>
                 <button
                   onClick={() => {
@@ -245,7 +325,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
                   }}
                   className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
                 >
-                  Reintentar
+                  Retry
                 </button>
               </div>
             </div>
@@ -253,19 +333,19 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
 
           {currentState === 'action_required' && (
             <button
-              onClick={() => setLocalState('at_terminal')}
+              onClick={() => setLocalState('awaiting_terminal')}
               className="w-full rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
             >
-              Ya revisé
+              I checked it
             </button>
           )}
 
-          {(currentState === 'expired' || currentState === 'canceled') && (
+          {(currentState === 'expired' || currentState === 'cancelled') && (
             <button
               onClick={() => onOpenChange(false)}
               className="w-full rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
             >
-              Cerrar
+              Close
             </button>
           )}
         </div>

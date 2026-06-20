@@ -1,0 +1,1 @@
+export { TerminalPaymentModal } from './TerminalPaymentModal'

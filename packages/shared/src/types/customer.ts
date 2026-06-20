@@ -32,6 +32,7 @@ export interface Payment {
   method: 'cash' | 'card' | 'transfer' | 'wallet' | 'other'
   status: 'pending' | 'completed' | 'failed' | 'refunded'
   reference: string | null
+  terminal_provider?: string | null
   amount_given?: number | null
   change_due?: number | null
   created_at: string

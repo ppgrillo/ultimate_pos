@@ -11,7 +11,7 @@ import {
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { formatCurrency, cn } from '@/lib/utils'
 import { Bolt, Banknote, BadgeCheck } from 'lucide-react'
-import type { PaymentMethod } from '@ultimate-pos/shared'
+import type { PaymentMethod, TerminalConfig } from '@ultimate-pos/shared'
 
 interface PaymentModalProps {
   open: boolean
@@ -19,10 +19,10 @@ interface PaymentModalProps {
   total: number
   onConfirm: (method: PaymentMethod, cashGiven?: number) => void
   acceptedMethods?: PaymentMethod[]
-  mpPointEnabled?: boolean
+  terminalProvider?: TerminalConfig | null
 }
 
-export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled }: PaymentModalProps) {
+export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, terminalProvider }: PaymentModalProps) {
   const [selected, setSelected] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState('')
   const autoConfirmed = useRef(false)
@@ -80,7 +80,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             acceptedMethods={acceptedMethods}
             amount={total}
             layout="vertical"
-            mpPointEnabled={mpPointEnabled}
+            terminalProvider={terminalProvider}
           />
         </div>
 

@@ -9,6 +9,7 @@ import { updateStoreSettings } from '@/store/slices/storeSlice'
 import { api } from '@/lib/api/client'
 import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { TerminalConfig } from '@ultimate-pos/shared'
 
 export default function SettingsPage() {
   const dispatch = useAppDispatch()
@@ -30,9 +31,7 @@ export default function SettingsPage() {
   const [cashEnabled, setCashEnabled] = useState(true)
   const [cardEnabled, setCardEnabled] = useState(true)
   const [transferEnabled, setTransferEnabled] = useState(true)
-  const [mpPointEnabled, setMpPointEnabled] = useState(false)
-  const [mpPointTerminalId, setMpPointTerminalId] = useState('')
-  const [mpPointAccessToken, setMpPointAccessToken] = useState('')
+  const [terminalConfigs, setTerminalConfigs] = useState<TerminalConfig[]>([])
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(false)
   const [terminals, setTerminals] = useState<Array<{ id: string; model: string; operating_mode: string }> | null>(null)
@@ -59,8 +58,7 @@ export default function SettingsPage() {
     setCashEnabled(methods.includes('cash'))
     setCardEnabled(methods.includes('card'))
     setTransferEnabled(methods.includes('transfer'))
-    setMpPointEnabled(settings?.mpPointEnabled ?? false)
-    setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
+    setTerminalConfigs((settings?.terminalConfigs ?? []) as TerminalConfig[])
   }, [settings, taxRate])
 
   const currentMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -83,11 +81,9 @@ export default function SettingsPage() {
     hasKitchen !== (settings?.hasKitchen ?? true) ||
     checkoutMode !== (settings?.checkoutMode ?? 'order-only') ||
     JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods) ||
-    mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
-    mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
-    mpPointAccessToken !== ''
+    JSON.stringify(terminalConfigs) !== JSON.stringify(settings?.terminalConfigs ?? [])
 
-  const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
+  const handleSave = async (overrides?: { terminalConfigs?: TerminalConfig[] }) => {
     try {
       await dispatch(updateStoreSettings({
         hasVariants,
@@ -102,9 +98,7 @@ export default function SettingsPage() {
         hasKitchen,
         checkoutMode,
         acceptedPaymentMethods: enabledMethods,
-        mpPointEnabled,
-        mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
-        ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
+        terminalConfigs: overrides?.terminalConfigs ?? terminalConfigs,
       })).unwrap()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -435,139 +429,167 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Mercado Pago Point</CardTitle>
-                <CardDescription>Accept credit and debit card payments via Mercado Pago Point Smart terminal</CardDescription>
+                <CardTitle>Terminal Payments</CardTitle>
+                <CardDescription>Configure card payment terminals for in-person processing</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={mpPointEnabled}
-                    onChange={(e) => setMpPointEnabled(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <Smartphone className="h-5 w-5 text-on-surface-variant" />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Enable MP Point</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Mercado Pago Point Smart 2 terminal for in-person processing</span>
-                  </div>
-                </label>
+              <CardContent className="space-y-6">
+                <p className="text-xs text-on-surface-variant">
+                  Add terminal providers to accept in-person card payments. Each provider has its own configuration.
+                </p>
 
-                {mpPointEnabled && (
-                  <>
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-                          Terminal ID
-                        </label>
-                        <Button
-                          onClick={handleListTerminals}
-                          isLoading={listingTerminals}
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[10px]"
-                        >
-                          <List className="h-3 w-3 mr-1" />
-                          Listar
-                        </Button>
-                      </div>
-                      <input
-                        type="text"
-                        value={mpPointTerminalId}
-                        onChange={(e) => setMpPointTerminalId(e.target.value)}
-                        placeholder="Seleccioná una terminal de la lista"
-                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                      />
-                    </div>
+                {terminalConfigs.map((cfg, idx) => {
+                  const mpTerminalId = cfg.credentials?.terminal_id ?? ''
 
-                    {listError && (
-                      <div className="flex items-start gap-2 rounded-xl bg-error/10 border border-error/30 p-4">
-                        <AlertCircle className="h-4 w-4 text-error shrink-0 mt-0.5" />
-                        <p className="text-xs text-error">{listError}</p>
-                      </div>
-                    )}
+                  return (
+                    <div key={cfg.provider} className="space-y-4">
+                      <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={cfg.enabled}
+                          onChange={(e) => {
+                            const next = [...terminalConfigs]
+                            next[idx] = { ...next[idx], enabled: e.target.checked }
+                            setTerminalConfigs(next)
+                          }}
+                          className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                        />
+                        <Smartphone className="h-5 w-5 text-on-surface-variant" />
+                        <div>
+                          <span className="block text-sm font-bold text-on-surface">{cfg.label}</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">
+                            Send card payments to a {cfg.provider === 'mercadopago' ? 'Mercado Pago Point Smart' : ''} terminal
+                          </span>
+                        </div>
+                      </label>
 
-                    {terminals && terminals.length === 0 && (
-                      <p className="text-xs text-on-surface-variant">No se encontraron terminales para esta cuenta.</p>
-                    )}
-
-                    {terminals && terminals.length > 0 && (
-                      <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 divide-y divide-outline-variant/30">
-                        {terminals.map((t) => (
-                          <div key={t.id} className="flex items-center justify-between p-4">
-                            <div>
-                              <p className="text-sm font-mono text-on-surface">{t.id}</p>
-                              <p className="text-[10px] text-on-surface-variant mt-0.5">
-                                {t.model} &middot; {t.operating_mode}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {t.operating_mode === 'STANDALONE' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  isLoading={settingUpPdv === t.id}
-                                  onClick={() => handleSetupPdv(t.id)}
-                                  className="text-[10px]"
-                                >
-                                  Set PDV
-                                </Button>
-                              )}
+                      {cfg.enabled && (
+                        <>
+                          <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                                Terminal ID
+                              </label>
                               <Button
+                                onClick={handleListTerminals}
+                                isLoading={listingTerminals}
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  setMpPointTerminalId(t.id)
-                                  setTerminals(null)
-                                  handleSave({ mpPointTerminalId: t.id })
-                                }}
+                                className="h-6 text-[10px]"
                               >
-                                Use
+                                <List className="h-3 w-3 mr-1" />
+                                Listar
                               </Button>
                             </div>
+                            <input
+                              type="text"
+                              value={mpTerminalId}
+                              onChange={(e) => {
+                                const next = [...terminalConfigs]
+                                next[idx] = { ...next[idx], credentials: { ...next[idx].credentials, terminal_id: e.target.value } }
+                                setTerminalConfigs(next)
+                              }}
+                              placeholder="Select a terminal from the list"
+                              className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                            />
                           </div>
-                        ))}
-                      </div>
-                    )}
 
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                        Access Token
-                      </label>
-                      <input
-                        type="password"
-                        value={mpPointAccessToken}
-                        onChange={(e) => setMpPointAccessToken(e.target.value)}
-                        placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current token' : 'Enter your Mercado Pago access token'}
-                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                      />
-                      <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                        Your access token is stored securely and never exposed to the frontend.
-                        {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
-                      </p>
-                    </div>
+                          {listError && (
+                            <div className="flex items-start gap-2 rounded-xl bg-error/10 border border-error/30 p-4">
+                              <AlertCircle className="h-4 w-4 text-error shrink-0 mt-0.5" />
+                              <p className="text-xs text-error">{listError}</p>
+                            </div>
+                          )}
 
-                    <div className="flex items-center justify-between rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
-                      <div>
-                        <p className="text-sm font-bold text-on-surface">Orden atorada en la terminal</p>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Cancela la orden MP Point activa si no se puede crear una nueva</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        isLoading={cancellingMpOrder}
-                        onClick={handleCancelQueued}
-                      >
-                        Cancelar
-                      </Button>
+                          {terminals && terminals.length === 0 && (
+                            <p className="text-xs text-on-surface-variant">No terminals found for this account.</p>
+                          )}
+
+                          {terminals && terminals.length > 0 && (
+                            <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 divide-y divide-outline-variant/30">
+                              {terminals.map((t) => (
+                                <div key={t.id} className="flex items-center justify-between p-4">
+                                  <div>
+                                    <p className="text-sm font-mono text-on-surface">{t.id}</p>
+                                    <p className="text-[10px] text-on-surface-variant mt-0.5">
+                                      {t.model} &middot; {t.operating_mode}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {t.operating_mode === 'STANDALONE' && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        isLoading={settingUpPdv === t.id}
+                                        onClick={() => handleSetupPdv(t.id)}
+                                        className="text-[10px]"
+                                      >
+                                        Set PDV
+                                      </Button>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const next = [...terminalConfigs]
+                                        next[idx] = { ...next[idx], credentials: { ...next[idx].credentials, terminal_id: t.id } }
+                                        setTerminalConfigs(next)
+                                        setTerminals(null)
+                                        handleSave({ terminalConfigs: next })
+                                      }}
+                                    >
+                                      Use
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                              Access Token
+                            </label>
+                            <input
+                              type="password"
+                              value={cfg.credentials?.access_token ?? ''}
+                              onChange={(e) => {
+                                const next = [...terminalConfigs]
+                                next[idx] = { ...next[idx], credentials: { ...next[idx].credentials, access_token: e.target.value } }
+                                setTerminalConfigs(next)
+                              }}
+                              placeholder={cfg.enabled ? 'Leave empty to keep current token' : 'Enter your access token'}
+                              className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                            />
+                            <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                              Your access token is stored securely and never exposed to the frontend.
+                              {cfg.enabled && ' Leave empty to keep the existing token.'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
+                            <div>
+                              <p className="text-sm font-bold text-on-surface">Stuck terminal order</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">Cancel the active terminal order if a new one cannot be created</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              isLoading={cancellingMpOrder}
+                              onClick={handleCancelQueued}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                          {cancelMpMessage && (
+                            <p className={`text-xs ${cancelMpSuccess ? 'text-primary' : 'text-error'}`}>
+                              {cancelMpMessage}
+                            </p>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {cancelMpMessage && (
-                      <p className={`text-xs ${cancelMpSuccess ? 'text-primary' : 'text-error'}`}>
-                        {cancelMpMessage}
-                      </p>
-                    )}
-                  </>
-                )}
+                  )
+                })}
               </CardContent>
             </Card>
           </div>

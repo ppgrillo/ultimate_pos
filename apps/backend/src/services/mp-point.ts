@@ -1,13 +1,16 @@
+import type {
+  TerminalPaymentResponse,
+  CreateTerminalPaymentParams,
+  TerminalInfo,
+  WebhookEvent,
+  TerminalProvider,
+} from '@ultimate-pos/shared'
+import type { TerminalProviderService } from './terminal/types'
+import { terminalRegistry } from './terminal/registry'
+
 const MP_API_BASE = 'https://api.mercadopago.com'
 
-export interface MPCreateOrderParams {
-  totalAmount: number
-  externalReference: string
-  description?: string
-  terminalId: string
-}
-
-export interface MPOrderResponse {
+interface MPOrderResponse {
   id: string
   status: string
   external_reference: string
@@ -15,11 +18,7 @@ export interface MPOrderResponse {
     payments: Array<{
       id: string
       status: string
-      payment_method: {
-        id: string
-        type: string
-        description: string
-      }
+      payment_method: { id: string; type: string; description: string }
       amount: string
       status_detail: string
       statement_descriptor?: string
@@ -37,15 +36,43 @@ export interface MPOrderResponse {
   status_detail: string
 }
 
-export interface MPError {
+interface MPError {
   message: string
   status: number
   cause?: Array<{ code: string; description: string }>
   errors?: Array<{ code: string; message: string }>
 }
 
-class MPService {
-  private apiBase = MP_API_BASE
+const MP_TO_NORMALIZED: Record<string, string> = {
+  created: 'created',
+  at_terminal: 'awaiting_terminal',
+  processing: 'processing',
+  processed: 'paid',
+  failed: 'failed',
+  expired: 'expired',
+  canceled: 'cancelled',
+  action_required: 'action_required',
+}
+
+const WEBHOOK_ACTION_MAP: Record<string, { normalizedStatus: string }> = {
+  'order.created': { normalizedStatus: 'created' },
+  'order.at_terminal': { normalizedStatus: 'awaiting_terminal' },
+  'order.processing': { normalizedStatus: 'processing' },
+  'order.processed': { normalizedStatus: 'paid' },
+  'order.failed': { normalizedStatus: 'failed' },
+  'order.expired': { normalizedStatus: 'expired' },
+  'order.canceled': { normalizedStatus: 'cancelled' },
+  'order.action_required': { normalizedStatus: 'action_required' },
+  'order.refunded': { normalizedStatus: 'paid' },
+}
+
+function normalizeStatus(mpStatus: string): string {
+  return MP_TO_NORMALIZED[mpStatus] || mpStatus
+}
+
+class MPPointProviderService implements TerminalProviderService {
+  readonly provider: TerminalProvider = 'mercadopago'
+  readonly label = 'Mercado Pago Point'
 
   private async request<T>(
     accessToken: string,
@@ -54,7 +81,7 @@ class MPService {
     body?: unknown,
     idempotencyKey?: string,
   ): Promise<T> {
-    const url = `${this.apiBase}${path}`
+    const url = `${MP_API_BASE}${path}`
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
@@ -64,7 +91,6 @@ class MPService {
       headers['X-Idempotency-Key'] = idempotencyKey
     }
     const bodyStr = body ? JSON.stringify(body) : undefined
-    console.log(`[mp-service] >> ${method} ${path}`, bodyStr?.slice(0, 500))
 
     const res = await fetch(url, {
       method,
@@ -73,7 +99,6 @@ class MPService {
     })
 
     const json = await res.json().catch(() => null)
-    console.log(`[mp-service] << ${res.status}`, JSON.stringify(json)?.slice(0, 800))
 
     if (!res.ok) {
       const mpErr = json as MPError | null
@@ -89,20 +114,39 @@ class MPService {
     return json as T
   }
 
-  async createOrder(
-    accessToken: string,
-    params: MPCreateOrderParams,
-  ): Promise<MPOrderResponse> {
+  private toTerminalResponse(mpOrder: MPOrderResponse): TerminalPaymentResponse {
+    return {
+      providerId: mpOrder.id,
+      providerStatus: mpOrder.status,
+      normalizedStatus: normalizeStatus(mpOrder.status) as TerminalPaymentResponse['normalizedStatus'],
+      paidAmount: mpOrder.transactions?.payments?.[0]?.amount
+        ? parseFloat(mpOrder.transactions.payments[0].amount)
+        : undefined,
+      statusDetail: mpOrder.status_detail,
+      raw: mpOrder,
+    }
+  }
+
+  async createPayment(
+    credentials: Record<string, string>,
+    params: CreateTerminalPaymentParams,
+  ): Promise<TerminalPaymentResponse> {
+    const accessToken = credentials.accessToken
+    const terminalId = params.terminalId || credentials.terminalId
+    if (!accessToken) throw new Error('MP Point access token is required')
+    if (!terminalId) throw new Error('MP Point terminal ID is required')
+
     const idempotencyKey = crypto.randomUUID()
     const amountStr = params.totalAmount.toFixed(2)
-    return this.request<MPOrderResponse>(accessToken, 'POST', '/v1/orders', {
+
+    const mpOrder = await this.request<MPOrderResponse>(accessToken, 'POST', '/v1/orders', {
       type: 'point',
       expiration_time: 'PT3M',
       external_reference: params.externalReference,
       description: params.description || 'Ultimate POS payment',
       config: {
         point: {
-          terminal_id: params.terminalId,
+          terminal_id: terminalId,
           print_on_terminal: 'no_ticket',
         },
         payment_method: {
@@ -117,46 +161,142 @@ class MPService {
         ],
       },
     }, idempotencyKey)
+
+    return this.toTerminalResponse(mpOrder)
   }
 
-  async getOrder(
-    accessToken: string,
-    orderId: string,
-  ): Promise<MPOrderResponse> {
-    return this.request<MPOrderResponse>(accessToken, 'GET', `/v1/orders/${orderId}`)
+  async getPayment(
+    credentials: Record<string, string>,
+    providerPaymentId: string,
+  ): Promise<TerminalPaymentResponse> {
+    const accessToken = credentials.accessToken
+    if (!accessToken) throw new Error('MP Point access token is required')
+
+    const mpOrder = await this.request<MPOrderResponse>(accessToken, 'GET', `/v1/orders/${providerPaymentId}`)
+    return this.toTerminalResponse(mpOrder)
   }
 
-  async cancelOrder(
-    accessToken: string,
-    orderId: string,
-  ): Promise<MPOrderResponse> {
+  async cancelPayment(
+    credentials: Record<string, string>,
+    providerPaymentId: string,
+  ): Promise<TerminalPaymentResponse> {
+    const accessToken = credentials.accessToken
+    if (!accessToken) throw new Error('MP Point access token is required')
+
     const idempotencyKey = crypto.randomUUID()
-    return this.request<MPOrderResponse>(accessToken, 'POST', `/v1/orders/${orderId}/cancel`, undefined, idempotencyKey)
+    const mpOrder = await this.request<MPOrderResponse>(
+      accessToken, 'POST', `/v1/orders/${providerPaymentId}/cancel`, undefined, idempotencyKey,
+    )
+    return this.toTerminalResponse(mpOrder)
   }
 
-  async refundOrder(
-    accessToken: string,
-    orderId: string,
-    transactionId?: string,
+  async refundPayment(
+    credentials: Record<string, string>,
+    providerPaymentId: string,
     amount?: number,
-  ): Promise<MPOrderResponse> {
+    transactionId?: string,
+  ): Promise<TerminalPaymentResponse> {
+    const accessToken = credentials.accessToken
+    if (!accessToken) throw new Error('MP Point access token is required')
+
     const idempotencyKey = crypto.randomUUID()
     const body: Record<string, unknown> = {}
     if (transactionId) body.transaction_id = transactionId
     if (amount) body.amount = Math.round(amount * 100)
-    return this.request<MPOrderResponse>(accessToken, 'POST', `/v1/orders/${orderId}/refund`, body, idempotencyKey)
+
+    const mpOrder = await this.request<MPOrderResponse>(
+      accessToken, 'POST', `/v1/orders/${providerPaymentId}/refund`, body, idempotencyKey,
+    )
+    return this.toTerminalResponse(mpOrder)
   }
 
-  async listTerminals(accessToken: string): Promise<{ terminals: Array<{ id: string; name: string; model: string; operating_mode: string }> }> {
-    return this.request(accessToken, 'GET', '/terminals/v1/list')
+  async listTerminals(credentials: Record<string, string>): Promise<TerminalInfo[]> {
+    const accessToken = credentials.accessToken
+    if (!accessToken) throw new Error('MP Point access token is required')
+
+    const result = await this.request<{ terminals?: Array<{ id: string; name: string; model: string; operating_mode: string }> }>(
+      accessToken, 'GET', '/terminals/v1/list',
+    )
+
+    return (result.terminals || []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      model: t.model,
+      operatingMode: t.operating_mode,
+    }))
   }
 
-  async setPdvMode(accessToken: string, terminalId: string): Promise<void> {
+  async setupTerminal(credentials: Record<string, string>, terminalId: string): Promise<void> {
+    const accessToken = credentials.accessToken
+    if (!accessToken) throw new Error('MP Point access token is required')
+
     const idempotencyKey = crypto.randomUUID()
-    await this.request(accessToken, 'PATCH', '/terminals/v1/setup', {
-      terminals: [{ id: terminalId, operating_mode: 'PDV' }],
-    }, idempotencyKey)
+    await this.request(
+      accessToken, 'PATCH', '/terminals/v1/setup', {
+        terminals: [{ id: terminalId, operating_mode: 'PDV' }],
+      }, idempotencyKey,
+    )
+  }
+
+  async verifyWebhook(request: { body: string; signature: string | undefined }): Promise<boolean> {
+    const clientSecret = process.env.MP_CLIENT_SECRET
+    if (!clientSecret) {
+      console.warn('[mp-point-webhook] MP_CLIENT_SECRET not set — skipping signature validation')
+      return true
+    }
+
+    const { body, signature: signatureHeader } = request
+    if (!signatureHeader) return false
+
+    const parts = signatureHeader.split(',').reduce<Record<string, string>>((acc, p) => {
+      const [key, value] = p.trim().split('=')
+      if (key && value) acc[key] = value
+      return acc
+    }, {})
+
+    const ts = parts['ts']
+    const receivedHash = parts['v1']
+    if (!ts || !receivedHash) return false
+
+    const now = Math.floor(Date.now() / 1000)
+    if (Math.abs(now - parseInt(ts, 10)) > 300) return false
+
+    const parsed = JSON.parse(body)
+    const orderId = parsed?.data?.id
+    const requestId = parsed?.id
+    if (!orderId || !requestId) return false
+
+    const dataToSign = `id=${orderId};request-id=${requestId};ts=${ts};`
+
+    const encoder = new TextEncoder()
+    const keyData = encoder.encode(clientSecret)
+    const messageData = encoder.encode(dataToSign)
+
+    const key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const signature = await crypto.subtle.sign('HMAC', key, messageData)
+    const computed = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+
+    return computed === receivedHash
+  }
+
+  parseWebhook(body: unknown): WebhookEvent | null {
+    const payload = body as { action?: string; data?: { id?: string } }
+    if (!payload?.action || !payload?.data?.id) return null
+
+    const mapping = WEBHOOK_ACTION_MAP[payload.action]
+    if (!mapping) return null
+
+    return {
+      providerPaymentId: payload.data.id,
+      providerStatus: payload.action,
+      normalizedStatus: mapping.normalizedStatus as WebhookEvent['normalizedStatus'],
+      provider: 'mercadopago',
+      raw: body,
+    }
   }
 }
 
-export const mpService = new MPService()
+export const mpProvider = new MPPointProviderService()
+terminalRegistry.register(mpProvider)

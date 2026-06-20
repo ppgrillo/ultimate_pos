@@ -2,7 +2,7 @@
 
 import { Banknote, CreditCard, Building } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
-import type { PaymentMethod } from '@ultimate-pos/shared'
+import type { PaymentMethod, TerminalConfig } from '@ultimate-pos/shared'
 
 interface PaymentMethodSelectorProps {
   selected: PaymentMethod | null
@@ -10,7 +10,7 @@ interface PaymentMethodSelectorProps {
   acceptedMethods?: PaymentMethod[]
   amount?: number
   layout?: 'horizontal' | 'vertical'
-  mpPointEnabled?: boolean
+  terminalProvider?: TerminalConfig | null
 }
 
 const methodConfig: Partial<Record<PaymentMethod, { label: string; icon: typeof Banknote }>> = {
@@ -25,7 +25,7 @@ export function PaymentMethodSelector({
   acceptedMethods = ['cash', 'card', 'transfer'],
   amount,
   layout = 'horizontal',
-  mpPointEnabled,
+  terminalProvider,
 }: PaymentMethodSelectorProps) {
   const methods = acceptedMethods
     .filter((m): m is keyof typeof methodConfig => m in methodConfig)
@@ -63,9 +63,9 @@ export function PaymentMethodSelector({
             <span className="flex flex-col items-center">
               <span className="flex items-center gap-1.5">
                 {method.label}
-                {method.id === 'card' && mpPointEnabled && (
+                {method.id === 'card' && terminalProvider && (
                   <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
-                    Point
+                    {terminalProvider.label ?? 'Terminal'}
                   </span>
                 )}
               </span>

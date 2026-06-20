@@ -13,6 +13,9 @@ import { customersRouter } from './routes/customers'
 import { storesRouter } from './routes/stores'
 import { webhooksRouter } from './routes/webhooks'
 
+// Register terminal providers (side-effect: self-registers on terminalRegistry)
+import './services/mp-point'
+
 const app = new Hono()
 
 app.use('*', logger())

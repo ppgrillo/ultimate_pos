@@ -1,4 +1,5 @@
 import type { Payment } from './customer'
+import type { TerminalPaymentMetadata } from './payment-terminal'
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
 
@@ -84,7 +85,5 @@ export function canTransition(from: OrderStatus, to: OrderStatus, hasKitchen: bo
 
 export interface OrderMetadata {
   [key: string]: unknown
-  mpOrderId?: string
-  mpOrderStatus?: 'created' | 'at_terminal' | 'processing' | 'processed' | 'failed' | 'expired' | 'canceled' | 'action_required'
-  mpStatusDetail?: string
+  terminalPayment?: TerminalPaymentMetadata
 }

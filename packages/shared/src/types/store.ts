@@ -1,4 +1,5 @@
 import type { PaymentMethod } from './customer'
+import type { TerminalConfig } from './payment-terminal'
 
 export interface StoreSettings {
   hasVariants: boolean
@@ -12,9 +13,7 @@ export interface StoreSettings {
   specialInstructionsEnabled: boolean
   checkoutMode: 'order-only' | 'payment-required'
   acceptedPaymentMethods: PaymentMethod[]
-  mpPointEnabled: boolean
-  mpPointTerminalId: string
-  mpPointAccessToken: string
+  terminalConfigs: TerminalConfig[]
 }
 
 export interface Store {

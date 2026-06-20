@@ -7,7 +7,8 @@ import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PaymentModal } from '@/components/pos/PaymentModal'
-import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { TerminalPaymentModal } from '@/components/pos/TerminalPaymentModal'
+import { useTerminalPayment } from '@/hooks/useTerminalPayment'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
@@ -16,7 +17,7 @@ import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { ShoppingBag, Search, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ProductCategory, PaymentMethod } from '@ultimate-pos/shared'
+import type { ProductCategory, PaymentMethod, TerminalConfig } from '@ultimate-pos/shared'
 
 interface PosDesktopLayoutProps {
   categories: ProductCategory[]
@@ -30,7 +31,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
+  const terminalPayment = useTerminalPayment()
 
   const items = useAppSelector((s) => s.cart.items)
   const customer_id = useAppSelector((s) => s.cart.customer_id)
@@ -52,7 +53,8 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const taxEnabled = settings?.taxEnabled ?? false
   const checkoutMode = settings?.checkoutMode ?? 'order-only'
   const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
-  const mpPointEnabled = settings?.mpPointEnabled ?? false
+  const terminalConfigs = (settings?.terminalConfigs ?? []) as TerminalConfig[]
+  const activeTerminal = terminalConfigs.find((tc: TerminalConfig) => tc.enabled) ?? null
 
   const computedTax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
@@ -64,11 +66,11 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
 
   const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number) => {
     const isCash = paymentMethod === 'cash'
-    const isMpPoint = paymentMethod === 'card' && mpPointEnabled
+    const useTerminal = paymentMethod === 'card' && activeTerminal !== null
 
-    if (isMpPoint) {
+    if (useTerminal) {
       setSubmitting(false)
-      setMpPaymentOrderId('__creating__')
+      terminalPayment.startPayment()
     } else {
       setSubmitting(true)
     }
@@ -81,7 +83,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         modifiers: item.modifiers,
         notes: item.notes,
       }))
-      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string } } }>('/orders', {
+      const res = await api.post<{ data: { id: string; metadata: { terminalPayment?: { providerId?: string } } } }>('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
@@ -91,8 +93,8 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
-      if (isMpPoint && res.data?.metadata?.mpOrderId) {
-        setMpPaymentOrderId(res.data.id)
+      if (useTerminal && res.data?.metadata?.terminalPayment?.providerId) {
+        terminalPayment.confirmPayment(res.data.id)
         return
       }
       dispatch(clearCart())
@@ -106,7 +108,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       }
       router.push(`/pos/receipt?${params.toString()}`)
     } catch {
-      setMpPaymentOrderId(null)
+      terminalPayment.clearPayment()
     } finally {
       setSubmitting(false)
     }
@@ -127,15 +129,12 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
 
   const handleMpPaid = () => {
     dispatch(clearCart())
-    setMpPaymentOrderId(null)
+    terminalPayment.clearPayment()
     router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
   }
 
   const handleMpCancel = async () => {
-    if (mpPaymentOrderId && mpPaymentOrderId !== '__creating__') {
-      try { await api.post(`/orders/${mpPaymentOrderId}/cancel-mp`) } catch {}
-    }
-    setMpPaymentOrderId(null)
+    await terminalPayment.cancelPayment()
   }
 
   return (
@@ -267,15 +266,17 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         total={totalAmount}
         onConfirm={handlePaymentConfirm}
         acceptedMethods={acceptedMethods}
-        mpPointEnabled={mpPointEnabled}
+        terminalProvider={activeTerminal}
       />
 
-      <MPPointPayment
-        open={mpPaymentOrderId !== null}
-        onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
-        orderId={mpPaymentOrderId && mpPaymentOrderId !== '__creating__' ? mpPaymentOrderId : null}
-        isCreating={mpPaymentOrderId === '__creating__'}
+      <TerminalPaymentModal
+        open={terminalPayment.isActive}
+        onOpenChange={(v) => { if (!v) terminalPayment.clearPayment() }}
+        orderId={terminalPayment.actualOrderId}
+        isCreating={terminalPayment.isCreating}
         total={totalAmount}
+        provider={activeTerminal?.provider ?? 'mercadopago'}
+        label={activeTerminal?.label ?? 'Terminal'}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}
       />
