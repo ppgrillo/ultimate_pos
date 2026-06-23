@@ -13,12 +13,47 @@ const item: CartItem = {
   notes: null,
 }
 
+const productWithImage = {
+  id: 'p1',
+  name: 'Latte',
+  price: 5,
+  is_active: true,
+  store_id: 's1',
+  category_id: null,
+  image_url: '/latte.jpg',
+  created_at: '',
+  updated_at: '',
+  description: null,
+  sku: null,
+  barcode: null,
+  cost: null,
+  modifiers: [],
+  points: null,
+  stock_qty: null,
+  track_inventory: false,
+  low_stock_threshold: null,
+  tax_exempt: false,
+}
+
 describe('CartItemRow', () => {
   it('renders item name, variant, and price', () => {
-    render(<CartItemRow item={item} />)
+    render(<CartItemRow item={item} />, {
+      preloadedState: {
+        products: { items: [productWithImage], categories: [] },
+      },
+    })
     expect(screen.getByText('Latte')).toBeInTheDocument()
     expect(screen.getByText('Oat Milk')).toBeInTheDocument()
     expect(screen.getByText('$5.00')).toBeInTheDocument()
+  })
+
+  it('renders a product thumbnail when available', () => {
+    render(<CartItemRow item={item} />, {
+      preloadedState: {
+        products: { items: [productWithImage], categories: [] },
+      },
+    })
+    expect(screen.getByAltText('Latte')).toHaveAttribute('src', '/latte.jpg')
   })
 
   it('shows quantity when not editable', () => {

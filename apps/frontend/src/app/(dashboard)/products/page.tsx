@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -10,11 +10,10 @@ import { DataTable } from '@/components/ui/DataTable'
 import { ProductMobileCard } from '@/components/products/ProductMobileCard'
 import { ImportModal } from '@/components/products/ImportModal'
 import { BulkImageUpload } from '@/components/products/BulkImageUpload'
-import { api } from '@/lib/api/client'
 import { formatCurrency } from '@/lib/utils'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { Product, ProductCategory } from '@ultimate-pos/shared'
+import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery } from '@/store/api'
 
 interface ProductRow {
   id: string
@@ -51,9 +50,6 @@ function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
 }
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<ProductCategory[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showImportModal, setShowImportModal] = useState(false)
   const [showBulkImageUpload, setShowBulkImageUpload] = useState(false)
@@ -64,24 +60,9 @@ export default function ProductsPage() {
   const userRole = useAppSelector((state) => state.auth.user?.role)
   const isAdmin = userRole === 'admin'
   const trackInventoryGlobal = useAppSelector((s) => s.storeConfig.currentStore?.settings?.trackInventory ?? false)
-
-  const loadData = useCallback(() => {
-    setLoading(true)
-    Promise.all([
-      api.get<{ data: Product[] }>('/products'),
-      api.get<{ data: ProductCategory[] }>('/categories'),
-    ])
-      .then(([productsRes, categoriesRes]) => {
-        setProducts(productsRes.data)
-        setCategories(categoriesRes.data)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  const { data: products = [], isLoading } = useGetProductsQuery()
+  const { data: categories = [] } = useGetCategoriesQuery()
+  const [deleteProductsBatch] = useDeleteProductsBatchMutation()
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -153,10 +134,9 @@ export default function ProductsPage() {
   const handleBulkDelete = async () => {
     setDeleting(true)
     try {
-      await api.delete('/products/batch', { ids: Array.from(selectedIds) })
+      await deleteProductsBatch({ ids: Array.from(selectedIds) }).unwrap()
       clearSelection()
       setShowDeleteConfirm(false)
-      loadData()
     } catch {
       // error handled silently
     } finally {
@@ -395,7 +375,7 @@ export default function ProductsPage() {
 
       {/* Mobile view */}
       <div className="lg:hidden space-y-3 pb-6">
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
@@ -466,7 +446,7 @@ export default function ProductsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {isLoading ? (
               <p className="text-on-surface-variant">Loading products...</p>
             ) : products.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -494,13 +474,13 @@ export default function ProductsPage() {
       <ImportModal
         open={showImportModal}
         onOpenChange={setShowImportModal}
-        onComplete={loadData}
+        onComplete={() => void 0}
       />
 
       <BulkImageUpload
         open={showBulkImageUpload}
         onOpenChange={setShowBulkImageUpload}
-        onComplete={loadData}
+        onComplete={() => void 0}
       />
 
       {/* Delete confirmation modal */}

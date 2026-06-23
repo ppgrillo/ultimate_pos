@@ -14,14 +14,14 @@ import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
 import type { Product } from '@ultimate-pos/shared'
+import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 
 export default function PosPage() {
   const dispatch = useAppDispatch()
-  const products = useAppSelector((s) => s.products.items)
-  const categories = useAppSelector((s) => s.products.categories)
-  const isLoading = useAppSelector((s) => s.products.isLoading)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
+  const { data: products = [], isLoading } = useGetProductsQuery()
+  const { data: categories = [] } = useGetCategoriesQuery()
 
   const filtered = products.filter((p) => {
     if (!p.is_active) return false

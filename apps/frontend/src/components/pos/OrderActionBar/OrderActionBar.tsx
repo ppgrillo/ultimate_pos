@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Percent, PauseCircle, CreditCard } from 'lucide-react'
-import { useAppSelector } from '@/store/hooks'
+import { Percent, Trash2, CreditCard } from 'lucide-react'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { clearCart } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
 import { PromoModal } from '@/components/pos/PromoModal'
 
@@ -12,6 +13,7 @@ interface OrderActionBarProps {
 }
 
 export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps) {
+  const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
   const discount = useAppSelector((s) => s.cart.discount)
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -44,10 +46,15 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
         </button>
         <button
           disabled={!itemsExist}
+          onClick={() => {
+            if (itemsExist && confirm('Clear the entire cart?')) {
+              dispatch(clearCart())
+            }
+          }}
           className="flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant px-3 py-2 text-xs font-label font-bold text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
         >
-          <PauseCircle className="h-4 w-4" />
-          Hold
+          <Trash2 className="h-4 w-4" />
+          Clear All
         </button>
       </div>
       <button

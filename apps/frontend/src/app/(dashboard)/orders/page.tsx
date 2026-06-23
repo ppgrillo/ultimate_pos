@@ -2,20 +2,23 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchOrders, updateOrderStatus, setActiveTab } from '@/store/slices/orderSlice'
+import { setActiveTab } from '@/store/slices/orderSlice'
 import type { OrderTab } from '@/store/slices/orderSlice'
 import { OrderHeader, OrderList, OrderDetailModal, useOrderStream } from '@/components/orders'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import type { Order, OrderStatus } from '@ultimate-pos/shared'
+import { useGetOrdersQuery, useUpdateOrderStatusMutation } from '@/store/api'
 
 export default function OrdersPage() {
   const dispatch = useAppDispatch()
-  const { items, loading, activeTab } = useAppSelector((s) => s.order)
+  const { activeTab } = useAppSelector((s) => s.order)
   const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen ?? true)
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
   const [statusLoading, setStatusLoading] = useState<Record<string, boolean>>({})
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+  const { data: items = [], isFetching: loading } = useGetOrdersQuery(activeTab)
+  const [updateOrderStatus] = useUpdateOrderStatusMutation()
 
   useOrderStream()
 
@@ -24,7 +27,6 @@ export default function OrdersPage() {
     if (effectiveTab !== activeTab) {
       dispatch(setActiveTab(effectiveTab))
     }
-    dispatch(fetchOrders(effectiveTab))
   }, [dispatch, hasKitchen, activeTab])
 
   const handleTabChange = useCallback((tab: OrderTab) => {
@@ -32,8 +34,8 @@ export default function OrdersPage() {
   }, [dispatch])
 
   const handleRefresh = useCallback(() => {
-    dispatch(fetchOrders(activeTab))
-  }, [dispatch, activeTab])
+    void activeTab
+  }, [activeTab])
 
   const handleStatusChange = useCallback(async (id: string, status: OrderStatus) => {
     if (status === 'cancelled') {
@@ -42,7 +44,7 @@ export default function OrdersPage() {
     }
     setStatusLoading((prev) => ({ ...prev, [id]: true }))
     try {
-      await dispatch(updateOrderStatus({ id, status })).unwrap()
+      await updateOrderStatus({ id, status }).unwrap()
     } finally {
       setStatusLoading((prev) => {
         const next = { ...prev }
@@ -50,7 +52,7 @@ export default function OrdersPage() {
         return next
       })
     }
-  }, [dispatch])
+  }, [updateOrderStatus])
 
   const handleConfirmCancel = useCallback(async () => {
     if (!confirmCancelId) return
@@ -58,7 +60,7 @@ export default function OrdersPage() {
     setConfirmCancelId(null)
     setStatusLoading((prev) => ({ ...prev, [id]: true }))
     try {
-      await dispatch(updateOrderStatus({ id, status: 'cancelled' })).unwrap()
+      await updateOrderStatus({ id, status: 'cancelled' }).unwrap()
     } finally {
       setStatusLoading((prev) => {
         const next = { ...prev }
@@ -66,7 +68,7 @@ export default function OrdersPage() {
         return next
       })
     }
-  }, [dispatch, confirmCancelId])
+  }, [updateOrderStatus, confirmCancelId])
 
   const handleTap = useCallback((order: Order) => {
     setDetailOrder(order)

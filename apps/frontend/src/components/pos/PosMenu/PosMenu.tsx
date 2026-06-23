@@ -1,24 +1,23 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchProducts, fetchCategories } from '@/store/slices/productsSlice'
 import { setSelectedCategory, setSearchQuery, setCustomizeProductId } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { CategoryChips } from '@/components/pos/CategoryChips'
 import { PosSearchBar } from '@/components/pos/PosSearchBar'
 import type { Product } from '@ultimate-pos/shared'
+import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 
 export function PosMenu() {
   const dispatch = useAppDispatch()
-  const { items: products, categories, isLoading } = useAppSelector((s) => s.products)
   const { selectedCategory, searchQuery } = useAppSelector((s) => s.pos)
-
-  useEffect(() => {
-    dispatch(fetchProducts())
-    dispatch(fetchCategories())
-  }, [dispatch])
+  const sliceProducts = useAppSelector((s) => s.products.items)
+  const sliceCategories = useAppSelector((s) => s.products.categories)
+  const { data: queryProducts = [], isLoading: productsLoading } = useGetProductsQuery()
+  const { data: queryCategories = [] } = useGetCategoriesQuery()
+  const products = sliceProducts.length > 0 ? sliceProducts : queryProducts
+  const categories = sliceCategories.length > 0 ? sliceCategories : queryCategories
 
   const filtered = products.filter((p) => {
     if (!p.is_active) return false
@@ -62,7 +61,7 @@ export function PosMenu() {
         onSelect={(id: string | null) => dispatch(setSelectedCategory(id))}
       />
 
-      {isLoading ? (
+      {productsLoading ? (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>

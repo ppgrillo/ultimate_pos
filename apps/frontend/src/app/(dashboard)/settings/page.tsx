@@ -4,17 +4,14 @@ import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
-import { useAppSelector, useAppDispatch } from '@/store/hooks'
-import { updateStoreSettings } from '@/store/slices/storeSlice'
-import { api } from '@/lib/api/client'
+import { useAppSelector } from '@/store/hooks'
+import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation } from '@/store/api'
 import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function SettingsPage() {
-  const dispatch = useAppDispatch()
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
   const taxRate = useAppSelector((s) => s.storeConfig.currentStore?.tax_rate)
-  const settingsLoading = useAppSelector((s) => s.storeConfig.settingsLoading)
 
   const [hasVariants, setHasVariants] = useState(false)
   const [hasLoyalty, setHasLoyalty] = useState(false)
@@ -43,6 +40,11 @@ export default function SettingsPage() {
   const [cancelMpMessage, setCancelMpMessage] = useState('')
   const [cancelMpSuccess, setCancelMpSuccess] = useState(false)
   const [preferenceFields, setPreferenceFields] = useState<Array<{ key: string; label: string; type: 'text' | 'select' | 'multiselect'; options?: string[]; placeholder?: string }>>([])
+  const { refetch: refetchStore } = useGetCurrentStoreQuery()
+  const [triggerTerminals] = useLazyGetTerminalsQuery()
+  const [updateStoreSettings, { isLoading: settingsLoading }] = useUpdateStoreSettingsMutation()
+  const [setupPdv] = useSetupPdvMutation()
+  const [cancelQueuedMpOrders] = useCancelQueuedMpOrdersMutation()
 
   useEffect(() => {
     setHasVariants(settings?.hasVariants ?? false)
@@ -92,7 +94,7 @@ export default function SettingsPage() {
 
   const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
     try {
-      await dispatch(updateStoreSettings({
+      await updateStoreSettings({
         hasVariants,
         hasLoyalty,
         trackInventory,
@@ -109,7 +111,8 @@ export default function SettingsPage() {
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         preferenceFields,
-      })).unwrap()
+      }).unwrap()
+      await refetchStore()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch {
@@ -123,8 +126,8 @@ export default function SettingsPage() {
     setListError('')
     setTerminals(null)
     try {
-      const result = await api.get<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }>('/stores/terminals')
-      setTerminals(result.terminals)
+      const result = await triggerTerminals().unwrap()
+      setTerminals(result.terminals ?? [])
     } catch (err: any) {
       setListError(err.message || 'Failed to list terminals')
     } finally {
@@ -136,7 +139,7 @@ export default function SettingsPage() {
     setSettingUpPdv(terminalId)
     setListError('')
     try {
-      await api.post('/stores/terminals/setup-pdv', { terminalId })
+      await setupPdv({ terminalId }).unwrap()
       setTerminals((prev) =>
         prev
           ? prev.map((t) => (t.id === terminalId ? { ...t, operating_mode: 'PDV' } : t))
@@ -153,7 +156,7 @@ export default function SettingsPage() {
     setCancellingMpOrder(true)
     setCancelMpMessage('')
     try {
-      const result = await api.post<{ cancelled: number; message?: string; errors?: string[] }>('/stores/terminals/cancel-queued')
+      const result = await cancelQueuedMpOrders().unwrap()
       if (result.cancelled > 0) {
         setCancelMpMessage(`Orden cancelada exitosamente`)
         setCancelMpSuccess(true)

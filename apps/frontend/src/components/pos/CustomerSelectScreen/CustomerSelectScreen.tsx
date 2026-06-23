@@ -1,12 +1,13 @@
 'use client'
 
 import { Search, Star, ShoppingBag, Calendar, Tag, Heart, ArrowRight, Clock } from 'lucide-react'
-import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchCustomers, fetchCustomerSummary, setSelectedCustomer } from '@/store/slices/customersSlice'
+import { useAppDispatch } from '@/store/hooks'
+import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { CustomerWithLoyalty } from '@/store/slices/customersSlice'
+import { useGetCustomersQuery, useGetCustomerSummaryQuery } from '@/store/api'
 
 interface CustomerSelectScreenProps {
   onStartOrder?: () => void
@@ -15,21 +16,12 @@ interface CustomerSelectScreenProps {
 
 export function CustomerSelectScreen({ onStartOrder, onSkip }: CustomerSelectScreenProps) {
   const dispatch = useAppDispatch()
-  const customers = useAppSelector((s) => s.customers.customers)
-  const customerSummary = useAppSelector((s) => s.customers.customerSummary)
-  const isLoadingSummary = useAppSelector((s) => s.customers.isLoadingSummary)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
-
-  useEffect(() => {
-    dispatch(fetchCustomers({ sort: 'name' }))
-  }, [dispatch])
-
-  useEffect(() => {
-    if (selectedCustomerId) {
-      dispatch(fetchCustomerSummary(selectedCustomerId))
-    }
-  }, [dispatch, selectedCustomerId])
+  const { data: customers = [] } = useGetCustomersQuery({ sort: 'name' })
+  const { data: customerSummary, isFetching: isLoadingSummary } = useGetCustomerSummaryQuery(selectedCustomerId || '', {
+    skip: !selectedCustomerId,
+  })
 
   const q = searchQuery.toLowerCase()
   const filtered = customers.filter((c) =>

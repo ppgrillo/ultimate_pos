@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchCustomers, fetchCustomerStats, createCustomer, updateCustomer } from '@/store/slices/customersSlice'
+import { useState } from 'react'
+import { useAppSelector } from '@/store/hooks'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
@@ -11,11 +10,11 @@ import { PhoneInput } from '@/components/ui/PhoneInput'
 import { Search, Plus, Tags, ArrowUpDown, User, ShoppingCart, Star, TrendingUp } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
+import { useCreateCustomerMutation, useGetCustomerStatsQuery, useGetCustomersQuery, useUpdateCustomerMutation } from '@/store/api'
+import type { CustomerWithLoyalty } from '@/store/api'
 
 export default function CustomersPage() {
-  const dispatch = useAppDispatch()
   const router = useRouter()
-  const { customers, stats, isLoading, isLoadingStats } = useAppSelector((s) => s.customers)
   const preferenceFields = useAppSelector((s) => s.storeConfig.currentStore?.settings?.preferenceFields ?? [])
 
   const [search, setSearch] = useState('')
@@ -36,29 +35,22 @@ export default function CustomersPage() {
     birthday: '',
   })
 
-  useEffect(() => {
-    dispatch(fetchCustomers({ search, tag: tagFilter, sort }))
-  }, [dispatch, search, tagFilter, sort])
-
-  useEffect(() => {
-    dispatch(fetchCustomerStats())
-  }, [dispatch])
+  const { data: customers = [], isLoading } = useGetCustomersQuery({ search, tag: tagFilter, sort })
+  const { data: stats, isLoading: isLoadingStats } = useGetCustomerStatsQuery()
+  const [createCustomer] = useCreateCustomerMutation()
+  const [updateCustomer] = useUpdateCustomerMutation()
+  const typedCustomers = customers as CustomerWithLoyalty[]
 
   const handleSearch = (val: string) => {
     setSearch(val)
-    dispatch(fetchCustomers({ search: val, tag: tagFilter, sort }))
   }
 
   const handleTagFilter = (tag: string) => {
-    const next = tagFilter === tag ? '' : tag
-    setTagFilter(next)
-    dispatch(fetchCustomers({ search, tag: next, sort }))
+    setTagFilter((current) => (current === tag ? '' : tag))
   }
 
   const handleSort = (col: string) => {
-    const next = sort === col ? '' : col
-    setSort(next)
-    dispatch(fetchCustomers({ search, tag: tagFilter, sort: next }))
+    setSort((current) => (current === col ? '' : col))
   }
 
   const resetForm = () => {
@@ -89,17 +81,16 @@ export default function CustomersPage() {
     } catch { /* keep default */ }
 
     if (editCustomer) {
-      await dispatch(updateCustomer({ id: editCustomer.id, ...payload }))
+      await updateCustomer({ id: editCustomer.id, body: payload }).unwrap()
     } else {
-      await dispatch(createCustomer(payload))
+      await createCustomer(payload).unwrap()
     }
 
     setShowCreate(false)
     resetForm()
-    dispatch(fetchCustomers({ search, tag: tagFilter, sort }))
   }
 
-  const allTags = [...new Set(customers.flatMap((c) => c.tags || []))].sort()
+  const allTags = [...new Set(typedCustomers.flatMap((c) => c.tags || []))].sort()
 
   return (
     <div className="space-y-6">
@@ -198,7 +189,7 @@ export default function CustomersPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-on-surface-variant">Loading customers...</div>
-          ) : customers.length === 0 ? (
+          ) : typedCustomers.length === 0 ? (
             <div className="p-8 text-center text-on-surface-variant">
               {search ? 'No customers match your search.' : 'No customers yet. Click "Add Customer" to get started.'}
             </div>
@@ -217,7 +208,7 @@ export default function CustomersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map((c) => (
+                  {typedCustomers.map((c) => (
                     <tr
                       key={c.id}
                       onClick={() => router.push(`/customers/${c.id}`)}

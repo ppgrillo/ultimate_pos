@@ -3,19 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import {
-  fetchCustomerById,
-  fetchCustomerOrders,
-  fetchCommunicationLog,
-  addCommunication,
-  updateCustomer,
-} from '@/store/slices/customersSlice'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
 import { ArrowLeft, Phone, Mail, Calendar, Hash, ShoppingBag, MessageCircle, Star, History, Edit3 } from 'lucide-react'
+import { useAddCommunicationMutation, useGetCommunicationLogQuery, useGetCustomerByIdQuery, useGetCustomerOrdersQuery, useUpdateCustomerMutation } from '@/store/api'
+import { setSelectedCustomer } from '@/store/slices/customersSlice'
 
 type Tab = 'info' | 'orders' | 'communication' | 'preferences'
 
@@ -24,10 +19,6 @@ export default function CustomerDetailPage() {
   const router = useRouter()
   const dispatch = useAppDispatch()
   const id = params.id as string
-  const customer = useAppSelector((s) => s.customers.selectedCustomer)
-  const orders = useAppSelector((s) => s.customers.customerOrders)
-  const commLog = useAppSelector((s) => s.customers.communicationLog)
-  const isLoadingOrders = useAppSelector((s) => s.customers.isLoadingOrders)
   const preferenceFields = useAppSelector((s) => s.storeConfig.currentStore?.settings?.preferenceFields ?? [])
 
   const [tab, setTab] = useState<Tab>('info')
@@ -47,14 +38,16 @@ export default function CustomerDetailPage() {
     social_handles: '{}',
   })
 
-  useEffect(() => {
-    dispatch(fetchCustomerById(id))
-  }, [dispatch, id])
-
-  useEffect(() => {
-    if (tab === 'orders') dispatch(fetchCustomerOrders({ id }))
-    if (tab === 'communication') dispatch(fetchCommunicationLog(id))
-  }, [dispatch, id, tab])
+  const { data: customer } = useGetCustomerByIdQuery(id)
+  const { data: orders = [], isFetching: isLoadingOrders } = useGetCustomerOrdersQuery(
+    { id },
+    { skip: tab !== 'orders' },
+  )
+  const { data: commLog = [] } = useGetCommunicationLogQuery(id, {
+    skip: tab !== 'communication',
+  })
+  const [addCommunication] = useAddCommunicationMutation()
+  const [updateCustomer] = useUpdateCustomerMutation()
 
   useEffect(() => {
     if (customer) {
@@ -75,15 +68,14 @@ export default function CustomerDetailPage() {
 
   const handleAddContact = async () => {
     if (!contactForm.type) return
-    await dispatch(addCommunication({
+    await addCommunication({
       customerId: id,
       type: contactForm.type,
       subject: contactForm.subject || undefined,
       message: contactForm.message || undefined,
-    }))
+    }).unwrap()
     setContactForm({ type: 'note', subject: '', message: '' })
     setShowContact(false)
-    dispatch(fetchCommunicationLog(id))
   }
 
   const handleEditSave = async () => {
@@ -100,10 +92,13 @@ export default function CustomerDetailPage() {
     }
     try { payload.preferences = JSON.parse(editForm.preferences) } catch {}
     try { payload.social_handles = JSON.parse(editForm.social_handles) } catch {}
-    await dispatch(updateCustomer({ id, ...payload }))
+    await updateCustomer({ id, body: payload }).unwrap()
     setShowEdit(false)
-    dispatch(fetchCustomerById(id))
   }
+
+  useEffect(() => {
+    if (customer) dispatch(setSelectedCustomer(customer))
+  }, [customer, dispatch])
 
   if (!customer) {
     return (

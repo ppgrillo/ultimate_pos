@@ -8,6 +8,7 @@ let _token: string | null = null
 
 export function setApiToken(token: string | null) {
   _token = token
+  ;(globalThis as any).__apiToken = token
 }
 
 export function getApiToken() {

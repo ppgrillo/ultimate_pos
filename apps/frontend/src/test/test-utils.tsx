@@ -8,8 +8,9 @@ import posReducer from '@/store/slices/posSlice'
 import storeReducer from '@/store/slices/storeSlice'
 import productsReducer from '@/store/slices/productsSlice'
 import customersReducer from '@/store/slices/customersSlice'
-import uiReducer from '@/store/slices/uiSlice'
 import orderReducer from '@/store/slices/orderSlice'
+import uiReducer from '@/store/slices/uiSlice'
+import { api } from '@/store/api'
 
 const rootReducer = combineReducers({
   auth: authReducer,
@@ -18,13 +19,15 @@ const rootReducer = combineReducers({
   storeConfig: storeReducer,
   products: productsReducer,
   customers: customersReducer,
-  ui: uiReducer,
   order: orderReducer,
+  ui: uiReducer,
+  [api.reducerPath]: api.reducer,
 })
 
 export function createTestStore(preloadedState?: Partial<ReturnType<typeof rootReducer>>) {
   return configureStore({
     reducer: rootReducer,
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(api.middleware),
     preloadedState,
   })
 }

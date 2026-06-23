@@ -2,8 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useAppDispatch } from '@/store/hooks'
-import { orderUpdated } from '@/store/slices/orderSlice'
-import type { Order } from '@ultimate-pos/shared'
+import { api } from '@/store/api'
 
 export function useOrderStream() {
   const dispatch = useAppDispatch()
@@ -17,8 +16,8 @@ export function useOrderStream() {
 
     es.onmessage = (event) => {
       try {
-        const order: Order = JSON.parse(event.data)
-        dispatch(orderUpdated(order))
+        JSON.parse(event.data)
+        dispatch(api.util.invalidateTags([{ type: 'Order', id: 'LIST' }]))
       } catch {
         // ignore malformed events
       }

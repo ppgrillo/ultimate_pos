@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Sparkles, Package, PackageOpen } from 'lucide-react'
-import { api } from '@/lib/api/client'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { CategoryChips } from '@/components/products/CategoryChips'
@@ -11,6 +10,7 @@ import { CreateCategoryModal } from '@/components/products/CreateCategoryModal'
 import { OptionGroupEditor } from '@/components/products/OptionGroupEditor'
 import { PointsInput } from '@/components/products/PointsInput'
 import { useAppSelector } from '@/store/hooks'
+import { useGetCategoriesQuery, useCreateProductMutation, useUpdateProductMutation } from '@/store/api'
 import type { ModifierGroup } from '@ultimate-pos/shared'
 import type { CreatedCategory } from '@/components/products/CreateCategoryModal'
 
@@ -77,6 +77,9 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [createProduct, { isLoading: createLoading }] = useCreateProductMutation()
+  const [updateProduct, { isLoading: updateLoading }] = useUpdateProductMutation()
+  const { data: queryCategories = [] } = useGetCategoriesQuery()
 
   const baselineRef = useRef(initialData ?? { ...defaultForm, track_inventory: trackInventory ?? false })
   const isDirty = useMemo(() => {
@@ -100,12 +103,8 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
   }, [form])
 
   useEffect(() => {
-    api.get<{ data: Category[] }>('/categories').then((res) => {
-      setCategories(res.data)
-    }).catch(() => {
-      // categories endpoint may not exist yet
-    })
-  }, [])
+    setCategories(queryCategories)
+  }, [queryCategories])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -138,9 +137,9 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
       }
 
       if (isEditing) {
-        await api.put(`/products/${productId}`, payload)
+        await updateProduct({ id: productId!, body: payload }).unwrap()
       } else {
-        await api.post('/products', payload)
+        await createProduct(payload).unwrap()
       }
 
       router.push('/products')
@@ -199,7 +198,7 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
             </p>
           </div>
         </div>
-        <Button type="submit" disabled={saving || !form.name || form.price <= 0 || !form.sku} isLoading={saving}>
+        <Button type="submit" disabled={saving || !form.name || form.price <= 0 || !form.sku} isLoading={saving || createLoading || updateLoading}>
           <Save className="h-4 w-4 mr-2" />
           {isEditing ? 'Update' : 'Save'}
         </Button>

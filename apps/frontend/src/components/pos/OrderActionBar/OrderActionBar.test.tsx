@@ -13,7 +13,7 @@ describe('OrderActionBar', () => {
       },
     })
     expect(screen.getByText('Promo')).toBeDisabled()
-    expect(screen.getByText('Hold')).toBeDisabled()
+    expect(screen.getByText('Clear All')).toBeDisabled()
     expect(screen.getByText('Complete Checkout')).toBeDisabled()
   })
 

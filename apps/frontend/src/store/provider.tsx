@@ -6,8 +6,9 @@ import { Provider, useDispatch } from 'react-redux'
 import { store } from './index'
 import type { AppDispatch } from './index'
 import { setApiToken } from '@/lib/api/client'
+import { useGetCurrentStoreQuery } from './api'
 import { setUser } from './slices/authSlice'
-import { fetchStore } from './slices/storeSlice'
+import { setStore } from './slices/storeSlice'
 import type { User } from '@ultimate-pos/shared'
 
 /**
@@ -17,6 +18,8 @@ import type { User } from '@ultimate-pos/shared'
 function SessionSyncProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
   const dispatch = useDispatch<AppDispatch>()
+  const accessToken = (session?.user as any)?.accessToken
+  const { data: currentStore } = useGetCurrentStoreQuery(undefined, { skip: !accessToken })
 
   useEffect(() => {
     const raw = session?.user as any
@@ -37,11 +40,16 @@ function SessionSyncProvider({ children }: { children: React.ReactNode }) {
         created_at: '',
       }
       dispatch(setUser(user))
-      dispatch(fetchStore())
     } else {
       dispatch(setUser(null))
     }
   }, [session, dispatch])
+
+  useEffect(() => {
+    if (currentStore) {
+      dispatch(setStore(currentStore))
+    }
+  }, [currentStore, dispatch])
 
   return <>{children}</>
 }

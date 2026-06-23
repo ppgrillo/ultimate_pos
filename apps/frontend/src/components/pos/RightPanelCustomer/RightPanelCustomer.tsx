@@ -3,28 +3,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Calendar, ChevronDown, ChevronUp, Clock, Heart, Search, ShoppingBag, Star, Tag, X } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchCustomers, fetchCustomerSummary, setSelectedCustomer } from '@/store/slices/customersSlice'
+import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
+import { useGetCustomersQuery, useGetCustomerSummaryQuery } from '@/store/api'
+import type { CustomerWithLoyalty } from '@/store/api'
 
 export function RightPanelCustomer() {
   const dispatch = useAppDispatch()
-  const selectedCustomer = useAppSelector((s) => s.customers.selectedCustomer)
-  const customers = useAppSelector((s) => s.customers.customers)
-  const customerSummary = useAppSelector((s) => s.customers.customerSummary)
-  const isLoadingSummary = useAppSelector((s) => s.customers.isLoadingSummary)
+  const selectedCustomer = useAppSelector((s) => s.customers?.selectedCustomer)
   const cartItemCount = useAppSelector((s) => s.cart.items.length)
   const [searchQuery, setSearchQuery] = useState('')
   const [expanded, setExpanded] = useState(false)
   const previousCartItemCount = useRef(cartItemCount)
-
-  useEffect(() => {
-    dispatch(fetchCustomers())
-  }, [dispatch])
+  const sliceCustomers = useAppSelector((s) => ((s as any).customers?.customers ?? []) as CustomerWithLoyalty[])
+  const sliceSummary = useAppSelector((s) => (s as any).customers?.customerSummary)
+  const sliceLoadingSummary = useAppSelector((s) => Boolean((s as any).customers?.isLoadingSummary))
+  const { data: queryCustomers = [] } = useGetCustomersQuery()
+  const { data: customerSummary, isFetching: isLoadingSummary } = useGetCustomerSummaryQuery(selectedCustomer?.id || '', {
+    skip: !selectedCustomer?.id,
+  })
+  const customers: CustomerWithLoyalty[] = queryCustomers.length > 0 ? queryCustomers : sliceCustomers
 
   useEffect(() => {
     if (selectedCustomer) {
-      dispatch(fetchCustomerSummary(selectedCustomer.id))
       setExpanded(true)
     } else {
       setExpanded(false)
@@ -40,7 +42,7 @@ export function RightPanelCustomer() {
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    return customers.filter((c) =>
+    return customers.filter((c: CustomerWithLoyalty) =>
       c.name.toLowerCase().includes(q) ||
       c.email?.toLowerCase().includes(q) ||
       c.phone?.toLowerCase().includes(q),
@@ -64,7 +66,12 @@ export function RightPanelCustomer() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const summary = selectedCustomer && customerSummary?.customer.id === selectedCustomer.id ? customerSummary : null
+  const summary = selectedCustomer && customerSummary?.customer.id === selectedCustomer.id
+    ? customerSummary
+    : selectedCustomer && sliceSummary?.customer.id === selectedCustomer.id
+      ? sliceSummary
+      : null
+  const summaryLoading = selectedCustomer?.id ? isLoadingSummary || sliceLoadingSummary : false
 
   return (
     <div className="border-b border-outline-variant">
@@ -244,7 +251,7 @@ export function RightPanelCustomer() {
                   </div>
                 )}
 
-                {isLoadingSummary && (
+                {summaryLoading && (
                   <div className="flex items-center justify-center py-2">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   </div>
@@ -259,7 +266,7 @@ export function RightPanelCustomer() {
           <div className="space-y-0.5 pb-1">
             {filtered.length > 0 ? (
               <div className="max-h-44 overflow-y-auto space-y-0.5 rounded-xl border border-outline-variant/50 bg-surface-container/40 p-1">
-                {filtered.map((c) => (
+                      {filtered.map((c: CustomerWithLoyalty) => (
                   <button
                     key={c.id}
                     onClick={() => {

@@ -1,26 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ProductForm } from '@/components/products/ProductForm'
-import { api } from '@/lib/api/client'
-import type { Product } from '@ultimate-pos/shared'
+import { useGetProductByIdQuery } from '@/store/api'
 
 export default function EditProductPage() {
   const params = useParams()
   const id = params.id as string
-  const [product, setProduct] = useState<Product | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: product, isLoading, error } = useGetProductByIdQuery(id)
 
-  useEffect(() => {
-    api.get<{ data: Product }>(`/products/${id}`)
-      .then((res) => setProduct(res.data))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load product'))
-      .finally(() => setLoading(false))
-  }, [id])
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <p className="text-on-surface-variant">Loading product...</p>
@@ -31,7 +20,7 @@ export default function EditProductPage() {
   if (error || !product) {
     return (
       <div className="rounded-lg bg-error-container/20 border border-error/30 p-4 text-sm text-error">
-        {error || 'Product not found'}
+        {error ? 'Failed to load product' : 'Product not found'}
       </div>
     )
   }

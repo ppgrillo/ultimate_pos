@@ -7,13 +7,15 @@ import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
+import { useGetProductsQuery } from '@/store/api'
 
 export function CustomizeProduct() {
   const dispatch = useAppDispatch()
   const productId = useAppSelector((s) => s.pos.customizeProductId)
-  const product = useAppSelector((s) =>
-    s.products.items.find((p) => p.id === productId),
-  )
+  const sliceProducts = useAppSelector((s) => s.products.items)
+  const { data: queryProducts = [] } = useGetProductsQuery()
+  const product = queryProducts.find((p) => p.id === productId)
+    ?? sliceProducts.find((p) => p.id === productId)
 
   const [imgError, setImgError] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})

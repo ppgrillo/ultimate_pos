@@ -1,0 +1,343 @@
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import type {
+  Customer,
+  CustomerInput,
+  CommunicationLog,
+  ModifierGroup,
+  Order,
+  OrderStatus,
+  PaymentMethod,
+  Product,
+  ProductCategory,
+  Store,
+  StoreSettings,
+} from '@ultimate-pos/shared'
+
+export interface CustomerWithLoyalty extends Customer {
+  loyalty?: {
+    tier?: string
+    points?: number
+  }
+}
+
+export interface CustomerStats {
+  totalCustomers: number
+  newThisMonth: number
+  topSpenders: Array<{ name: string; total_spent: number }>
+  mostVisits: number
+  avgOrderValue: number
+}
+
+export interface CustomerSummary {
+  customer: CustomerWithLoyalty
+  recentOrders: any[]
+  lastVisit: string | null
+  upcomingBirthday: number | null
+}
+
+export type OrderTab = 'active' | 'completed' | 'all'
+
+export interface ProductUpsertInput {
+  name: string
+  price: number
+  cost: number | null
+  sku: string | null
+  barcode: string | null
+  description: string | null
+  category_id: string | null
+  image_url: string | null
+  modifiers: ModifierGroup[]
+  points: number | null
+  stock_qty: number | null
+  track_inventory: boolean
+  low_stock_threshold: number | null
+  tax_exempt: boolean
+}
+
+export interface OrderCreateInput {
+  customer_id?: string
+  type: string
+  items: Array<{
+    product_id: string
+    quantity: number
+    unit_price: number
+    modifiers: string[]
+    notes: string | null
+  }>
+  notes?: string | null
+  discount?: number
+  discount_label?: string | null
+  payment_method?: PaymentMethod
+  cash_amount_given?: number
+}
+
+export const api = createApi({
+  reducerPath: 'api',
+  baseQuery: fetchBaseQuery({
+    baseUrl: '/api',
+    prepareHeaders: (headers) => {
+      const token = (globalThis as any).__apiToken ?? null
+      if (token) headers.set('Authorization', `Bearer ${token}`)
+      return headers
+    },
+  }),
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal'],
+  endpoints: (builder) => ({
+    getProducts: builder.query<Product[], void>({
+      query: () => '/products',
+      transformResponse: (response: { data: Product[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Product' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Product' as const, id: item.id })),
+            ]
+          : [{ type: 'Product' as const, id: 'LIST' }],
+    }),
+    getProductById: builder.query<Product, string>({
+      query: (id) => `/products/${id}`,
+      transformResponse: (response: { data: Product }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Product', id }],
+    }),
+    createProduct: builder.mutation<Product, ProductUpsertInput>({
+      query: (body) => ({
+        url: '/products',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Product }) => response.data,
+      invalidatesTags: [{ type: 'Product', id: 'LIST' }],
+    }),
+    updateProduct: builder.mutation<Product, { id: string; body: ProductUpsertInput }>({
+      query: ({ id, body }) => ({
+        url: `/products/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: { data: Product }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Product', id },
+        { type: 'Product', id: 'LIST' },
+      ],
+    }),
+    deleteProductsBatch: builder.mutation<{ deleted: number }, { ids: string[] }>({
+      query: (body) => ({
+        url: '/products/batch',
+        method: 'DELETE',
+        body,
+      }),
+      invalidatesTags: [{ type: 'Product', id: 'LIST' }],
+    }),
+    getCategories: builder.query<ProductCategory[], void>({
+      query: () => '/categories',
+      transformResponse: (response: { data: ProductCategory[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Category' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Category' as const, id: item.id })),
+            ]
+          : [{ type: 'Category' as const, id: 'LIST' }],
+    }),
+    createCategory: builder.mutation<ProductCategory, { name: string; description?: string }>({
+      query: (body) => ({
+        url: '/categories',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: ProductCategory }) => response.data,
+      invalidatesTags: [{ type: 'Category', id: 'LIST' }],
+    }),
+    getCurrentStore: builder.query<Store, void>({
+      query: () => '/stores/current',
+      providesTags: [{ type: 'Store', id: 'CURRENT' }],
+    }),
+    updateStoreSettings: builder.mutation<Store, Partial<StoreSettings & { taxRate?: number }>>({
+      query: (settings) => ({
+        url: '/stores/settings',
+        method: 'PUT',
+        body: { settings },
+      }),
+      transformResponse: (response: { settings: StoreSettings; tax_rate?: number }) => response as unknown as Store,
+      invalidatesTags: [{ type: 'Store', id: 'CURRENT' }],
+    }),
+    getTerminals: builder.query<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }, void>({
+      query: () => '/stores/terminals',
+      providesTags: [{ type: 'Terminal', id: 'LIST' }],
+    }),
+    setupPdv: builder.mutation<{ success: boolean }, { terminalId: string }>({
+      query: (body) => ({
+        url: '/stores/terminals/setup-pdv',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: [{ type: 'Terminal', id: 'LIST' }],
+    }),
+    cancelQueuedMpOrders: builder.mutation<{ cancelled: number; message?: string; errors?: string[] }, void>({
+      query: () => ({
+        url: '/stores/terminals/cancel-queued',
+        method: 'POST',
+      }),
+      invalidatesTags: [{ type: 'Terminal', id: 'LIST' }],
+    }),
+    getCustomers: builder.query<CustomerWithLoyalty[], { search?: string; tag?: string; source?: string; sort?: string } | void>({
+      query: (params) => ({
+        url: '/customers',
+        params: params ? Object.fromEntries(Object.entries(params).filter(([, value]) => value)) : undefined,
+      }),
+      transformResponse: (response: { data: CustomerWithLoyalty[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Customer' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Customer' as const, id: item.id })),
+            ]
+          : [{ type: 'Customer' as const, id: 'LIST' }],
+    }),
+    getCustomerById: builder.query<CustomerWithLoyalty, string>({
+      query: (id) => `/customers/${id}`,
+      transformResponse: (response: { data: CustomerWithLoyalty }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Customer', id }],
+    }),
+    getCustomerSummary: builder.query<CustomerSummary, string>({
+      query: (id) => `/customers/${id}/summary`,
+      transformResponse: (response: { data: CustomerSummary }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Customer', id: `summary-${id}` }],
+    }),
+    getCustomerOrders: builder.query<any[], { id: string; limit?: number; offset?: number }>({
+      query: ({ id, limit, offset }) => ({
+        url: `/customers/${id}/orders`,
+        params: {
+          ...(limit ? { limit: String(limit) } : {}),
+          ...(offset ? { offset: String(offset) } : {}),
+        },
+      }),
+      transformResponse: (response: { data: any[] }) => response.data,
+      providesTags: (_result, _error, { id }) => [{ type: 'Customer', id: `orders-${id}` }],
+    }),
+    getCommunicationLog: builder.query<CommunicationLog[], string>({
+      query: (id) => `/customers/${id}/contact`,
+      transformResponse: (response: { data: CommunicationLog[] }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Customer', id: `contact-${id}` }],
+    }),
+    getCustomerStats: builder.query<CustomerStats, void>({
+      query: () => '/customers/stats',
+      transformResponse: (response: { data: CustomerStats }) => response.data,
+      providesTags: [{ type: 'Customer', id: 'STATS' }],
+    }),
+    createCustomer: builder.mutation<CustomerWithLoyalty, CustomerInput>({
+      query: (body) => ({
+        url: '/customers',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: CustomerWithLoyalty }) => response.data,
+      invalidatesTags: [{ type: 'Customer', id: 'LIST' }, { type: 'Customer', id: 'STATS' }],
+    }),
+    updateCustomer: builder.mutation<CustomerWithLoyalty, { id: string; body: CustomerInput }>({
+      query: ({ id, body }) => ({
+        url: `/customers/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      transformResponse: (response: { data: CustomerWithLoyalty }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Customer', id },
+        { type: 'Customer', id: 'LIST' },
+        { type: 'Customer', id: 'STATS' },
+      ],
+    }),
+    addCommunication: builder.mutation<CommunicationLog, { customerId: string; type: string; subject?: string; message?: string }>({
+      query: ({ customerId, ...body }) => ({
+        url: `/customers/${customerId}/contact`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: CommunicationLog }) => response.data,
+      invalidatesTags: (_result, _error, { customerId }) => [
+        { type: 'Customer', id: customerId },
+        { type: 'Customer', id: `summary-${customerId}` },
+        { type: 'Customer', id: `contact-${customerId}` },
+      ],
+    }),
+    getOrders: builder.query<Order[], OrderTab | undefined>({
+      query: (tab) => ({
+        url: '/orders',
+        params: tab ? { tab } : undefined,
+      }),
+      transformResponse: (response: { data: Order[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Order' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Order' as const, id: item.id })),
+            ]
+          : [{ type: 'Order' as const, id: 'LIST' }],
+    }),
+    getOrderById: builder.query<Order, string>({
+      query: (id) => `/orders/${id}`,
+      transformResponse: (response: { data: Order }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Order', id }],
+    }),
+    createOrder: builder.mutation<{ id: string; metadata: { mpOrderId?: string } }, OrderCreateInput>({
+      query: (body) => ({
+        url: '/orders',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: { id: string; metadata: { mpOrderId?: string } } }) => response.data,
+      invalidatesTags: [{ type: 'Order', id: 'LIST' }],
+    }),
+    updateOrderStatus: builder.mutation<Order, { id: string; status: OrderStatus | string }>({
+      query: ({ id, status }) => ({
+        url: `/orders/${id}/status`,
+        method: 'PATCH',
+        body: { status },
+      }),
+      transformResponse: (response: { data: Order }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+    cancelMpOrder: builder.mutation<{ success: boolean }, { id: string }>({
+      query: ({ id }) => ({
+        url: `/orders/${id}/cancel-mp`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+  }),
+})
+
+export const {
+  useGetProductsQuery,
+  useGetProductByIdQuery,
+  useCreateProductMutation,
+  useUpdateProductMutation,
+  useDeleteProductsBatchMutation,
+  useGetCategoriesQuery,
+  useCreateCategoryMutation,
+  useGetCurrentStoreQuery,
+  useUpdateStoreSettingsMutation,
+  useLazyGetTerminalsQuery,
+  useSetupPdvMutation,
+  useCancelQueuedMpOrdersMutation,
+  useGetCustomersQuery,
+  useGetCustomerByIdQuery,
+  useGetCustomerSummaryQuery,
+  useGetCustomerOrdersQuery,
+  useGetCommunicationLogQuery,
+  useGetCustomerStatsQuery,
+  useCreateCustomerMutation,
+  useUpdateCustomerMutation,
+  useAddCommunicationMutation,
+  useGetOrdersQuery,
+  useGetOrderByIdQuery,
+  useCreateOrderMutation,
+  useUpdateOrderStatusMutation,
+  useCancelMpOrderMutation,
+} = api
