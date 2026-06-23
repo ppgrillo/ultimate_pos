@@ -6,6 +6,7 @@ import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck } from 'lucide-rea
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView } from '@/store/slices/posSlice'
 import { clearCart, setOrderType } from '@/store/slices/cartSlice'
+import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
 import { formatCurrency, cn } from '@/lib/utils'
 import { CartItemRow } from '@/components/pos/CartItemRow'
@@ -67,6 +68,7 @@ export function CheckoutPanel() {
 
   const handleMpPaid = () => {
     dispatch(clearCart())
+    dispatch(setSelectedCustomer(null))
     dispatch(setCheckoutView(false))
     dispatch(setCartOpen(false))
     setMpPaymentOrderId(null)
@@ -119,6 +121,7 @@ export function CheckoutPanel() {
       }
 
       dispatch(clearCart())
+      dispatch(setSelectedCustomer(null))
       dispatch(setCheckoutView(false))
       dispatch(setCartOpen(false))
       const params = new URLSearchParams()

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { useAppSelector, useAppDispatch } from '@/store/hooks'
 import { updateStoreSettings } from '@/store/slices/storeSlice'
 import { api } from '@/lib/api/client'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function SettingsPage() {
@@ -42,6 +42,7 @@ export default function SettingsPage() {
   const [cancellingMpOrder, setCancellingMpOrder] = useState(false)
   const [cancelMpMessage, setCancelMpMessage] = useState('')
   const [cancelMpSuccess, setCancelMpSuccess] = useState(false)
+  const [preferenceFields, setPreferenceFields] = useState<Array<{ key: string; label: string; type: 'text' | 'select' | 'multiselect'; options?: string[]; placeholder?: string }>>([])
 
   useEffect(() => {
     setHasVariants(settings?.hasVariants ?? false)
@@ -61,6 +62,7 @@ export default function SettingsPage() {
     setTransferEnabled(methods.includes('transfer'))
     setMpPointEnabled(settings?.mpPointEnabled ?? false)
     setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
+    setPreferenceFields(settings?.preferenceFields ?? [])
   }, [settings, taxRate])
 
   const currentMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -85,7 +87,8 @@ export default function SettingsPage() {
     JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods) ||
     mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
-    mpPointAccessToken !== ''
+    mpPointAccessToken !== '' ||
+    JSON.stringify(preferenceFields) !== JSON.stringify(settings?.preferenceFields ?? [])
 
   const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
     try {
@@ -105,6 +108,7 @@ export default function SettingsPage() {
         mpPointEnabled,
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
+        preferenceFields,
       })).unwrap()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -263,6 +267,110 @@ export default function SettingsPage() {
                     <span className="block text-xs text-on-surface-variant mt-0.5">Show kitchen-related messaging — disable for retail or service-based businesses</span>
                   </div>
                 </label>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer Preferences</CardTitle>
+                <CardDescription>Define what preferences your customers can have — these appear in the customer form as editable fields</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {preferenceFields.map((field, idx) => (
+                  <div key={idx} className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-label font-bold text-on-surface">{field.label || 'New Field'}</span>
+                      <button
+                        onClick={() => setPreferenceFields((prev) => prev.filter((_, i) => i !== idx))}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Key</label>
+                        <input
+                          value={field.key}
+                          onChange={(e) => {
+                            const next = [...preferenceFields]
+                            next[idx] = { ...next[idx], key: e.target.value }
+                            setPreferenceFields(next)
+                          }}
+                          placeholder="e.g. clothing_style"
+                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Label</label>
+                        <input
+                          value={field.label}
+                          onChange={(e) => {
+                            const next = [...preferenceFields]
+                            next[idx] = { ...next[idx], label: e.target.value }
+                            setPreferenceFields(next)
+                          }}
+                          placeholder="e.g. Clothing Style"
+                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Type</label>
+                        <select
+                          value={field.type}
+                          onChange={(e) => {
+                            const next = [...preferenceFields]
+                            next[idx] = { ...next[idx], type: e.target.value as 'text' | 'select' | 'multiselect' }
+                            setPreferenceFields(next)
+                          }}
+                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        >
+                          <option value="text">Text</option>
+                          <option value="select">Select (single)</option>
+                          <option value="multiselect">Multi-select</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Placeholder</label>
+                        <input
+                          value={field.placeholder || ''}
+                          onChange={(e) => {
+                            const next = [...preferenceFields]
+                            next[idx] = { ...next[idx], placeholder: e.target.value }
+                            setPreferenceFields(next)
+                          }}
+                          placeholder="Optional"
+                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                    </div>
+                    {(field.type === 'select' || field.type === 'multiselect') && (
+                      <div className="mt-3">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Options <span className="text-on-surface-variant/50">(one per line)</span></label>
+                        <textarea
+                          value={(field.options || []).join('\n')}
+                          onChange={(e) => {
+                            const next = [...preferenceFields]
+                            next[idx] = { ...next[idx], options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) }
+                            setPreferenceFields(next)
+                          }}
+                          placeholder="Streetwear&#10;Formal&#10;Deportivo"
+                          rows={3}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button
+                  onClick={() => setPreferenceFields((prev) => [...prev, { key: '', label: '', type: 'text', options: [], placeholder: '' }])}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline-variant/50 p-4 text-sm text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Preference Field
+                </button>
               </CardContent>
             </Card>
 

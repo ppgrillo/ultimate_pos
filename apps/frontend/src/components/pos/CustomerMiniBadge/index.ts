@@ -1,0 +1,1 @@
+export { CustomerMiniBadge } from './CustomerMiniBadge'

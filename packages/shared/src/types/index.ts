@@ -3,4 +3,4 @@ export type { Order, OrderItem, OrderStatus, OrderType, PaymentStatus, OrderMeta
 export { KITCHEN_FLOW, getNextKitchenTransitions, getNextRetailTransitions, canTransition } from './order'
 export type { User, UserRole } from './user'
 export type { Store, StoreMember, StoreSettings } from './store'
-export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod } from './customer'
+export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField } from './customer'

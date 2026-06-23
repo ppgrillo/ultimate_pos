@@ -36,13 +36,16 @@ describe('PosDesktopLayout', () => {
     expect(screen.getByText('Scan')).toBeInTheDocument()
   })
 
-  it('renders empty cart state', () => {
+  it('shows customer select screen when cart is empty', () => {
     render(
       <PosDesktopLayout
         categories={categories}
         products={<div>Products Grid</div>}
       />,
     )
+    expect(screen.getByPlaceholderText('Search customers...')).toBeInTheDocument()
+    expect(screen.getByText('Search for a customer')).toBeInTheDocument()
     expect(screen.getByText('Cart is empty')).toBeInTheDocument()
+    expect(screen.getByText('Add products to get started')).toBeInTheDocument()
   })
 })

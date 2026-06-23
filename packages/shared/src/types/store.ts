@@ -1,4 +1,4 @@
-import type { PaymentMethod } from './customer'
+import type { PaymentMethod, PreferenceField } from './customer'
 
 export interface StoreSettings {
   hasVariants: boolean
@@ -15,6 +15,7 @@ export interface StoreSettings {
   mpPointEnabled: boolean
   mpPointTerminalId: string
   mpPointAccessToken: string
+  preferenceFields: PreferenceField[]
 }
 
 export interface Store {

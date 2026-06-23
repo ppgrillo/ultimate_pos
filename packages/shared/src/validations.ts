@@ -67,11 +67,25 @@ export const employeeInviteSchema = z.object({
   name: z.string().min(2),
 })
 
+export const customerSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional().default([]),
+  preferences: z.record(z.unknown()).optional().default({}),
+  birthday: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  social_handles: z.record(z.string()).optional().default({}),
+  preferred_contact: z.string().nullable().optional(),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterInput = z.infer<typeof registerSchema>
 export type ProductInput = z.infer<typeof productSchema>
 export type OrderInput = z.infer<typeof orderSchema>
 export type EmployeeInviteInput = z.infer<typeof employeeInviteSchema>
+export type CustomerInput = z.infer<typeof customerSchema>
 
 export type ModifierGroupInput = z.infer<typeof modifierGroupSchema>
 export type ModifierOptionInput = z.infer<typeof modifierOptionSchema>

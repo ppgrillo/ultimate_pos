@@ -62,9 +62,7 @@ export default function PosPage() {
       {/* Mobile layout */}
       <div className="lg:hidden">
         <PosLayout
-          menu={
-            <PosMenu />
-          }
+          menu={<PosMenu />}
           cart={<PosCart />}
           checkout={<CheckoutPanel />}
           customerDrawer={<CustomerDrawer />}

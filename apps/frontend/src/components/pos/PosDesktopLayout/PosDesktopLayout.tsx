@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { clearCart, setOrderType } from '@/store/slices/cartSlice'
 import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
+import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
 import { ShoppingBag, Search, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -40,7 +41,6 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const notes = useAppSelector((s) => s.cart.notes)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
-  const cartHasItems = items.length > 0
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
 
@@ -95,6 +95,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         setMpPaymentOrderId(res.data.id)
         return
       }
+      dispatch(setSelectedCustomer(null))
       dispatch(clearCart())
       const params = new URLSearchParams()
       if (paymentMethod) {
@@ -126,6 +127,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   }
 
   const handleMpPaid = () => {
+    dispatch(setSelectedCustomer(null))
     dispatch(clearCart())
     setMpPaymentOrderId(null)
     router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
@@ -203,62 +205,53 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       </div>
 
       {/* Right Panel — Customer + Order + Checkout */}
-      <aside className={cn(
-        'hidden w-80 shrink-0 border-l border-outline-variant lg:flex lg:flex-col',
-        !cartHasItems && 'justify-center',
-      )}>
-        {cartHasItems ? (
-          <>
-            {/* Customer Section */}
-            <RightPanelCustomer />
+      <aside className="hidden w-80 shrink-0 border-l border-outline-variant lg:flex lg:flex-col">
+        <RightPanelCustomer />
 
-            {settings?.hasKitchen && (
-              <div className="px-3 pt-3">
-                <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2 px-1">
-                  Dining Option
-                </h3>
-                <DiningOptionToggle
-                  value={order_type}
-                  onChange={(v) => dispatch(setOrderType(v))}
-                />
-              </div>
-            )}
-
-            {/* Order Items */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1">
-                Order Summary ({count} {count === 1 ? 'item' : 'items'})
-              </h3>
-              {items.map((item, index) => (
-                <CartItemRow
-                  key={`${item.product_id}-${index}`}
-                  item={item}
-                />
-              ))}
-              <div className="pt-2 px-1">
-                <OrderSummary
-                  subtotal={subtotal}
-                  discount={discount}
-                  discountLabel={discount_label || undefined}
-                  taxRate={taxRate}
-                  taxLabel={taxLabel}
-                  taxInclusive={taxInclusive}
-                  taxEnabled={taxEnabled}
-                  showTotal
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <OrderActionBar onCheckout={handleSubmit} isSubmitting={submitting} />
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center px-4 text-center">
-            <ShoppingBag className="h-12 w-12 text-on-surface-variant/30 mb-3" />
-            <p className="text-sm text-on-surface-variant">Cart is empty</p>
-            <p className="text-xs text-on-surface-variant/50 mt-1">Add products to get started</p>
+        {settings?.hasKitchen && (
+          <div className="px-3 pt-3">
+            <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2 px-1">
+              Dining Option
+            </h3>
+            <DiningOptionToggle
+              value={order_type}
+              onChange={(v) => dispatch(setOrderType(v))}
+            />
           </div>
         )}
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1">
+            Order Summary ({count} {count === 1 ? 'item' : 'items'})
+          </h3>
+          {items.map((item, index) => (
+            <CartItemRow
+              key={`${item.product_id}-${index}`}
+              item={item}
+            />
+          ))}
+          {items.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+              <ShoppingBag className="h-12 w-12 text-on-surface-variant/30 mb-3" />
+              <p className="text-sm text-on-surface-variant">Cart is empty</p>
+              <p className="text-xs text-on-surface-variant/50 mt-1">Add products to get started</p>
+            </div>
+          )}
+          <div className="pt-2 px-1">
+            <OrderSummary
+              subtotal={subtotal}
+              discount={discount}
+              discountLabel={discount_label || undefined}
+              taxRate={taxRate}
+              taxLabel={taxLabel}
+              taxInclusive={taxInclusive}
+              taxEnabled={taxEnabled}
+              showTotal
+            />
+          </div>
+        </div>
+
+        <OrderActionBar onCheckout={handleSubmit} isSubmitting={submitting} />
       </aside>
 
       <PaymentModal
