@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/Modal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { formatCurrency, cn } from '@/lib/utils'
-import { Bolt, Banknote, BadgeCheck } from 'lucide-react'
+import { Bolt, Banknote, BadgeCheck, Loader2 } from 'lucide-react'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
 interface PaymentModalProps {
@@ -20,9 +20,10 @@ interface PaymentModalProps {
   onConfirm: (method: PaymentMethod, cashGiven?: number) => void
   acceptedMethods?: PaymentMethod[]
   mpPointEnabled?: boolean
+  isLoading?: boolean
 }
 
-export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled }: PaymentModalProps) {
+export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, isLoading }: PaymentModalProps) {
   const [selected, setSelected] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState('')
   const autoConfirmed = useRef(false)
@@ -59,6 +60,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
   }
 
   const handleOpenChange = (v: boolean) => {
+    if (isLoading) return // block closing while processing
     if (!v) { setSelected(null); setCashGiven('') }
     onOpenChange(v)
   }
@@ -143,15 +145,23 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
 
         <button
           onClick={handleConfirm}
-          disabled={!selected || (isCash && !cashValid)}
+          disabled={isLoading || !selected || (isCash && !cashValid)}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-base font-label font-bold text-primary-on hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {isCash ? <Banknote className="h-5 w-5" /> : <Bolt className="h-5 w-5" />}
-          {!selected
-            ? 'Select a method'
-            : isCash
-              ? `Charge ${formatCurrency(total)}`
-              : `Pay ${formatCurrency(total)} with ${selected === 'card' ? 'Card' : 'Transfer'}`}
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : isCash ? (
+            <Banknote className="h-5 w-5" />
+          ) : (
+            <Bolt className="h-5 w-5" />
+          )}
+          {isLoading
+            ? 'Processing…'
+            : !selected
+              ? 'Select a method'
+              : isCash
+                ? `Charge ${formatCurrency(total)}`
+                : `Pay ${formatCurrency(total)} with ${selected === 'card' ? 'Card' : 'Transfer'}`}
         </button>
       </ModalContent>
     </Modal>

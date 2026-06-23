@@ -122,8 +122,8 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   }
 
   const handlePaymentConfirm = async (method: PaymentMethod, cashGiven?: number) => {
-    setShowPaymentModal(false)
     await doSubmit(method, cashGiven)
+    setShowPaymentModal(false)
   }
 
   const handleMpPaid = () => {
@@ -261,6 +261,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         onConfirm={handlePaymentConfirm}
         acceptedMethods={acceptedMethods}
         mpPointEnabled={mpPointEnabled}
+        isLoading={submitting}
       />
 
       <MPPointPayment
