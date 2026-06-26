@@ -36,6 +36,7 @@ export interface LoyaltyCard {
   tier: LoyaltyTier
   google_pass_id: string | null
   apple_pass_id: string | null
+  digital_pass_id: string | null
   created_at: string
   updated_at: string
 }

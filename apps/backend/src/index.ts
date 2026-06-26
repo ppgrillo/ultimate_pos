@@ -12,6 +12,10 @@ import { employeesRouter } from './routes/employees'
 import { customersRouter } from './routes/customers'
 import { storesRouter } from './routes/stores'
 import { webhooksRouter } from './routes/webhooks'
+import { loyaltyRouter } from './routes/loyalty'
+import { appleWalletRouter } from './routes/apple-wallet'
+import { walletRouter } from './routes/wallet'
+import { filesRouter } from './routes/files'
 
 const app = new Hono()
 
@@ -29,6 +33,10 @@ app.route('/employees', employeesRouter)
 app.route('/customers', customersRouter)
 app.route('/stores', storesRouter)
 app.route('/webhooks', webhooksRouter)
+app.route('/loyalty', loyaltyRouter)
+app.route('/apple-wallet', appleWalletRouter)
+app.route('/wallet', walletRouter)
+app.route('/files', filesRouter)
 
 const port = Number(process.env.PORT) || 3001
 

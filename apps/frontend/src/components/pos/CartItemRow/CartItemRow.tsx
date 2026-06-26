@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { ShoppingCart } from 'lucide-react'
+import { ShoppingCart, Star } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useGetProductsQuery } from '@/store/api'
 import { removeItem, updateQuantity, type CartItem } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
+import { proxyImageUrl } from '@/lib/image-proxy'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 
 interface CartItemRowProps {
@@ -20,7 +21,16 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
   const { data: queryProducts = [] } = useGetProductsQuery()
   const product = queryProducts.find((p) => p.id === item.product_id)
     ?? sliceProducts.find((p) => p.id === item.product_id)
-  const imageUrl = product?.image_url && !imgError ? product.image_url : null
+  const imageUrl = product?.image_url && !imgError ? (proxyImageUrl(product.image_url) ?? product.image_url) : null
+  const store = useAppSelector((s) => s.storeConfig.currentStore)
+  const hasLoyalty = store?.settings?.hasLoyalty ?? false
+  const pointsPerCurrency = store?.settings?.pointsPerCurrency ?? 10
+  const productPoints = product?.points ?? 0
+  const itemPoints = hasLoyalty
+    ? productPoints > 0
+      ? productPoints * item.quantity
+      : Math.floor(item.price * pointsPerCurrency) * item.quantity
+    : 0
 
   return (
     <div className="flex items-center gap-3 rounded-xl bg-surface-container/50 border border-outline-variant p-3">
@@ -41,7 +51,15 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
         {item.variant_label && (
           <p className="text-xs text-on-surface-variant truncate mt-0.5">{item.variant_label}</p>
         )}
-        <p className="font-headline font-bold text-primary text-sm mt-1">{formatCurrency(item.price)}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="font-headline font-bold text-primary text-sm">{formatCurrency(item.price)}</p>
+          {itemPoints > 0 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              <Star className="h-2.5 w-2.5 fill-primary" />
+              {itemPoints}
+            </span>
+          )}
+        </div>
       </div>
       {editable ? (
         <div className="flex items-center gap-2">

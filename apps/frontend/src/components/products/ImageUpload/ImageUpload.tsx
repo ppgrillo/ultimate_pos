@@ -4,14 +4,16 @@ import { useCallback, useRef, useState } from 'react'
 import { ImagePlus, X, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
+import { proxyImageUrl } from '@/lib/image-proxy'
 
 interface ImageUploadProps {
   value?: string | null
   onChange: (value: string | null) => void
   className?: string
+  uploadLabel?: string
 }
 
-export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, className, uploadLabel = 'Upload Product Image' }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(value ?? null)
   const [uploading, setUploading] = useState(false)
@@ -88,7 +90,7 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
       ) : preview ? (
         <>
           <img
-            src={preview}
+            src={proxyImageUrl(preview) ?? ''}
             alt="Product preview"
             className="max-h-[200px] rounded-lg object-contain"
           />
@@ -106,7 +108,7 @@ export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
             <ImagePlus className="h-8 w-8 text-primary" />
           </div>
           <p className="font-headline text-base font-bold text-on-surface">
-            Upload Product Image
+            {uploadLabel}
           </p>
           <p className="mt-1 text-xs text-on-surface-variant">JPG, PNG (Max 5MB)</p>
         </>

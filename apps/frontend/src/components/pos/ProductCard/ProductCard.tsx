@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus, ShoppingCart } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
+import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
 import type { Product } from '@ultimate-pos/shared'
 
@@ -34,7 +35,7 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
         <div className="aspect-[4/3] bg-surface-container-high overflow-hidden">
           {showImg ? (
             <img
-              src={product.image_url ?? undefined}
+              src={proxyImageUrl(product.image_url) ?? undefined}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
               onError={() => setImgError(true)}
@@ -70,7 +71,7 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
         {showImg ? (
           <div className="aspect-[4/3] bg-surface-container-high overflow-hidden shrink-0">
             <img
-              src={product.image_url ?? undefined}
+              src={proxyImageUrl(product.image_url) ?? undefined}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
               onError={() => setImgError(true)}
@@ -117,7 +118,7 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
       {showImg && (
         <div className="h-14 w-14 shrink-0 rounded-lg bg-surface-container-high overflow-hidden">
           <img
-            src={product.image_url ?? undefined}
+            src={proxyImageUrl(product.image_url) ?? undefined}
             alt={product.name}
             className="h-full w-full object-cover"
             onError={() => setImgError(true)}

@@ -17,11 +17,14 @@ export interface CartState {
   customer_id: string | null
   customer_name: string | null
   customer_tier: string | null
+  customer_points: number
+  customer_loyalty_card_id: string | null
   table_number: number | null
   order_type: 'dine-in' | 'takeaway' | 'delivery'
   discount: number
   notes: string | null
   discount_label: string | null
+  redeemed_points: number
 }
 
 const initialState: CartState = {
@@ -29,11 +32,14 @@ const initialState: CartState = {
   customer_id: null,
   customer_name: null,
   customer_tier: null,
+  customer_points: 0,
+  customer_loyalty_card_id: null,
   table_number: null,
   order_type: 'dine-in',
   discount: 0,
   notes: null,
   discount_label: null,
+  redeemed_points: 0,
 }
 
 const cartSlice = createSlice({
@@ -69,16 +75,25 @@ const cartSlice = createSlice({
         item.quantity = Math.max(0, action.payload.quantity)
       }
     },
-    setCustomer(state, action: PayloadAction<{ id: string; name: string; tier?: string } | null>) {
+    setCustomer(state, action: PayloadAction<{ id: string; name: string; tier?: string; points?: number; loyalty_card_id?: string } | null>) {
       if (action.payload) {
         state.customer_id = action.payload.id
         state.customer_name = action.payload.name
         state.customer_tier = action.payload.tier || null
+        state.customer_points = action.payload.points ?? 0
+        state.customer_loyalty_card_id = action.payload.loyalty_card_id ?? null
+        state.redeemed_points = 0
       } else {
         state.customer_id = null
         state.customer_name = null
         state.customer_tier = null
+        state.customer_points = 0
+        state.customer_loyalty_card_id = null
+        state.redeemed_points = 0
       }
+    },
+    setRedeemedPoints(state, action: PayloadAction<number>) {
+      state.redeemed_points = Math.min(Math.max(0, action.payload), state.customer_points)
     },
     setOrderType(state, action: PayloadAction<'dine-in' | 'takeaway' | 'delivery'>) {
       state.order_type = action.payload
@@ -103,5 +118,6 @@ export const {
   addItem, removeItem, updateQuantity,
   setCustomer, setOrderType, setTable,
   setDiscount, setNotes, clearCart,
+  setRedeemedPoints,
 } = cartSlice.actions
 export default cartSlice.reducer

@@ -4,3 +4,5 @@ export { KITCHEN_FLOW, getNextKitchenTransitions, getNextRetailTransitions, canT
 export type { User, UserRole } from './user'
 export type { Store, StoreMember, StoreSettings } from './store'
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField } from './customer'
+export type { LoyaltyTierName, RewardTier, RedemptionRule, LoyaltyProgram, LoyaltyTransactionType, LoyaltyTransaction } from './loyalty'
+export type { PassType, PassStatus, DigitalPass, CreatePassInput, UpdatePassInput } from './digital-pass'

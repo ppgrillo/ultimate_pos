@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight } from 'lucide-react'
+import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
 
@@ -23,8 +23,13 @@ export default function ReceiptPage() {
   const paymentMethod = searchParams.get('paymentMethod')
   const total = searchParams.get('total')
   const changeDue = searchParams.get('changeDue')
+  const pointsEarned = searchParams.get('pointsEarned')
+  const pointsBefore = searchParams.get('pointsBefore')
+  const pointsAfter = searchParams.get('pointsAfter')
+  const pointsChanged = pointsBefore && pointsAfter && pointsBefore !== pointsAfter
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const hasKitchen = store?.settings?.hasKitchen ?? true
+  const hasLoyalty = store?.settings?.hasLoyalty ?? false
   const Icon = paymentMethod ? methodIcons[paymentMethod as keyof typeof methodIcons] : null
 
   return (
@@ -63,6 +68,34 @@ export default function ReceiptPage() {
               <div className="text-left">
                 <p className="text-xs text-on-surface-variant">Change Due</p>
                 <p className="text-lg font-headline font-bold text-primary">{formatCurrency(parseFloat(changeDue))}</p>
+              </div>
+            </div>
+          )}
+          {hasLoyalty && (
+            <div className="flex items-center gap-3 rounded-lg bg-primary/10 p-3 mt-4">
+              <Stars className="h-5 w-5 text-primary shrink-0" />
+              <div className="text-left">
+                {pointsChanged ? (
+                  <>
+                    <p className="text-xs text-on-surface-variant">
+                      Loyalty points
+                      {pointsEarned && Number(pointsEarned) > 0 ? ' earned' : ' redeemed'}
+                    </p>
+                    <p className="text-lg font-headline font-bold text-primary">
+                      {pointsBefore} → {pointsAfter}
+                    </p>
+                  </>
+                ) : pointsEarned && Number(pointsEarned) > 0 ? (
+                  <>
+                    <p className="text-xs text-on-surface-variant">Points earned</p>
+                    <p className="text-lg font-headline font-bold text-primary">+{pointsEarned}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-on-surface-variant">Loyalty</p>
+                    <p className="text-sm font-headline font-bold text-primary">No points earned</p>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -1,0 +1,37 @@
+{
+    "formatVersion": 1,
+    "passTypeIdentifier": "pass.com.ovejasautomaticas.generic",
+    "teamIdentifier": "M5D878749M",
+    "organizationName": "OvejaPass",
+    "description": "Pase Digital",
+    "logoText": "OvejaPass",
+    "sharingProhibited": false,
+    "suppressStripShine": false,
+    "backgroundColor": "rgb(31, 31, 31)",
+    "foregroundColor": "rgb(255, 255, 255)",
+    "labelColor": "rgb(200, 200, 200)",
+    "generic": {
+        "primaryFields": [
+            {
+                "key": "title",
+                "label": "TIPO",
+                "value": "Pase de Usuario"
+            }
+        ],
+        "backFields": [
+            {
+                "key": "description",
+                "label": "DESCRIPCIÓN",
+                "value": "Pase digital"
+            }
+        ]
+    },
+    "barcodes": [
+        {
+            "format": "PKBarcodeFormatQR",
+            "message": "123456789",
+            "messageEncoding": "iso-8859-1",
+            "altText": "123456789"
+        }
+    ]
+}

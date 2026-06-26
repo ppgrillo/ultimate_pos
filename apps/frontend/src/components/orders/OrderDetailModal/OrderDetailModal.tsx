@@ -13,6 +13,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Clock, Table2, User, Receipt } from 'lucide-react'
 import type { Order, OrderStatus } from '@ultimate-pos/shared'
+import { useGetOrderByIdQuery } from '@/store/api'
 
 interface OrderDetailModalProps {
   order: Order | null
@@ -26,9 +27,12 @@ interface OrderDetailModalProps {
 const statusTimeline: OrderStatus[] = ['pending', 'preparing', 'ready', 'served', 'paid']
 
 export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStatusChange, statusLoading }: OrderDetailModalProps) {
-  if (!order) return null
+  const { data: fullOrder } = useGetOrderByIdQuery(order?.id ?? '', { skip: !open || !order })
+  const displayOrder = fullOrder ?? order
 
-  const currentIdx = statusTimeline.indexOf(order.status)
+  if (!displayOrder) return null
+
+  const currentIdx = statusTimeline.indexOf(displayOrder.status)
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
@@ -42,19 +46,19 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
 
         <div className="space-y-5">
           <div className="flex items-center gap-3 flex-wrap">
-            <OrderStatusBadge status={order.status} />
-            {order.table_number && (
+            <OrderStatusBadge status={displayOrder.status} />
+            {displayOrder.table_number && (
               <span className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-                <Table2 className="h-3.5 w-3.5" /> Table {order.table_number}
+                <Table2 className="h-3.5 w-3.5" /> Table {displayOrder.table_number}
               </span>
             )}
-            {order.customer_name && (
+            {displayOrder.customer_name && (
               <span className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-                <User className="h-3.5 w-3.5" /> {order.customer_name}
+                <User className="h-3.5 w-3.5" /> {displayOrder.customer_name}
               </span>
             )}
             <span className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-              <Clock className="h-3.5 w-3.5" /> {formatDate(order.created_at)}
+              <Clock className="h-3.5 w-3.5" /> {formatDate(displayOrder.created_at)}
             </span>
           </div>
 
@@ -93,7 +97,7 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
                 <span>Item</span>
                 <span className="text-right">Amount</span>
               </div>
-              {order.items?.map((item) => (
+              {displayOrder.items?.map((item) => (
                 <div key={item.id} className="px-4 py-2.5">
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <div>
@@ -116,31 +120,43 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
           <div className="rounded-xl border border-outline-variant/40 p-4 space-y-1.5">
             <div className="flex justify-between text-sm">
               <span className="text-on-surface-variant">Subtotal</span>
-              <span className="font-label font-bold text-on-surface">{formatCurrency(order.subtotal)}</span>
+              <span className="font-label font-bold text-on-surface">{formatCurrency(displayOrder.subtotal)}</span>
             </div>
-            {order.discount > 0 && (
+            {displayOrder.discount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Discount</span>
-                <span className="font-label font-bold text-error">{formatCurrency(-order.discount)}</span>
+                <span className="font-label font-bold text-error">{formatCurrency(-displayOrder.discount)}</span>
               </div>
             )}
-            {order.tax > 0 && (
+            {displayOrder.tax > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Tax</span>
-                <span className="font-label font-bold text-on-surface">{formatCurrency(order.tax)}</span>
+                <span className="font-label font-bold text-on-surface">{formatCurrency(displayOrder.tax)}</span>
               </div>
             )}
+            {displayOrder.loyalty?.earned ? (
+              <div className="flex justify-between text-xs">
+                <span className="text-on-surface-variant">Points earned</span>
+                <span className="text-primary font-label font-bold">+{displayOrder.loyalty.earned}</span>
+              </div>
+            ) : null}
+            {displayOrder.loyalty?.redeemed ? (
+              <div className="flex justify-between text-xs">
+                <span className="text-on-surface-variant">Points redeemed</span>
+                <span className="text-error font-label font-bold">-{displayOrder.loyalty.redeemed}</span>
+              </div>
+            ) : null}
             <div className="border-t border-outline-variant/40 pt-1.5 flex justify-between">
               <span className="font-label font-bold text-on-surface">Total</span>
-              <span className="font-headline font-bold text-lg text-primary">{formatCurrency(order.total)}</span>
+              <span className="font-headline font-bold text-lg text-primary">{formatCurrency(displayOrder.total)}</span>
             </div>
           </div>
 
-          {order.payments && order.payments.length > 0 && (
+          {displayOrder.payments && displayOrder.payments.length > 0 && (
             <div>
               <h4 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">Payment</h4>
               <div className="rounded-xl bg-surface-container/30 border border-outline-variant/40 p-4 space-y-2">
-                {order.payments.map((p) => (
+                {displayOrder.payments.map((p) => (
                   <div key={p.id} className="flex items-center justify-between text-sm">
                     <span className="text-on-surface-variant capitalize">{p.method}</span>
                     <div className="text-right">
@@ -157,10 +173,10 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
 
           <div onClick={(e) => e.stopPropagation()} className="pt-0">
             <KitchenOrderActions
-              status={order.status}
+              status={displayOrder.status}
               hasKitchen={hasKitchen}
-              loading={!!statusLoading?.[order.id]}
-              onTransition={(to) => onStatusChange(order.id, to)}
+              loading={!!statusLoading?.[displayOrder.id]}
+              onTransition={(to) => onStatusChange(displayOrder.id, to)}
             />
           </div>
         </div>

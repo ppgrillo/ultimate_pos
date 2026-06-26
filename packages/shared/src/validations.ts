@@ -57,6 +57,7 @@ export const orderSchema = z.object({
   })).min(1),
   discount: z.number().min(0).optional().default(0),
   discount_label: z.string().nullable().optional(),
+  redeemed_points: z.number().int().min(0).optional().default(0),
   notes: z.string().nullable().optional(),
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),

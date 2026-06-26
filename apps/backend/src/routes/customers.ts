@@ -5,6 +5,15 @@ import { customerSchema } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
 
+// Helper: Supabase returns loyalty:loyalty_cards(*) as an array (reverse FK join).
+// Convert to a single object so frontend code can access loyalty.points directly.
+function normalizeLoyalty<T extends { loyalty?: unknown }>(item: T): T {
+  if (Array.isArray(item.loyalty)) {
+    return { ...item, loyalty: item.loyalty[0] || null }
+  }
+  return item
+}
+
 export const customersRouter = new Hono()
 
 customersRouter.use('*', authMiddleware)
@@ -50,7 +59,7 @@ customersRouter.get('/', async (c) => {
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data })
+  return c.json({ data: (data || []).map(normalizeLoyalty) })
 })
 
 customersRouter.get('/stats', async (c) => {
@@ -102,7 +111,7 @@ customersRouter.get('/:id', async (c) => {
 
   if (error || !data) throw notFound('Customer not found')
 
-  return c.json({ data })
+  return c.json({ data: normalizeLoyalty(data) })
 })
 
 customersRouter.get('/:id/summary', async (c) => {
@@ -145,7 +154,7 @@ customersRouter.get('/:id/summary', async (c) => {
 
   return c.json({
     data: {
-      customer,
+      customer: normalizeLoyalty(customer),
       recentOrders: recentOrders || [],
       lastVisit,
       upcomingBirthday,
@@ -203,7 +212,7 @@ customersRouter.post('/', zValidator('json', customerSchema), async (c) => {
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data }, 201)
+  return c.json({ data: normalizeLoyalty(data) }, 201)
 })
 
 customersRouter.patch('/:id', async (c) => {
@@ -240,7 +249,7 @@ customersRouter.patch('/:id', async (c) => {
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data })
+  return c.json({ data: normalizeLoyalty(data) })
 })
 
 customersRouter.post('/:id/contact', async (c) => {

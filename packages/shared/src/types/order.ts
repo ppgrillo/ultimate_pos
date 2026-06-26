@@ -25,6 +25,7 @@ export interface Order {
   customer_name?: string | null
   notes: string | null
   metadata: OrderMetadata
+  loyalty?: { earned: number; redeemed: number } | null
   created_at: string
   updated_at: string
 }

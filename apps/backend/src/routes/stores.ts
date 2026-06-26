@@ -4,6 +4,9 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
 import { mpService } from '../services/mp-point'
 
+const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
+const MAX_LOGO_SIZE = 3 * 1024 * 1024
+
 export const storesRouter = new Hono()
 
 storesRouter.use('*', authMiddleware)
@@ -28,6 +31,32 @@ storesRouter.get('/current', async (c) => {
   }
 
   return c.json(safe)
+})
+
+storesRouter.post('/upload-logo', requireRole('admin'), async (c) => {
+  const storeId = c.get('storeId')
+  if (!storeId) throw notFound('No store assigned')
+
+  const body = await c.req.parseBody()
+  const file = body['file']
+  if (!file || !(file instanceof File)) throw badRequest('Missing file')
+  if (!ALLOWED_MIME.includes(file.type)) throw badRequest('Invalid file type. Allowed: PNG, JPEG, WebP, AVIF')
+  if (file.size > MAX_LOGO_SIZE) throw badRequest('File too large. Max 3 MB')
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/webp' ? 'webp' : 'avif'
+  const fileName = `logos/${storeId}-${Date.now()}.${ext}`
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('product-images')
+    .upload(fileName, file, { contentType: file.type, upsert: true })
+
+  if (uploadError) throw badRequest(`Upload failed: ${uploadError.message}`)
+
+  const { data: publicUrl } = supabaseAdmin.storage
+    .from('product-images')
+    .getPublicUrl(fileName)
+
+  return c.json({ url: publicUrl.publicUrl })
 })
 
 storesRouter.put('/settings', requireRole('admin'), async (c) => {

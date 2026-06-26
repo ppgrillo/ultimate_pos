@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, Minus, Plus, ShoppingCart } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCustomizeProductId } from '@/store/slices/posSlice'
+import { proxyImageUrl } from '@/lib/image-proxy'
 import { addItem } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
@@ -102,7 +103,7 @@ export function CustomizeProduct() {
             {product.image_url && !imgError && (
               <div className="shrink-0">
                 <img
-                  src={product.image_url ?? undefined}
+                  src={proxyImageUrl(product.image_url) ?? undefined}
                   alt={product.name}
                   className="h-24 w-24 rounded-xl object-cover"
                   onError={() => setImgError(true)}

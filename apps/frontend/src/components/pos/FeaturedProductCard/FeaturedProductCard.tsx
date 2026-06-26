@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Bolt } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
 import type { Product } from '@ultimate-pos/shared'
 
@@ -27,7 +28,7 @@ export function FeaturedProductCard({ product, onQuickBuy }: FeaturedProductCard
         {showImg && (
           <div className="sm:w-48 h-40 sm:h-auto bg-surface-container-high overflow-hidden shrink-0">
             <img
-              src={product.image_url ?? undefined}
+              src={proxyImageUrl(product.image_url) ?? undefined}
               alt={product.name}
               className="h-full w-full object-cover"
               onError={() => setImgError(true)}

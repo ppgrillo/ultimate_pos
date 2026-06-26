@@ -18,3 +18,5 @@ export function formatDate(date: string | Date): string {
     timeStyle: 'short',
   }).format(new Date(date))
 }
+
+

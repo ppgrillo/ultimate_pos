@@ -15,6 +15,7 @@ import { clearCart, setOrderType } from '@/store/slices/cartSlice'
 import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
+import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import { ShoppingBag, Search, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ProductCategory, PaymentMethod } from '@ultimate-pos/shared'
@@ -39,6 +40,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const discount = useAppSelector((s) => s.cart.discount)
   const discount_label = useAppSelector((s) => s.cart.discount_label)
   const notes = useAppSelector((s) => s.cart.notes)
+  const redeemed_points = useAppSelector((s) => s.cart.redeemed_points)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -46,6 +48,8 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
 
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
+  const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
+  const { data: loyaltyCard } = useGetLoyaltyCardQuery(customer_id ?? '', { skip: !customer_id || !hasLoyalty })
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
@@ -81,13 +85,14 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         modifiers: item.modifiers,
         notes: item.notes,
       }))
-      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string } } }>('/orders', {
+      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string }; earned_points?: number } }>('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
         notes,
         discount,
         discount_label,
+        redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
@@ -95,14 +100,28 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         setMpPaymentOrderId(res.data.id)
         return
       }
+      const earnedPoints = res.data?.earned_points ?? 0
       dispatch(setSelectedCustomer(null))
       dispatch(clearCart())
+      if (customer_id) {
+        dispatch(rtkApi.util.invalidateTags([
+          { type: 'LoyaltyCard', id: customer_id },
+          { type: 'Customer', id: customer_id },
+        ]))
+      }
       const params = new URLSearchParams()
       if (paymentMethod) {
         params.set('paymentMethod', paymentMethod)
         params.set('total', String(totalAmount))
         if (isCash && cashAmountGiven !== undefined && cashAmountGiven > totalAmount) {
           params.set('changeDue', String(Math.round((cashAmountGiven - totalAmount) * 100) / 100))
+        }
+      }
+      if (earnedPoints > 0 || redeemed_points > 0) {
+        params.set('pointsEarned', String(earnedPoints))
+        if (loyaltyCard?.points !== undefined) {
+          params.set('pointsBefore', String(loyaltyCard.points))
+          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + (earnedPoints > 0 ? earnedPoints : -redeemed_points))))
         }
       }
       router.push(`/pos/receipt?${params.toString()}`)

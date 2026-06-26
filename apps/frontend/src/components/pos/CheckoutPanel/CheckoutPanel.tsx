@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck } from 'lucide-react'
+import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView } from '@/store/slices/posSlice'
 import { clearCart, setOrderType } from '@/store/slices/cartSlice'
@@ -15,12 +15,15 @@ import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PromoModal } from '@/components/pos/PromoModal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { LoyaltyPanel } from '@/components/pos/LoyaltyPanel'
+import { EnrollPrompt } from '@/components/pos/EnrollPrompt'
+import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
 export function CheckoutPanel() {
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { items, customer_id, order_type, discount, discount_label, notes } = useAppSelector((s) => s.cart)
+  const { items, customer_id, customer_name, order_type, discount, discount_label, notes, redeemed_points } = useAppSelector((s) => s.cart)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -35,6 +38,9 @@ export function CheckoutPanel() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState<string>('')
   const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
+  const [showLoyalty, setShowLoyalty] = useState(false)
+  const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
+  const { data: loyaltyCard } = useGetLoyaltyCardQuery(customer_id ?? '', { skip: !customer_id || !hasLoyalty })
 
   useEffect(() => {
     const methods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -104,13 +110,14 @@ export function CheckoutPanel() {
         notes: item.notes,
       }))
 
-      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string } } }>('/orders', {
+      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string }; earned_points?: number } }>('/orders', {
         customer_id: customer_id || undefined,
         type: order_type,
         items: orderItems,
         notes,
         discount,
         discount_label,
+        redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         payment_method: paymentRequired ? selectedMethod : undefined,
         cash_amount_given: isCash ? parsedCashGiven : undefined,
       })
@@ -120,16 +127,31 @@ export function CheckoutPanel() {
         return
       }
 
+      const earnedPoints = res.data?.earned_points ?? 0
+
       dispatch(clearCart())
       dispatch(setSelectedCustomer(null))
       dispatch(setCheckoutView(false))
       dispatch(setCartOpen(false))
+      if (customer_id) {
+        dispatch(rtkApi.util.invalidateTags([
+          { type: 'LoyaltyCard', id: customer_id },
+          { type: 'Customer', id: customer_id },
+        ]))
+      }
       const params = new URLSearchParams()
       if (paymentRequired && selectedMethod) {
         params.set('paymentMethod', selectedMethod)
         params.set('total', String(totalAmount))
         if (isCash && changeDue > 0) {
           params.set('changeDue', String(changeDue))
+        }
+      }
+      if (earnedPoints > 0 || redeemed_points > 0) {
+        params.set('pointsEarned', String(earnedPoints))
+        if (loyaltyCard?.points !== undefined) {
+          params.set('pointsBefore', String(loyaltyCard.points))
+          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + (earnedPoints > 0 ? earnedPoints : -redeemed_points))))
         }
       }
       router.push(`/pos/receipt?${params.toString()}`)
@@ -185,6 +207,40 @@ export function CheckoutPanel() {
               value={order_type}
               onChange={(v) => dispatch(setOrderType(v))}
             />
+          </div>
+        )}
+
+        {hasLoyalty && customer_id && (
+          <div>
+            <button
+              onClick={() => setShowLoyalty(!showLoyalty)}
+              className="flex w-full items-center justify-between rounded-xl border border-outline-variant/60 bg-surface-container/40 px-4 py-3 text-sm font-bold text-on-surface hover:bg-surface-container/80 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Stars className="h-4 w-4 text-primary" />
+                Loyalty Points
+              </span>
+              <span className="text-xs text-on-surface-variant">
+                {loyaltyCard
+                  ? `${loyaltyCard.points.toLocaleString()} pts`
+                  : 'Not enrolled'}
+              </span>
+            </button>
+            {showLoyalty && (
+              <div className="mt-3">
+                {loyaltyCard ? (
+                  <LoyaltyPanel isAdmin />
+                ) : (
+                  <EnrollPrompt
+                    customerId={customer_id}
+                    customerName={customer_name ?? 'this customer'}
+                    onEnrolled={() => {
+                      setShowLoyalty(false)
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
 

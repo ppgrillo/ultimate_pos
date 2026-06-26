@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen } from 'lucide-react'
+import { proxyImageUrl } from '@/lib/image-proxy'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
@@ -35,7 +36,7 @@ function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
     <>
       {showImg ? (
         <img
-          src={imageUrl ?? undefined}
+          src={proxyImageUrl(imageUrl) ?? undefined}
           alt=""
           className="h-9 w-9 rounded-lg object-cover bg-surface-container-high shrink-0"
           onError={() => setError(true)}

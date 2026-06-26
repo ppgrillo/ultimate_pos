@@ -2,6 +2,7 @@
 node_modules/
 .pnp
 .pnp.js
+certs/
 
 # builds
 .next/
@@ -13,6 +14,9 @@ out/
 .env.local
 .env.production
 .env*.local
+
+# credentials
+service-account-key.json
 
 # IDE
 .vscode/

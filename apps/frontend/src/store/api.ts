@@ -67,8 +67,38 @@ export interface OrderCreateInput {
   notes?: string | null
   discount?: number
   discount_label?: string | null
+  redeemed_points?: number
   payment_method?: PaymentMethod
   cash_amount_given?: number
+}
+
+interface LoyaltyCardData {
+  id: string
+  customer_id: string
+  points: number
+  tier: string
+  digital_pass_id: string | null
+  google_pass_id: string | null
+  apple_pass_id: string | null
+  digital_passes?: {
+    id: string
+    apple_pass_id: string | null
+    google_pass_id: string | null
+  }
+}
+
+interface LoyaltyTransactionData {
+  id: string
+  type: string
+  points: number
+  balance_after: number
+  description: string | null
+  created_at: string
+}
+
+interface EnrollResult {
+  card: LoyaltyCardData
+  pass: { id: string }
 }
 
 export const api = createApi({
@@ -81,7 +111,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal', 'LoyaltyCard'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -286,7 +316,7 @@ export const api = createApi({
         body,
       }),
       transformResponse: (response: { data: { id: string; metadata: { mpOrderId?: string } } }) => response.data,
-      invalidatesTags: [{ type: 'Order', id: 'LIST' }],
+      invalidatesTags: [{ type: 'Order', id: 'LIST' }, { type: 'LoyaltyCard' }, { type: 'Customer' }],
     }),
     updateOrderStatus: builder.mutation<Order, { id: string; status: OrderStatus | string }>({
       query: ({ id, status }) => ({
@@ -309,6 +339,62 @@ export const api = createApi({
         { type: 'Order', id },
         { type: 'Order', id: 'LIST' },
       ],
+    }),
+
+    // ── Loyalty endpoints ──
+    enrollCustomer: builder.mutation<EnrollResult, { customer_id: string }>({
+      query: (body) => ({
+        url: '/loyalty/enroll',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: EnrollResult }) => response.data,
+      invalidatesTags: ['LoyaltyCard'],
+    }),
+    getLoyaltyCard: builder.query<LoyaltyCardData | null, string>({
+      query: (customerId) => `/loyalty/card/${customerId}`,
+      transformResponse: (response: { data: LoyaltyCardData | null }) => response.data,
+      providesTags: (_result, _error, customerId) => [{ type: 'LoyaltyCard', id: customerId }],
+    }),
+    scanLoyaltyBarcode: builder.mutation<LoyaltyCardData, { barcode: string }>({
+      query: (body) => ({
+        url: '/loyalty/scan',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: LoyaltyCardData }) => response.data,
+      invalidatesTags: ['LoyaltyCard'],
+    }),
+    getLoyaltyProgram: builder.query<{ id: string; name: string; pointsLabel: string }, void>({
+      query: () => '/loyalty/program',
+      transformResponse: (response: { data: any }) => response.data,
+    }),
+    getLoyaltyTransactions: builder.query<LoyaltyTransactionData[], string>({
+      query: (cardId) => `/loyalty/transactions/${cardId}`,
+      transformResponse: (response: { data: LoyaltyTransactionData[] }) => response.data,
+      providesTags: ['LoyaltyCard'],
+    }),
+    // Manually add (positive) or remove (negative) points from a loyalty card. Admin only.
+    adjustLoyaltyPoints: builder.mutation<{ new_balance: number }, { card_id: string; points: number; description?: string }>({
+      query: (body) => ({ url: '/loyalty/adjust', method: 'POST', body }),
+      transformResponse: (response: { data: { new_balance: number } }) => response.data,
+      invalidatesTags: ['LoyaltyCard'],
+    }),
+
+    // ── Wallet endpoints ──
+    getAppleWalletPassUrl: builder.query<string, string>({
+      query: (passId) => `/wallet/apple/${passId}/download`,
+      transformResponse: (response: { data: string }) => response.data,
+    }),
+    getGoogleWalletSaveUrl: builder.query<{ jwtUrl: string }, string>({
+      query: (passId) => `/wallet/google/${passId}/save-url`,
+      transformResponse: (response: { data: { jwtUrl: string } }) => response.data,
+    }),
+    // Creates or updates the Google Wallet LoyaltyClass for the store.
+    // Must be called once after configuring wallet settings (admin only).
+    syncGoogleWalletClass: builder.mutation<{ classId: string }, void>({
+      query: () => ({ url: '/wallet/google/class', method: 'POST' }),
+      transformResponse: (response: { data: { classId: string } }) => response.data,
     }),
   }),
 })
@@ -340,4 +426,14 @@ export const {
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,
   useCancelMpOrderMutation,
+  useEnrollCustomerMutation,
+  useGetLoyaltyCardQuery,
+  useLazyGetLoyaltyCardQuery,
+  useScanLoyaltyBarcodeMutation,
+  useGetLoyaltyProgramQuery,
+  useGetLoyaltyTransactionsQuery,
+  useAdjustLoyaltyPointsMutation,
+  useGetAppleWalletPassUrlQuery,
+  useGetGoogleWalletSaveUrlQuery,
+  useSyncGoogleWalletClassMutation,
 } = api

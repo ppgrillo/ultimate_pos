@@ -162,10 +162,40 @@ ordersRouter.get('/:id', async (c) => {
       .eq('id', id)
       .single()
 
-    if (refreshed) return c.json({ data: enrichOrder(refreshed) })
+    if (refreshed) {
+      const enriched = enrichOrder(refreshed)
+      const { data: loyaltyTx } = await supabase
+        .from('loyalty_transactions')
+        .select('type, points')
+        .eq('reference_id', id)
+        .eq('reference_type', 'order')
+      if (loyaltyTx && loyaltyTx.length > 0) {
+        let earned = 0, redeemed = 0
+        for (const tx of loyaltyTx) {
+          if (tx.type === 'earn') earned += tx.points
+          else if (tx.type === 'redeem') redeemed += Math.abs(tx.points)
+        }
+        enriched.loyalty = { earned, redeemed }
+      }
+      return c.json({ data: enriched })
+    }
   }
 
-  return c.json({ data: enrichOrder(data) })
+  const enriched = enrichOrder(data)
+  const { data: loyaltyTx } = await supabase
+    .from('loyalty_transactions')
+    .select('type, points')
+    .eq('reference_id', data.id)
+    .eq('reference_type', 'order')
+  if (loyaltyTx && loyaltyTx.length > 0) {
+    let earned = 0, redeemed = 0
+    for (const tx of loyaltyTx) {
+      if (tx.type === 'earn') earned += tx.points
+      else if (tx.type === 'redeem') redeemed += Math.abs(tx.points)
+    }
+    enriched.loyalty = { earned, redeemed }
+  }
+  return c.json({ data: enriched })
 })
 
 ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
@@ -397,6 +427,52 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   }
 
+  // ── Loyalty: process points earn/redeem ──
+  let earnedPoints = 0
+  const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
+  const customerId = input.customer_id as string | undefined
+  if (hasLoyalty && customerId) {
+    const { getLoyaltyCard, redeemPoints, earnPoints: doEarn, calculateEarnPoints, syncWallets } = await import('../services/loyalty.service')
+
+    const card = await getLoyaltyCard(customerId, storeId)
+
+    const effectiveCard = card ?? (await (async () => {
+      const { enrollCustomer } = await import('../services/loyalty.service')
+      await enrollCustomer(storeId, customerId, settings as any)
+      return getLoyaltyCard(customerId, storeId)
+    })())
+
+    if (effectiveCard) {
+      const redeemedPoints = (input as any).redeemed_points || 0
+
+      if (redeemedPoints > 0) {
+        try {
+          await redeemPoints(effectiveCard.id, redeemedPoints, `Canje en orden #${nextOrderNumber}`)
+        } catch (err: unknown) {
+          console.error('Failed to redeem points:', err)
+        }
+      }
+
+      const itemsForPoints = input.items.map(i => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+        price: i.unit_price ?? 0,
+      }))
+      earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
+      if (earnedPoints > 0) {
+        try {
+          await doEarn(effectiveCard.id, earnedPoints, `Compra en orden #${nextOrderNumber}`, order.id)
+
+          if (!isMpPoint) {
+            syncWallets(effectiveCard.id).catch(() => {})
+          }
+        } catch (err: unknown) {
+          console.error('Failed to earn points:', err)
+        }
+      }
+    }
+  }
+
   const { data: fullOrder } = await supabase
     .from('orders')
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
@@ -404,9 +480,10 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     .single()
 
   const enriched = enrichOrder(fullOrder!)
-  orderBus.emit('order:created', enriched)
+  const enrichedWithLoyalty = earnedPoints > 0 ? { ...enriched, earned_points: earnedPoints } : enriched
+  orderBus.emit('order:created', enrichedWithLoyalty)
 
-  return c.json({ data: enriched }, 201)
+  return c.json({ data: enrichedWithLoyalty }, 201)
 })
 
 ordersRouter.post('/:id/cancel-mp', async (c) => {
@@ -499,6 +576,23 @@ ordersRouter.patch('/:id/status', async (c) => {
   if (error) throw badRequest(error.message)
 
   const enriched = enrichOrder(data!)
+
+  if (newStatus === 'cancelled') {
+    const { data: cancelTxs } = await supabase
+      .from('loyalty_transactions')
+      .select('type, points, loyalty_card_id')
+      .eq('reference_id', id)
+      .eq('reference_type', 'order')
+    if (cancelTxs && cancelTxs.length > 0) {
+      const { redeemPoints: doRedeem } = await import('../services/loyalty.service')
+      for (const tx of cancelTxs) {
+        if (tx.type === 'earn' && tx.points > 0 && tx.loyalty_card_id) {
+          await doRedeem(tx.loyalty_card_id, tx.points, `Devolución orden #${data?.order_number}`).catch(() => {})
+        }
+      }
+    }
+  }
+
   orderBus.emit('order:status-changed', enriched)
 
   return c.json({ data: enriched })

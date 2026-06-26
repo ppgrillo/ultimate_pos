@@ -1,4 +1,5 @@
 import type { PaymentMethod, PreferenceField } from './customer'
+import type { LoyaltyProgram } from './loyalty'
 
 export interface StoreSettings {
   hasVariants: boolean
@@ -16,6 +17,39 @@ export interface StoreSettings {
   mpPointTerminalId: string
   mpPointAccessToken: string
   preferenceFields: PreferenceField[]
+  // Loyalty
+  pointsPerCurrency?: number
+  currencyUnit?: string
+  signupBonusPoints?: number
+  pointsExpirationDays?: number
+  // Business Info
+  address?: string
+  // Wallet
+  walletPassDesign?: WalletPassDesign
+}
+
+export interface WalletPassDesign {
+  issuerName?: string
+  programName?: string
+  hexColor?: string
+  logoText?: string
+  heroImageUrl?: string
+  logoImageUrl?: string
+  pointsLabel?: string
+  tierLabel?: string
+  defaultTier?: string
+  secondaryTierEnabled?: boolean
+  secondaryTierLabel?: string
+  secondaryTierValue?: string
+  memberIdLabel?: string
+  memberNameLabel?: string
+  barcodeType?: string
+  foilShimmer?: boolean
+  promotions?: string
+  homepageUrl?: string
+  contactEmail?: string
+  contactPhone?: string
+  contactWebsite?: string
 }
 
 export interface Store {

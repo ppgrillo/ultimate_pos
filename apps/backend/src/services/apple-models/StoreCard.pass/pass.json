@@ -1,0 +1,19 @@
+{
+    "formatVersion": 1,
+    "passTypeIdentifier": "pass.com.ovejasautomaticas.ovejaPass",
+    "teamIdentifier": "M5D878749M",
+    "organizationName": "OvejaPass",
+    "description": "Loyalty Pass",
+    "logoText": "OvejaPass",
+    "sharingProhibited": false,
+    "suppressStripShine": false,
+    "backgroundColor": "rgb(31, 31, 31)",
+    "foregroundColor": "rgb(255, 255, 255)",
+    "labelColor": "rgb(255, 232, 77)",
+    "storeCard": {
+        "primaryFields": [],
+        "secondaryFields": [],
+        "auxiliaryFields": [],
+        "backFields": []
+    }
+}

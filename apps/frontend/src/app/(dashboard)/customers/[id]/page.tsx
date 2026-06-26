@@ -5,25 +5,29 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
+import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter, ModalClose } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
-import { ArrowLeft, Phone, Mail, Calendar, Hash, ShoppingBag, MessageCircle, Star, History, Edit3 } from 'lucide-react'
-import { useAddCommunicationMutation, useGetCommunicationLogQuery, useGetCustomerByIdQuery, useGetCustomerOrdersQuery, useUpdateCustomerMutation } from '@/store/api'
+import { ArrowLeft, Phone, Mail, Calendar, Hash, ShoppingBag, MessageCircle, Star, History, Edit3, Gift, Award } from 'lucide-react'
+import { useAddCommunicationMutation, useGetCommunicationLogQuery, useGetCustomerByIdQuery, useGetCustomerOrdersQuery, useGetLoyaltyTransactionsQuery, useGetLoyaltyCardQuery, useEnrollCustomerMutation, useUpdateCustomerMutation, useGetGoogleWalletSaveUrlQuery, useAdjustLoyaltyPointsMutation } from '@/store/api'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
+import { WalletQR } from '@/components/pos/WalletQR'
 
-type Tab = 'info' | 'orders' | 'communication' | 'preferences'
+type Tab = 'info' | 'orders' | 'communication' | 'preferences' | 'loyalty'
 
 export default function CustomerDetailPage() {
   const params = useParams()
   const router = useRouter()
   const dispatch = useAppDispatch()
   const id = params.id as string
-  const preferenceFields = useAppSelector((s) => s.storeConfig.currentStore?.settings?.preferenceFields ?? [])
+  const preferenceFieldsRaw = useAppSelector((s) => s.storeConfig.currentStore?.settings?.preferenceFields)
+  const preferenceFields = preferenceFieldsRaw ?? []
 
   const [tab, setTab] = useState<Tab>('info')
   const [showContact, setShowContact] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [showAdjustPoints, setShowAdjustPoints] = useState(false)
+  const [adjustPointsForm, setAdjustPointsForm] = useState({ points: '', description: '' })
   const [contactForm, setContactForm] = useState({ type: 'note', subject: '', message: '' })
   const [editForm, setEditForm] = useState({
     name: '',
@@ -48,6 +52,20 @@ export default function CustomerDetailPage() {
   })
   const [addCommunication] = useAddCommunicationMutation()
   const [updateCustomer] = useUpdateCustomerMutation()
+  const { data: loyaltyCard } = useGetLoyaltyCardQuery(id)
+  const { data: transactions = [] } = useGetLoyaltyTransactionsQuery(loyaltyCard?.id ?? '', {
+    skip: tab !== 'loyalty' || !loyaltyCard?.id,
+  })
+  const [enroll, { isLoading: enrolling }] = useEnrollCustomerMutation()
+  const [adjustPoints, { isLoading: adjusting }] = useAdjustLoyaltyPointsMutation()
+
+  // Wallet pass ID comes from the joined digital_passes row
+  const passId = loyaltyCard?.digital_passes?.id ?? null
+  const applePassUrl = passId ? `/api/wallet/apple/${passId}/download` : undefined
+  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
+    skip: tab !== 'loyalty' || !passId,
+  })
+  const googleSaveUrl = googleWalletData?.jwtUrl
 
   useEffect(() => {
     if (customer) {
@@ -111,6 +129,7 @@ export default function CustomerDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'info', label: 'Info' },
     { key: 'preferences', label: 'Preferences' },
+    { key: 'loyalty', label: 'Loyalty' },
     { key: 'orders', label: `Orders (${customer.total_visits})` },
     { key: 'communication', label: `Contact (${commLog.length})` },
   ]
@@ -350,6 +369,116 @@ export default function CustomerDetailPage() {
         </Card>
       )}
 
+      {tab === 'loyalty' && (
+        <div className="space-y-6">
+          {!loyaltyCard ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Loyalty Program</CardTitle>
+                <CardDescription>Enroll this customer to start earning points</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <button
+                  onClick={async () => {
+                    try {
+                      await enroll({ customer_id: id }).unwrap()
+                    } catch {}
+                  }}
+                  disabled={enrolling}
+                  className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {enrolling ? 'Enrolling...' : 'Enroll in Loyalty'}
+                </button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="text-center">
+                    <Star className="h-5 w-5 text-primary mx-auto mb-1" />
+                    <CardTitle className="text-2xl">{loyaltyCard.points.toLocaleString()}</CardTitle>
+                    <CardDescription>Points Balance</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0 flex justify-center">
+                    <button
+                      onClick={() => { setAdjustPointsForm({ points: '', description: '' }); setShowAdjustPoints(true) }}
+                      className="text-xs font-bold text-primary hover:underline"
+                    >
+                      + Adjust Points
+                    </button>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="text-center">
+                    <Award className="h-5 w-5 text-secondary mx-auto mb-1" />
+                    <CardTitle className="text-2xl capitalize">{loyaltyCard.tier || 'Standard'}</CardTitle>
+                    <CardDescription>Tier</CardDescription>
+                  </CardHeader>
+                </Card>
+              </div>
+
+              {passId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Digital Wallet Pass</CardTitle>
+                    <CardDescription>Download or scan to add to Google Wallet or Apple Wallet</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <WalletQR
+                      passId={passId}
+                      applePassUrl={applePassUrl}
+                      googleSaveUrl={googleSaveUrl}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Points History</CardTitle>
+                  <CardDescription>Recent loyalty transactions</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {transactions.length === 0 ? (
+                    <div className="p-8 text-center text-on-surface-variant text-sm">No transactions yet.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-outline-variant text-left text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
+                            <th className="px-4 py-3">Date</th>
+                            <th className="px-4 py-3">Type</th>
+                            <th className="px-4 py-3">Points</th>
+                            <th className="px-4 py-3">Balance</th>
+                            <th className="px-4 py-3">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {transactions.map((tx) => (
+                            <tr key={tx.id} className="border-b border-outline-variant/50 hover:bg-surface-container-high/50 transition-colors">
+                              <td className="px-4 py-3 text-sm text-on-surface-variant">{new Date(tx.created_at).toLocaleDateString()}</td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-label font-bold capitalize ${tx.type === 'earn' ? 'bg-green-500/20 text-green-400' : tx.type === 'redeem' ? 'bg-red-500/20 text-red-400' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                  {tx.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm font-bold text-on-surface">{tx.type === 'earn' ? '+' : '-'}{tx.points}</td>
+                              <td className="px-4 py-3 text-sm text-on-surface">{tx.balance_after}</td>
+                              <td className="px-4 py-3 text-sm text-on-surface-variant">{tx.description || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
       {tab === 'orders' && (
         <Card>
           <CardHeader>
@@ -534,6 +663,72 @@ export default function CustomerDetailPage() {
           <ModalFooter>
             <Button variant="secondary" onClick={() => setShowEdit(false)}>Cancel</Button>
             <Button onClick={handleEditSave}>Save Changes</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Adjust Points Modal */}
+      <Modal open={showAdjustPoints} onOpenChange={setShowAdjustPoints}>
+        <ModalContent className="max-w-sm">
+          <ModalHeader>
+            <ModalTitle>Adjust Points</ModalTitle>
+            <ModalDescription>
+              Add or remove points. Current balance: <strong>{loyaltyCard?.points.toLocaleString() ?? 0}</strong>
+            </ModalDescription>
+          </ModalHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">
+                Points (positive to add, negative to remove)
+              </label>
+              <input
+                type="number"
+                value={adjustPointsForm.points}
+                onChange={(e) => setAdjustPointsForm((f) => ({ ...f, points: e.target.value }))}
+                placeholder="e.g. 100 or -50"
+                className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">
+                Reason (optional)
+              </label>
+              <input
+                type="text"
+                value={adjustPointsForm.description}
+                onChange={(e) => setAdjustPointsForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="e.g. Birthday bonus, correction…"
+                className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30"
+              />
+            </div>
+          </div>
+          <ModalFooter>
+            <ModalClose asChild>
+              <Button variant="ghost" size="sm">Cancel</Button>
+            </ModalClose>
+            <Button
+              size="sm"
+              isLoading={adjusting}
+              disabled={!adjustPointsForm.points || Number(adjustPointsForm.points) === 0 || !loyaltyCard}
+              onClick={async () => {
+                if (!loyaltyCard) return
+                try {
+                  await adjustPoints({
+                    card_id: loyaltyCard.id,
+                    points: Number(adjustPointsForm.points),
+                    description: adjustPointsForm.description || undefined,
+                  }).unwrap()
+                  setShowAdjustPoints(false)
+                } catch {}
+              }}
+            >
+              {Number(adjustPointsForm.points) > 0
+                ? `Add ${adjustPointsForm.points} pts`
+                : Number(adjustPointsForm.points) < 0
+                  ? `Remove ${Math.abs(Number(adjustPointsForm.points))} pts`
+                  : 'Confirm'}
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
