@@ -27,6 +27,7 @@ interface MPPointPaymentProps {
   total: number
   onPaid: () => void
   onCancel: () => void
+  fetchOrder?: (orderId: string) => Promise<{ data: OrderResponse }>
 }
 
 type PaymentState = 'created' | 'at_terminal' | 'processing' | 'paid' | 'failed' | 'expired' | 'canceled' | 'action_required'
@@ -40,8 +41,8 @@ const STATE_CONFIG: Record<PaymentState, {
 }> = {
   created: {
     icon: Loader2,
-    title: 'Creando orden de pago...',
-    description: 'Espera mientras se envía la orden a la terminal',
+    title: 'Enviando orden a la terminal...',
+    description: 'Comunicándose con la terminal Point',
     color: 'text-primary',
     bg: 'bg-primary/10',
   },
@@ -111,7 +112,7 @@ function toPaymentState(res: OrderResponse | undefined): PaymentState | undefine
   return undefined
 }
 
-export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total, onPaid, onCancel }: MPPointPaymentProps) {
+export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total, onPaid, onCancel, fetchOrder }: MPPointPaymentProps) {
   const orderFromStore = useAppSelector((s) => {
     if (!orderId) return undefined
     const state = s as { order?: { items?: Array<{ id: string; metadata?: Record<string, unknown> }> } }
@@ -147,12 +148,19 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
   const poll = useCallback(async () => {
     if (!open || !orderId) return
     try {
-      const res = await api.get<{ data: OrderResponse }>(`/orders/${orderId}`)
+      const res = fetchOrder
+        ? await fetchOrder(orderId)
+        : await api.get<{ data: OrderResponse }>(`/orders/${orderId}`)
       const s = toPaymentState(res.data)
       if (s) setLocalState(s)
     } catch {
     }
-  }, [open, orderId])
+  }, [open, orderId, fetchOrder])
+
+  useEffect(() => {
+    if (!open || !orderId || isCreating) return
+    poll()
+  }, [open, orderId, isCreating, poll])
 
   useEffect(() => {
     if (isCreating || !orderId) return

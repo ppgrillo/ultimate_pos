@@ -96,11 +96,6 @@ export function CheckoutPanel() {
 
     const isMpPoint = selectedMethod === 'card' && mpPointEnabled
 
-    if (isMpPoint) {
-      setSubmitting(false)
-      setMpPaymentOrderId('__creating__')
-    }
-
     try {
       const orderItems = items.map((item) => ({
         product_id: item.product_id,
@@ -123,6 +118,7 @@ export function CheckoutPanel() {
       })
 
       if (isMpPoint && res.data?.metadata?.mpOrderId) {
+        setSubmitting(false)
         setMpPaymentOrderId(res.data.id)
         return
       }
@@ -380,8 +376,7 @@ export function CheckoutPanel() {
       <MPPointPayment
         open={mpPaymentOrderId !== null}
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
-        orderId={mpPaymentOrderId && mpPaymentOrderId !== '__creating__' ? mpPaymentOrderId : null}
-        isCreating={mpPaymentOrderId === '__creating__'}
+        orderId={mpPaymentOrderId}
         total={totalAmount}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}

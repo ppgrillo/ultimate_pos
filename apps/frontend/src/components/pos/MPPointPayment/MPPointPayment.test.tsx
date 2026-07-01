@@ -56,12 +56,12 @@ describe('MPPointPayment', () => {
 
   it('renders modal when open is true', () => {
     renderWithStore(<MPPointPayment {...defaultProps} />, [mockOrder({})])
-    expect(screen.getByText('Creando orden de pago...')).toBeInTheDocument()
+    expect(screen.getByText('Enviando orden a la terminal...')).toBeInTheDocument()
   })
 
   it('does not render content when open is false', () => {
     renderWithStore(<MPPointPayment {...defaultProps} open={false} />, [mockOrder({})])
-    expect(screen.queryByText('Creando orden de pago...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Enviando orden a la terminal...')).not.toBeInTheDocument()
   })
 
   it('displays the total amount', () => {

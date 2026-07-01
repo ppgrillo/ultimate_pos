@@ -70,12 +70,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
     const isCash = paymentMethod === 'cash'
     const isMpPoint = paymentMethod === 'card' && mpPointEnabled
 
-    if (isMpPoint) {
-      setSubmitting(false)
-      setMpPaymentOrderId('__creating__')
-    } else {
-      setSubmitting(true)
-    }
+    setSubmitting(true)
 
     try {
       const orderItems = items.map((item) => ({
@@ -97,6 +92,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
       if (isMpPoint && res.data?.metadata?.mpOrderId) {
+        setSubmitting(false)
         setMpPaymentOrderId(res.data.id)
         return
       }
@@ -282,8 +278,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       <MPPointPayment
         open={mpPaymentOrderId !== null}
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
-        orderId={mpPaymentOrderId && mpPaymentOrderId !== '__creating__' ? mpPaymentOrderId : null}
-        isCreating={mpPaymentOrderId === '__creating__'}
+        orderId={mpPaymentOrderId}
         total={totalAmount}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}

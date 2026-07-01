@@ -932,6 +932,7 @@ export default function SelfCheckoutPage() {
         }
         onPaid={handlePaid}
         onCancel={handlePaymentCancel}
+        fetchOrder={(id) => apiFetch<any>(`/orders/${id}`)}
       />
     </div>
   )
