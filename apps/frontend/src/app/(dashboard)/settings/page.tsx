@@ -12,6 +12,7 @@ import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { api } from '@/lib/api/client'
+import { SelfCheckoutSettings } from './SelfCheckoutSettings'
 
 export default function SettingsPage() {
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
@@ -335,6 +336,7 @@ export default function SettingsPage() {
           <TabsTrigger value="checkout">Checkout</TabsTrigger>
           <TabsTrigger value="business">Business</TabsTrigger>
             <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
+          <TabsTrigger value="self-checkout">Self-Checkout</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
           <div className="space-y-4">
@@ -1200,6 +1202,10 @@ export default function SettingsPage() {
             </Card>
 
           </div>
+        </TabsContent>
+
+        <TabsContent value="self-checkout">
+          <SelfCheckoutSettings />
         </TabsContent>
       </Tabs>
     </div>

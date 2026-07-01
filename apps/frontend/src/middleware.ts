@@ -27,9 +27,12 @@ export default auth((req) => {
 
     const headers = new Headers(req.headers)
     // req.auth is the Session object; accessToken lives on session.user
-    const accessToken = (req.auth as any)?.user?.accessToken as string | undefined
-    if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`)
+    const existingAuth = headers.get('Authorization')
+    if (!existingAuth) {
+      const accessToken = (req.auth as any)?.user?.accessToken as string | undefined
+      if (accessToken) {
+        headers.set('Authorization', `Bearer ${accessToken}`)
+      }
     }
 
     const isBodyMethod = !['GET', 'HEAD'].includes(req.method)

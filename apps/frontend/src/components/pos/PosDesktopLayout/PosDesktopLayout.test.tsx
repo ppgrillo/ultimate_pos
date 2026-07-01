@@ -25,7 +25,7 @@ describe('PosDesktopLayout', () => {
     expect(screen.getByText('Pastries')).toBeInTheDocument()
   })
 
-  it('renders search input and scan barcode', () => {
+  it('renders product search input', () => {
     render(
       <PosDesktopLayout
         categories={categories}
@@ -33,7 +33,6 @@ describe('PosDesktopLayout', () => {
       />,
     )
     expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
-    expect(screen.getByText('Scan')).toBeInTheDocument()
   })
 
   it('shows customer select screen when cart is empty', () => {

@@ -11,6 +11,7 @@ import type {
   ProductCategory,
   Store,
   StoreSettings,
+  ScanLoyaltyResult,
 } from '@ultimate-pos/shared'
 
 export interface CustomerWithLoyalty extends Customer {
@@ -356,14 +357,14 @@ export const api = createApi({
       transformResponse: (response: { data: LoyaltyCardData | null }) => response.data,
       providesTags: (_result, _error, customerId) => [{ type: 'LoyaltyCard', id: customerId }],
     }),
-    scanLoyaltyBarcode: builder.mutation<LoyaltyCardData, { barcode: string }>({
+    scanLoyaltyBarcode: builder.mutation<ScanLoyaltyResult, { barcode: string }>({
       query: (body) => ({
         url: '/loyalty/scan',
         method: 'POST',
         body,
       }),
-      transformResponse: (response: { data: LoyaltyCardData }) => response.data,
-      invalidatesTags: ['LoyaltyCard'],
+      transformResponse: (response: { data: ScanLoyaltyResult }) => response.data,
+      invalidatesTags: ['LoyaltyCard', { type: 'Customer', id: 'LIST' }],
     }),
     getLoyaltyProgram: builder.query<{ id: string; name: string; pointsLabel: string }, void>({
       query: () => '/loyalty/program',

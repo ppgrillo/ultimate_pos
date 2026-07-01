@@ -67,3 +67,23 @@ export interface Payment {
 }
 
 export type PaymentMethod = Payment['method']
+
+export interface LoyaltyCardData {
+  id: string
+  customer_id: string
+  points: number
+  tier: string
+  digital_pass_id: string | null
+  google_pass_id: string | null
+  apple_pass_id: string | null
+  digital_passes?: {
+    id: string
+    apple_pass_id: string | null
+    google_pass_id: string | null
+  }
+}
+
+export interface ScanLoyaltyResult {
+  customer: Customer
+  loyaltyCard: LoyaltyCardData
+}

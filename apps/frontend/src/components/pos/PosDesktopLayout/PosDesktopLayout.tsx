@@ -16,7 +16,7 @@ import { setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
 import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
-import { ShoppingBag, Search, QrCode } from 'lucide-react'
+import { ShoppingBag, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ProductCategory, PaymentMethod } from '@ultimate-pos/shared'
 
@@ -165,7 +165,7 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar with search and categories */}
         <div className="border-b border-outline-variant bg-surface-container-low/80">
-          <div className="flex items-center gap-2 px-3 py-1.5">
+          <div className="relative flex items-center gap-2 px-3 py-1.5">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-on-surface-variant" />
               <input
@@ -176,10 +176,6 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
                 className="h-7 w-full rounded-md border border-outline-variant bg-surface-container pl-7 pr-2 text-[11px] text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               />
             </div>
-            <button className="flex items-center gap-1 rounded-md border border-outline-variant bg-surface-container px-2 py-1 text-[11px] text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
-              <QrCode className="h-3 w-3" />
-              Scan
-            </button>
           </div>
 
           {/* Category Pills */}

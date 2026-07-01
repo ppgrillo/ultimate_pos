@@ -13,12 +13,13 @@ const SKU_NOTE = '# SKU is required and used to prevent duplicates. Rows with th
 const TEMPLATE_HEADERS = [
   'name', 'price', 'cost', 'sku', 'barcode', 'category_name',
   'description', 'stock_qty', 'track_inventory', 'low_stock_threshold',
-  'tax_exempt', 'is_active',
+  'tax_exempt', 'is_active', 'points', 'modifiers',
 ]
 
 const TEMPLATE_EXAMPLE = [
   'Caramel Macchiato', '5.99', '2.50', 'BEV-001', '', 'Beverages',
-  'Espresso with caramel and steamed milk', '50', 'TRUE', '10', 'FALSE', 'TRUE',
+  'Espresso with caramel and steamed milk', '50', 'TRUE', '10', 'FALSE', 'TRUE', '10',
+  'Size(single,req):Small|Medium|Large;Extras(multi):Extra Shot$0.75|Whipped Cream$0.50|Soy Milk$0.50',
 ]
 
 interface ImportResponse {
@@ -40,6 +41,25 @@ function generateTemplateCsv(): string {
   const header = TEMPLATE_HEADERS.map((h) => `"${h}"`).join(',')
   const example = TEMPLATE_EXAMPLE.map((v) => `"${v}"`).join(',')
   return `${SKU_NOTE}\n${header}\n${example}\n`
+}
+
+function serializeModifiers(modifiers: unknown): string {
+  if (!Array.isArray(modifiers) || modifiers.length === 0) return ''
+  return modifiers
+    .map((g: Record<string, unknown>) => {
+      const params: string[] = []
+      if (g.type === 'multi') params.push('multi')
+      if (g.is_required) params.push('req')
+      const paramsStr = params.length > 0 ? `(${params.join(',')})` : ''
+      const options = (g.options as Record<string, unknown>[] | undefined)
+        ?.map((o) => {
+          const price = o.price_adjustment ? `$${o.price_adjustment}` : ''
+          return `${o.name}${price}`
+        })
+        .join('|')
+      return `${g.name}${paramsStr}:${options}`
+    })
+    .join(';')
 }
 
 function downloadFile(content: string, filename: string, type: string) {
@@ -94,6 +114,12 @@ export function ImportModal({ open, onOpenChange, onComplete }: ImportModalProps
             case 'tax_exempt':
             case 'is_active':
               val = p[h] ? 'TRUE' : 'FALSE'
+              break
+            case 'points':
+              val = p.points ?? ''
+              break
+            case 'modifiers':
+              val = serializeModifiers(p.modifiers)
               break
             default:
               val = p[h] ?? ''

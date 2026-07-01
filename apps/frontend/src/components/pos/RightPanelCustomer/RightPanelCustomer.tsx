@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Calendar, ChevronDown, ChevronUp, Clock, Heart, Search, ShoppingBag, Star, Tag, X } from 'lucide-react'
+import { ArrowRight, Calendar, ChevronDown, ChevronUp, Clock, Heart, QrCode, Search, ShoppingBag, Star, Tag, X } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
 import { useGetCustomersQuery, useGetCustomerSummaryQuery } from '@/store/api'
+import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
 import type { CustomerWithLoyalty } from '@/store/api'
 
 export function RightPanelCustomer() {
@@ -15,6 +16,7 @@ export function RightPanelCustomer() {
   const cartItemCount = useAppSelector((s) => s.cart.items.length)
   const [searchQuery, setSearchQuery] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const previousCartItemCount = useRef(cartItemCount)
   const sliceCustomers = useAppSelector((s) => ((s as any).customers?.customers ?? []) as CustomerWithLoyalty[])
   const sliceSummary = useAppSelector((s) => (s as any).customers?.customerSummary)
@@ -75,7 +77,7 @@ export function RightPanelCustomer() {
 
   return (
     <div className="border-b border-outline-variant">
-      <div className="px-4 py-3 space-y-3">
+      <div className="relative px-4 py-3 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
           <input
@@ -83,9 +85,27 @@ export function RightPanelCustomer() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search customers..."
-            className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container pl-10 pr-4 text-sm text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container pl-10 pr-10 text-sm text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
+          <button
+            onClick={() => setScannerOpen(true)}
+            className={cn(
+              'absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center h-7 w-7 rounded-lg transition-colors',
+              scannerOpen
+                ? 'bg-primary/15 text-primary'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',
+            )}
+            title="Scan loyalty card"
+          >
+            <QrCode className="h-4 w-4" />
+          </button>
         </div>
+
+        <QRScannerPopover
+          open={scannerOpen}
+          onClose={() => setScannerOpen(false)}
+          variant="popover"
+        />
 
         {!selectedCustomer ? (
           <div className="space-y-0.5 pb-1">

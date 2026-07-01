@@ -1,11 +1,12 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { PosHeader } from '@/components/pos/PosHeader'
 import { PosBottomNav } from '@/components/pos/PosBottomNav'
 import { CustomerQuickBar } from '@/components/pos/CustomerQuickBar'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
+import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView } from '@/store/slices/posSlice'
 import { openDrawer } from '@/store/slices/uiSlice'
@@ -22,12 +23,19 @@ export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutPro
   const activeView = useAppSelector((s) => s.pos.activeView)
   const cartOpen = useAppSelector((s) => s.pos.cartOpen)
   const checkoutView = useAppSelector((s) => s.pos.checkoutView)
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
       <PosHeader
         onMenuClick={() => dispatch(openDrawer())}
         onCartClick={() => dispatch(setActiveView(cartOpen ? 'menu' : 'cart'))}
+        onScanClick={() => setScannerOpen(true)}
+      />
+      <QRScannerPopover
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        variant="modal"
       />
 
       <div className={cn(

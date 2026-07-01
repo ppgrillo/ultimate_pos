@@ -45,16 +45,116 @@ loyaltyRouter.post('/scan', async (c) => {
   const { barcode } = await c.req.json()
   if (!barcode) throw badRequest('barcode is required')
 
-  const { data: card } = await supabaseAdmin
-    .from('loyalty_cards')
-    .select('*, customers!inner(id, name, email)')
-    .eq('id', barcode)
+  const code = barcode.trim()
+  const candidates = [code]
+
+  // Handle UUID formats: underscore ↔ dash (Google Wallet vs DB)
+  const uuidDash = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const uuidUnderscore = /^[0-9a-f]{8}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9a-f]{12}$/i
+  if (uuidDash.test(code)) {
+    candidates.push(code.replace(/-/g, '_'))
+  } else if (uuidUnderscore.test(code)) {
+    candidates.push(code.replace(/_/g, '-'))
+  }
+
+  // Handle Google/Apple Wallet "issuerId.objectSuffix" format
+  if (code.includes('.')) {
+    const suffix = code.split('.').pop()
+    if (suffix && !candidates.includes(suffix)) candidates.push(suffix)
+  }
+
+  // --- Multi-strategy sequential lookup ---
+
+  // Strategy 1: match by loyalty_cards.id directly
+  for (const candidate of candidates) {
+    const { data: card } = await supabaseAdmin
+      .from('loyalty_cards')
+      .select('*, customers!inner(*)')
+      .eq('id', candidate)
+      .eq('store_id', storeId)
+      .single()
+
+    if (card) {
+      const customer = card.customers as Record<string, unknown>
+      delete (card as Record<string, unknown>).customers
+      return c.json({ data: { customer, loyaltyCard: card } })
+    }
+  }
+
+  // Strategy 2: match by digital_passes.barcode_value (via loyalty_cards.digital_pass_id)
+  const { data: passByBarcode } = await supabaseAdmin
+    .from('digital_passes')
+    .select('id')
+    .in('barcode_value', candidates)
     .eq('store_id', storeId)
-    .single()
+    .maybeSingle()
 
-  if (!card) throw notFound('Loyalty card not found')
+  if (passByBarcode) {
+    const { data: card } = await supabaseAdmin
+      .from('loyalty_cards')
+      .select('*, customers!inner(*)')
+      .eq('digital_pass_id', passByBarcode.id)
+      .eq('store_id', storeId)
+      .single()
 
-  return c.json({ data: card })
+    if (card) {
+      const customer = card.customers as Record<string, unknown>
+      delete (card as Record<string, unknown>).customers
+      return c.json({ data: { customer, loyaltyCard: card } })
+    }
+  }
+
+  // Strategy 3: match by digital_passes.id (Google/Apple pass UUID from QR)
+  const { data: passById } = await supabaseAdmin
+    .from('digital_passes')
+    .select('id')
+    .in('id', candidates)
+    .eq('store_id', storeId)
+    .maybeSingle()
+
+  if (passById) {
+    const { data: card } = await supabaseAdmin
+      .from('loyalty_cards')
+      .select('*, customers!inner(*)')
+      .eq('digital_pass_id', passById.id)
+      .eq('store_id', storeId)
+      .single()
+
+    if (card) {
+      const customer = card.customers as Record<string, unknown>
+      delete (card as Record<string, unknown>).customers
+      return c.json({ data: { customer, loyaltyCard: card } })
+    }
+  }
+
+  // Strategy 4: case-variant barcode_value
+  const lowerCaseVariants = candidates.map(c => c.toLowerCase())
+  const upperCaseVariants = candidates.map(c => c.toUpperCase())
+  const allCaseVariants = [...new Set([...lowerCaseVariants, ...upperCaseVariants])]
+
+  const { data: passByCase } = await supabaseAdmin
+    .from('digital_passes')
+    .select('id')
+    .in('barcode_value', allCaseVariants)
+    .eq('store_id', storeId)
+    .maybeSingle()
+
+  if (passByCase) {
+    const { data: card } = await supabaseAdmin
+      .from('loyalty_cards')
+      .select('*, customers!inner(*)')
+      .eq('digital_pass_id', passByCase.id)
+      .eq('store_id', storeId)
+      .single()
+
+    if (card) {
+      const customer = card.customers as Record<string, unknown>
+      delete (card as Record<string, unknown>).customers
+      return c.json({ data: { customer, loyaltyCard: card } })
+    }
+  }
+
+  throw notFound('Tarjeta de lealtad no encontrada')
 })
 
 loyaltyRouter.get('/transactions/:cardId', async (c) => {

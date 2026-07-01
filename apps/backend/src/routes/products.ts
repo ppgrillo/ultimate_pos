@@ -1,11 +1,70 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { productSchema } from '@ultimate-pos/shared'
+import { modifierGroupSchema, productSchema } from '@ultimate-pos/shared'
 import { parse } from 'csv-parse/sync'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
+
+function parseModifiers(raw: string | undefined | null) {
+  if (!raw?.trim()) return []
+
+  const groups: Array<{
+    name: string
+    type: 'single' | 'multi'
+    is_required: boolean
+    sort_order: number
+    options: Array<{
+      name: string
+      price_adjustment: number
+      sort_order: number
+    }>
+  }> = []
+
+  for (const [gi, groupStr] of raw.split(';').entries()) {
+    const g = groupStr.trim()
+    if (!g) continue
+
+    const match = g.match(/^([^(;]+?)(?:\(([^)]*)\))?:(.*)$/)
+    if (!match) continue
+
+    const [, name, paramsStr, optionsStr] = match
+    const params = paramsStr?.split(',').map((s) => s.trim()) || []
+    const type = params.includes('multi') ? 'multi' : 'single'
+    const is_required = params.includes('req')
+
+    const options = optionsStr
+      .split('|')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((o, oi) => {
+        const dollarIdx = o.lastIndexOf('$')
+        if (dollarIdx > 0) {
+          return {
+            name: o.slice(0, dollarIdx).trim(),
+            price_adjustment: parseFloat(o.slice(dollarIdx + 1)) || 0,
+            sort_order: oi,
+          }
+        }
+        return {
+          name: o.trim(),
+          price_adjustment: 0,
+          sort_order: oi,
+        }
+      })
+
+    groups.push({
+      name: name.trim(),
+      type,
+      is_required,
+      sort_order: gi,
+      options,
+    })
+  }
+
+  return modifierGroupSchema.array().parse(groups)
+}
 
 export const productsRouter = new Hono()
 
@@ -29,18 +88,22 @@ productsRouter.get('/', async (c) => {
 productsRouter.get('/import/template', async (c) => {
   const notes = [
     '# REQUIRED: name, price, sku',
-    '# Optional: cost, barcode, category_name, description, stock_qty, track_inventory, low_stock_threshold, tax_exempt, is_active',
+    '# Optional: cost, barcode, category_name, description, stock_qty, track_inventory, low_stock_threshold, tax_exempt, is_active, points, modifiers',
+    '# modifiers format: "GroupName(type,req):Option1$price|Option2$price;Group2(multi):Opt1|Opt2"',
+    '#   type = "single" (radio) or "multi" (checkboxes)',
+    '#   "req" means the group is required (omit for optional)',
+    '#   Price after "$" is the extra cost for that option (omit = 0)',
   ].join('\n')
   const headers = [
     'name', 'price', 'cost', 'sku', 'barcode', 'category_name',
     'description', 'stock_qty', 'track_inventory', 'low_stock_threshold',
-    'tax_exempt', 'is_active',
+    'tax_exempt', 'is_active', 'points', 'modifiers',
   ].join(',')
 
   const example = [
     'Caramel Macchiato', '5.99', '2.50', 'BEV-001', '', 'Beverages',
     'Espresso with caramel and steamed milk', '50', 'TRUE', '10',
-    'FALSE', 'TRUE',
+    'FALSE', 'TRUE', '10', '"Size(single,req):Small|Medium|Large;Extras(multi):Extra Shot$0.75|Whipped Cream$0.50|Soy Milk$0.50"',
   ].join(',')
 
   const csv = `${notes}\n${headers}\n${example}\n`
@@ -241,6 +304,22 @@ productsRouter.post('/import', requireRole('admin'), async (c) => {
         low_stock_threshold: lowStock !== null && !isNaN(lowStock) && lowStock >= 0 ? lowStock : 10,
         tax_exempt: row.tax_exempt?.toUpperCase() === 'TRUE',
         is_active: row.is_active ? row.is_active.toUpperCase() === 'TRUE' : true,
+        points: row.points ? parseInt(row.points, 10) : null,
+      }
+
+      if ('modifiers' in row) {
+        const modifiersRaw = row.modifiers?.trim()
+        if (modifiersRaw) {
+          try {
+            productData.modifiers = parseModifiers(modifiersRaw)
+          } catch {
+            results.failed++
+            results.errors.push({ row: rowNumber, sku, message: `Invalid modifiers format for "${name}". Use format: Name(type,req):Opt$price|Opt2$price` })
+            continue
+          }
+        } else {
+          productData.modifiers = []
+        }
       }
 
       // Upsert by SKU
@@ -454,6 +533,20 @@ productsRouter.delete('/batch', requireRole('admin'), async (c) => {
     throw badRequest('ids must be a non-empty array')
   }
 
+  const { data: products } = await supabase
+    .from('products')
+    .select('image_url')
+    .in('id', ids)
+
+  if (products) {
+    const fileNames = products
+      .map((p) => p.image_url?.split('/').pop())
+      .filter(Boolean) as string[]
+    if (fileNames.length > 0) {
+      await supabaseAdmin.storage.from('product-images').remove(fileNames).catch(() => {})
+    }
+  }
+
   const { error } = await supabase
     .from('products')
     .delete()
@@ -468,6 +561,19 @@ productsRouter.delete('/batch', requireRole('admin'), async (c) => {
 productsRouter.delete('/:id', requireRole('admin'), async (c) => {
   const supabase = supabaseAdmin
   const id = c.req.param('id')
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('image_url')
+    .eq('id', id)
+    .single()
+
+  if (product?.image_url) {
+    const fileName = product.image_url.split('/').pop()
+    if (fileName) {
+      await supabaseAdmin.storage.from('product-images').remove([fileName]).catch(() => {})
+    }
+  }
 
   const { error } = await supabase.from('products').delete().eq('id', id)
 

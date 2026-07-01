@@ -182,6 +182,13 @@ webhooksRouter.post('/mp-point', async (c) => {
     }
   }
 
+  const { processMpLoyalty, reverseMpLoyalty } = await import('../routes/orders')
+  if (mapping.orderStatus === 'paid') {
+    await processMpLoyalty(supabaseAdmin, orderData.id, orderData.store_id).catch(() => {})
+  } else if (mapping.orderStatus === 'cancelled') {
+    await reverseMpLoyalty(supabaseAdmin, orderData.id).catch(() => {})
+  }
+
   const { data: fullOrder } = await supabaseAdmin
     .from('orders')
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')

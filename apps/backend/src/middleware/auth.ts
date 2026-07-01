@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from 'hono'
 import { jwtVerify } from 'jose'
 import { unauthorized } from './error'
 import { supabaseAdmin } from '../lib/supabase/admin'
+import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 
 declare module 'hono' {
   interface ContextVariableMap {
@@ -9,6 +10,8 @@ declare module 'hono' {
     storeId: string
     role: string
     token: string
+    stationId: string
+    station: SelfCheckoutStation
   }
 }
 

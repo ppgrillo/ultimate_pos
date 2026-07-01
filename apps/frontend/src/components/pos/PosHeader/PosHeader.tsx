@@ -1,14 +1,15 @@
 'use client'
 
-import { ShoppingBag, Menu } from 'lucide-react'
+import { ShoppingBag, Menu, QrCode } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
 
 interface PosHeaderProps {
   onMenuClick?: () => void
   onCartClick?: () => void
+  onScanClick?: () => void
 }
 
-export function PosHeader({ onMenuClick, onCartClick }: PosHeaderProps) {
+export function PosHeader({ onMenuClick, onCartClick, onScanClick }: PosHeaderProps) {
   const cartCount = useAppSelector((s) => s.cart.items.reduce((sum, i) => sum + i.quantity, 0))
   const customerName = useAppSelector((s) => s.cart.customer_name)
 
@@ -38,6 +39,14 @@ export function PosHeader({ onMenuClick, onCartClick }: PosHeaderProps) {
             <span className="text-xs font-label font-bold text-on-surface">{customerName}</span>
           </div>
         )}
+
+        <button
+          onClick={onScanClick}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+          title="Scan loyalty card"
+        >
+          <QrCode className="h-5 w-5" />
+        </button>
 
         <button
           onClick={onCartClick}

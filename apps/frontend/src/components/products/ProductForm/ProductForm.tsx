@@ -204,6 +204,19 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
         </Button>
       </div>
 
+      {(() => {
+        const missing: string[] = []
+        if (!form.name) missing.push('Product Name')
+        if (form.price <= 0) missing.push('Base Price')
+        if (!form.sku) missing.push('SKU')
+        if (missing.length === 0) return null
+        return (
+          <p className="text-xs text-error ml-16">
+            Fill in the required fields: {missing.join(', ')}
+          </p>
+        )
+      })()}
+
       {error && (
         <div className="rounded-lg bg-error-container/20 border border-error/30 p-4 text-sm text-error whitespace-pre-wrap">
           {error}

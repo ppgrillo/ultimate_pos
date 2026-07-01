@@ -67,10 +67,10 @@ export function QRScanButton({ onCustomerFound }: QRScanButtonProps) {
       const result = await scan({ barcode: code.data }).unwrap()
       handleClose()
       onCustomerFound?.({
-        id: result.customer_id,
-        name: '',
-        loyalty_card_id: result.id,
-        points: result.points,
+        id: result.loyaltyCard.customer_id,
+        name: result.customer.name,
+        loyalty_card_id: result.loyaltyCard.id,
+        points: result.loyaltyCard.points,
       })
     } catch {
       setError('Failed to scan')

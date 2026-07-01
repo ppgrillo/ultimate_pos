@@ -12,7 +12,8 @@ describe('PosHeader', () => {
   it('calls onCartClick when cart button is clicked', async () => {
     const onCartClick = vi.fn()
     render(<PosHeader onCartClick={onCartClick} />)
-    const cartBtn = screen.getAllByRole('button')[1]
+    const buttons = screen.getAllByRole('button')
+    const cartBtn = buttons[buttons.length - 1]
     await userEvent.click(cartBtn)
     expect(onCartClick).toHaveBeenCalledTimes(1)
   })

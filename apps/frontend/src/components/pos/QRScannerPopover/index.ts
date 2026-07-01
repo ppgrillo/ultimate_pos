@@ -1,0 +1,1 @@
+export { QRScannerPopover } from './QRScannerPopover'

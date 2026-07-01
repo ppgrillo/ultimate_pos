@@ -3,6 +3,8 @@ import { authMiddleware, requireRole } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
 import { mpService } from '../services/mp-point'
+import { SignJWT } from 'jose'
+import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
 const MAX_LOGO_SIZE = 3 * 1024 * 1024
@@ -201,3 +203,131 @@ async function getMetadata(supabaseAdmin: any, orderId: string): Promise<Record<
   const { data } = await supabaseAdmin.from('orders').select('metadata').eq('id', orderId).single()
   return (data?.metadata as Record<string, unknown>) || {}
 }
+
+function getJwtSecret() {
+  const secret = process.env.NEXTAUTH_SECRET
+  if (!secret) throw new Error('NEXTAUTH_SECRET is not set')
+  return new TextEncoder().encode(secret)
+}
+
+storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => {
+  const storeId = c.get('storeId')
+  const { name, terminalId } = await c.req.json<{ name: string; terminalId: string }>()
+
+  if (!name || !name.trim()) throw badRequest('Station name is required')
+  if (!terminalId || !terminalId.trim()) throw badRequest('Terminal ID is required')
+
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  if (!store) throw notFound('Store not found')
+
+  const currentSettings = (store.settings as Record<string, unknown>) || {}
+  const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
+
+  const stationId = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+
+  const token = await new SignJWT({
+    station_id: stationId,
+    store_id: storeId,
+    role: 'self_checkout',
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(`self-checkout:${stationId}`)
+    .setIssuedAt()
+    .setExpirationTime('1y')
+    .sign(getJwtSecret())
+
+  const newStation: SelfCheckoutStation = {
+    id: stationId,
+    name: name.trim(),
+    terminalId: terminalId.trim(),
+    isActive: true,
+    createdAt,
+    token,
+  }
+
+  stations.push(newStation)
+
+  const { error } = await supabaseAdmin
+    .from('stores')
+    .update({ settings: { ...currentSettings, selfCheckoutStations: stations } })
+    .eq('id', storeId)
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ data: newStation }, 201)
+})
+
+storesRouter.post('/self-checkout/stations/:id/token', requireRole('admin'), async (c) => {
+  const storeId = c.get('storeId')
+  const stationId = c.req.param('id')
+
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  if (!store) throw notFound('Store not found')
+
+  const currentSettings = (store.settings as Record<string, unknown>) || {}
+  const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
+  const idx = stations.findIndex((s) => s.id === stationId)
+
+  if (idx === -1) throw notFound('Station not found')
+
+  const token = await new SignJWT({
+    station_id: stationId,
+    store_id: storeId,
+    role: 'self_checkout',
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(`self-checkout:${stationId}`)
+    .setIssuedAt()
+    .setExpirationTime('1y')
+    .sign(getJwtSecret())
+
+  stations[idx].token = token
+
+  const { error } = await supabaseAdmin
+    .from('stores')
+    .update({ settings: { ...currentSettings, selfCheckoutStations: stations } })
+    .eq('id', storeId)
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ data: { id: stationId, token } })
+})
+
+storesRouter.delete('/self-checkout/stations/:id', requireRole('admin'), async (c) => {
+  const storeId = c.get('storeId')
+  const stationId = c.req.param('id')
+
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  if (!store) throw notFound('Store not found')
+
+  const currentSettings = (store.settings as Record<string, unknown>) || {}
+  const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
+  const filtered = stations.filter((s) => s.id !== stationId)
+
+  if (filtered.length === stations.length) throw notFound('Station not found')
+
+  const { error } = await supabaseAdmin
+    .from('stores')
+    .update({ settings: { ...currentSettings, selfCheckoutStations: filtered } })
+    .eq('id', storeId)
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ success: true })
+})

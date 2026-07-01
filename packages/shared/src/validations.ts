@@ -12,13 +12,13 @@ export const registerSchema = z.object({
   store_name: z.string().min(2).optional(),
 })
 
-const modifierOptionSchema = z.object({
+export const modifierOptionSchema = z.object({
   name: z.string().min(1),
   price_adjustment: z.number().min(0).default(0),
   sort_order: z.number().int().min(0).default(0),
 })
 
-const modifierGroupSchema = z.object({
+export const modifierGroupSchema = z.object({
   name: z.string().min(1),
   type: z.enum(['single', 'multi']).default('single'),
   is_required: z.boolean().default(false),

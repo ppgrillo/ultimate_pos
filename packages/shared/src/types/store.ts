@@ -24,8 +24,19 @@ export interface StoreSettings {
   pointsExpirationDays?: number
   // Business Info
   address?: string
+  // Self-Checkout
+  selfCheckoutStations?: SelfCheckoutStation[]
   // Wallet
   walletPassDesign?: WalletPassDesign
+}
+
+export interface SelfCheckoutStation {
+  id: string
+  name: string
+  terminalId: string
+  isActive: boolean
+  createdAt: string
+  token?: string
 }
 
 export interface WalletPassDesign {

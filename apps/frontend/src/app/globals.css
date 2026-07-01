@@ -41,3 +41,12 @@
     scrollbar-width: none;
   }
 }
+
+@keyframes scanLaser {
+  0%, 100% {
+    transform: translateY(-60px);
+  }
+  50% {
+    transform: translateY(60px);
+  }
+}

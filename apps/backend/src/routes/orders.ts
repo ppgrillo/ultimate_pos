@@ -150,6 +150,12 @@ ordersRouter.get('/:id', async (c) => {
             .from('payments')
             .update({ status: paymentStatus })
             .eq('order_id', id)
+
+          if (mpStatus === 'processed') {
+            await processMpLoyalty(supabaseAdmin, id, data.store_id as string).catch(() => {})
+          } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
+            await reverseMpLoyalty(supabaseAdmin, id).catch(() => {})
+          }
         }
       }
     } catch {
@@ -459,13 +465,10 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
         price: i.unit_price ?? 0,
       }))
       earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
-      if (earnedPoints > 0) {
+      if (earnedPoints > 0 && !isMpPoint) {
         try {
           await doEarn(effectiveCard.id, earnedPoints, `Compra en orden #${nextOrderNumber}`, order.id)
-
-          if (!isMpPoint) {
-            syncWallets(effectiveCard.id).catch(() => {})
-          }
+          syncWallets(effectiveCard.id).catch(() => {})
         } catch (err: unknown) {
           console.error('Failed to earn points:', err)
         }
@@ -537,6 +540,8 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
     })
     .eq('id', orderId)
 
+  await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
+
   return c.json({ success: true, meta: { mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled' } })
 })
 
@@ -598,6 +603,98 @@ ordersRouter.patch('/:id/status', async (c) => {
   return c.json({ data: enriched })
 })
 
+export async function processMpLoyalty(
+  supabase: typeof supabaseAdmin,
+  orderId: string,
+  storeId: string,
+) {
+  const { data: order } = await supabase
+    .from('orders')
+    .select('*, items:order_items(*), order_number, customer_id, discount')
+    .eq('id', orderId)
+    .single()
+  if (!order?.customer_id) return
+
+  const { data: store } = await supabase
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+  if (!store) return
+
+  const settings = (store.settings || {}) as Record<string, unknown>
+  const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
+  if (!hasLoyalty) return
+
+  const { getLoyaltyCard, earnPoints: doEarn, calculateEarnPoints, syncWallets } = await import('../services/loyalty.service')
+
+  const card = await getLoyaltyCard(order.customer_id, storeId)
+  if (!card) return
+
+  const { data: existingTxs } = await supabase
+    .from('loyalty_transactions')
+    .select('id')
+    .eq('reference_id', orderId)
+    .eq('reference_type', 'order')
+    .eq('type', 'earn')
+    .limit(1)
+  if (existingTxs && existingTxs.length > 0) return
+
+  const items = (order.items || []) as any[]
+  const subtotal = items.reduce((s, i) => s + Number(i.unit_price) * (i.quantity || 1), 0)
+  const discount = Number(order.discount || 0)
+
+  const itemsForPoints = items.map((i: any) => ({
+    product_id: i.product_id,
+    quantity: i.quantity,
+    price: Number(i.unit_price ?? 0),
+  }))
+
+  const earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
+
+  if (earnedPoints > 0) {
+    await doEarn(card.id, earnedPoints, `Compra MP Point orden #${order.order_number}`, orderId)
+    syncWallets(card.id).catch(() => {})
+  }
+
+  const { data: cust } = await supabase
+    .from('customers')
+    .select('total_visits, total_spent')
+    .eq('id', order.customer_id)
+    .single()
+
+  if (cust) {
+    const total = subtotal - discount
+    await supabase
+      .from('customers')
+      .update({
+        total_visits: (cust.total_visits || 0) + 1,
+        total_spent: (Number(cust.total_spent) || 0) + total,
+      })
+      .eq('id', order.customer_id)
+  }
+}
+
+export async function reverseMpLoyalty(
+  supabase: typeof supabaseAdmin,
+  orderId: string,
+) {
+  const { data: txs } = await supabase
+    .from('loyalty_transactions')
+    .select('type, points, loyalty_card_id')
+    .eq('reference_id', orderId)
+    .eq('reference_type', 'order')
+
+  if (!txs || txs.length === 0) return
+
+  const { redeemPoints: doRedeem } = await import('../services/loyalty.service')
+  for (const tx of txs) {
+    if (tx.type === 'earn' && tx.points > 0 && tx.loyalty_card_id) {
+      await doRedeem(tx.loyalty_card_id, tx.points, `Devolución MP orden #${orderId}`).catch(() => {})
+    }
+  }
+}
+
 async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: string, storeId: string) {
   const seen = new Set<string>()
   const candidates: Array<{ id: string; metadata: Record<string, unknown> | null }> = []
@@ -645,6 +742,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .from('payments')
           .update({ status: 'completed' })
           .eq('order_id', order.id)
+        await processMpLoyalty(supabase, order.id, storeId).catch(() => {})
         continue
       }
 
@@ -657,6 +755,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .from('payments')
           .update({ status: 'failed' })
           .eq('order_id', order.id)
+        await reverseMpLoyalty(supabase, order.id).catch(() => {})
         continue
       }
 
@@ -666,6 +765,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .from('orders')
           .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: 'canceled' } })
           .eq('id', order.id)
+        await reverseMpLoyalty(supabase, order.id).catch(() => {})
       }
     } catch {
     }
