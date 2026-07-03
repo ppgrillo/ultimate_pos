@@ -5,6 +5,7 @@ import { notFound, badRequest } from '../middleware/error'
 import { mpService } from '../services/mp-point'
 import { SignJWT } from 'jose'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
+import { encryptSettings, decryptSettings } from '../lib/settings'
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
 const MAX_LOGO_SIZE = 3 * 1024 * 1024
@@ -29,6 +30,7 @@ storesRouter.get('/current', async (c) => {
   if (safe.settings && typeof safe.settings === 'object') {
     const s = { ...(safe.settings as Record<string, unknown>) }
     delete s.mpPointAccessToken
+    delete s.mpClientSecret
     safe.settings = s as typeof safe.settings
   }
 
@@ -75,8 +77,11 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
     .eq('id', storeId)
     .single()
 
-  const merged = { ...(current?.settings as Record<string, unknown> ?? {}), ...settings }
-  delete (merged as any).taxRate
+  const incoming = { ...settings }
+  delete (incoming as any).taxRate
+
+  const encrypted = encryptSettings(incoming)
+  const merged = { ...(current?.settings as Record<string, unknown> ?? {}), ...encrypted }
 
   const updateData: Record<string, unknown> = { settings: merged }
 
@@ -95,6 +100,7 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
 
   const safeSettings = { ...(data.settings as Record<string, unknown>) }
   delete safeSettings.mpPointAccessToken
+  delete safeSettings.mpClientSecret
 
   return c.json({ settings: safeSettings, tax_rate: data.tax_rate })
 })
@@ -109,7 +115,8 @@ storesRouter.get('/terminals', requireRole('admin'), async (c) => {
     .eq('id', storeId)
     .single()
 
-  const accessToken = (store?.settings as Record<string, unknown>)?.mpPointAccessToken as string | undefined
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const accessToken = settings?.mpPointAccessToken as string | undefined
   if (!accessToken) throw badRequest('MP Point access token not configured. Save your access token in settings first.')
 
   try {
@@ -134,7 +141,8 @@ storesRouter.post('/terminals/setup-pdv', requireRole('admin'), async (c) => {
     .eq('id', storeId)
     .single()
 
-  const accessToken = (store?.settings as Record<string, unknown>)?.mpPointAccessToken as string | undefined
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const accessToken = settings?.mpPointAccessToken as string | undefined
   if (!accessToken) throw badRequest('MP Point access token not configured')
 
   try {
@@ -155,7 +163,8 @@ storesRouter.post('/terminals/cancel-queued', requireRole('admin'), async (c) =>
     .eq('id', storeId)
     .single()
 
-  const accessToken = (store?.settings as Record<string, unknown>)?.mpPointAccessToken as string | undefined
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const accessToken = settings?.mpPointAccessToken as string | undefined
   if (!accessToken) throw badRequest('MP Point access token not configured')
 
   const { data: pendingOrders } = await supabaseAdmin

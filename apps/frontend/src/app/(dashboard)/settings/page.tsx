@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [mpPointEnabled, setMpPointEnabled] = useState(false)
   const [mpPointTerminalId, setMpPointTerminalId] = useState('')
   const [mpPointAccessToken, setMpPointAccessToken] = useState('')
+  const [mpClientSecret, setMpClientSecret] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(false)
   const [terminals, setTerminals] = useState<Array<{ id: string; model: string; operating_mode: string }> | null>(null)
@@ -153,6 +154,7 @@ export default function SettingsPage() {
     mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
     mpPointAccessToken !== '' ||
+    mpClientSecret !== '' ||
     JSON.stringify(preferenceFields) !== JSON.stringify(settings?.preferenceFields ?? []) ||
     pointsPerCurrency !== ((settings?.pointsPerCurrency as number) ?? 1) ||
     currencyUnit !== ((settings?.currencyUnit as string) ?? 'points') ||
@@ -201,6 +203,7 @@ export default function SettingsPage() {
         mpPointEnabled,
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
+        ...(mpClientSecret ? { mpClientSecret } : {}),
         preferenceFields,
         pointsPerCurrency,
         currencyUnit,
@@ -792,6 +795,23 @@ export default function SettingsPage() {
                       <p className="text-[10px] text-on-surface-variant/50 mt-1">
                         Your access token is stored securely and never exposed to the frontend.
                         {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Client Secret (Webhook HMAC)
+                      </label>
+                      <input
+                        type="password"
+                        value={mpClientSecret}
+                        onChange={(e) => setMpClientSecret(e.target.value)}
+                        placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago client secret'}
+                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                      />
+                      <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                        Used to verify webhook signatures. Stored encrypted and never exposed to the frontend.
+                        {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
                       </p>
                     </div>
 

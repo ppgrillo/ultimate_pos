@@ -4,6 +4,7 @@ import { selfCheckoutAuth } from '../middleware/self-checkout'
 import { notFound, badRequest } from '../middleware/error'
 import { mpService } from '../services/mp-point'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
+import { decryptSettings } from '../lib/settings'
 
 export const selfCheckoutRouter = new Hono()
 
@@ -23,6 +24,7 @@ selfCheckoutRouter.get('/verify', async (c) => {
 
   const safeSettings = { ...(store.settings as Record<string, unknown>) }
   delete safeSettings.mpPointAccessToken
+  delete safeSettings.mpClientSecret
 
   return c.json({
     data: {
@@ -157,7 +159,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
 
   if (!store) throw notFound('Store not found')
 
-  const settings = (store.settings as Record<string, unknown>) || {}
+  const settings = decryptSettings((store.settings as Record<string, unknown>) || {})
   const mpPointAccessToken = settings.mpPointAccessToken as string | undefined
 
   if (!mpPointAccessToken) {
@@ -521,5 +523,5 @@ async function getStoreSettings(storeId: string) {
     .select('settings')
     .eq('id', storeId)
     .single()
-  return data?.settings as Record<string, unknown> | null
+  return decryptSettings((data?.settings as Record<string, unknown>) || {})
 }

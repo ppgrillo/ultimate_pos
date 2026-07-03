@@ -7,6 +7,7 @@ import { notFound, badRequest } from '../middleware/error'
 import { orderBus } from '../events'
 import { mpService } from '../services/mp-point'
 import type { OrderMetadata } from '@ultimate-pos/shared'
+import { decryptSettings } from '../lib/settings'
 
 export const ordersRouter = new Hono()
 
@@ -100,7 +101,8 @@ ordersRouter.get('/:id', async (c) => {
         .eq('id', data.store_id)
         .single()
 
-      const accessToken = (store?.settings as Record<string, unknown> | null)?.mpPointAccessToken as string | undefined
+      const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
+      const accessToken = decrypted?.mpPointAccessToken as string | undefined
 
       if (accessToken) {
         const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
@@ -217,7 +219,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     .single()
 
   const taxRate = store ? Number(store.tax_rate) / 100 : 0
-  const settings = store?.settings as Record<string, unknown> | null
+  const rawSettings = store?.settings as Record<string, unknown> | null
+  const settings = decryptSettings(rawSettings || {})
   const taxEnabled = (settings?.taxEnabled as boolean) ?? false
   const taxInclusive = (settings?.taxInclusive as boolean) ?? false
   const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
@@ -500,7 +503,8 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
     .eq('id', storeId)
     .single()
 
-  const accessToken = (store?.settings as Record<string, unknown> | null)?.mpPointAccessToken as string | undefined
+  const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const accessToken = decrypted?.mpPointAccessToken as string | undefined
   if (!accessToken) throw badRequest('MP Point access token not configured')
 
   const { data: order } = await supabase

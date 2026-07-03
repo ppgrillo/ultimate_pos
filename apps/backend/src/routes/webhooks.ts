@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { orderBus } from '../events'
 import { mpService } from '../services/mp-point'
+import { decryptSettings } from '../lib/settings'
 
 export const webhooksRouter = new Hono()
 
@@ -80,17 +81,6 @@ const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string;
 webhooksRouter.post('/mp-point', async (c) => {
   const body = await c.req.text()
   const signature = c.req.header('x-signature')
-  const clientSecret = process.env.MP_CLIENT_SECRET
-
-  if (clientSecret) {
-    const valid = await verifySignature(body, signature, clientSecret)
-    if (!valid) {
-      console.warn('[mp-point-webhook] Invalid signature')
-      return c.json({ message: 'Invalid signature' }, 401)
-    }
-  } else {
-    console.warn('[mp-point-webhook] MP_CLIENT_SECRET not set — skipping signature validation')
-  }
 
   let parsed: { action: string; data: { id: string }; id: string }
   try {
@@ -116,6 +106,28 @@ webhooksRouter.post('/mp-point', async (c) => {
   if (orderError || !orderData) {
     console.warn(`[mp-point-webhook] Order not found for mpOrderId=${mpOrderId}`)
     return c.json({ message: 'Accepted' }, 200)
+  }
+
+  const storeId = orderData.store_id
+  if (storeId) {
+    const { data: store } = await supabaseAdmin
+      .from('stores')
+      .select('settings')
+      .eq('id', storeId)
+      .single()
+
+    const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+    const clientSecret = storeSettings?.mpClientSecret as string | undefined
+
+    if (clientSecret) {
+      const valid = await verifySignature(body, signature, clientSecret)
+      if (!valid) {
+        console.warn(`[mp-point-webhook] Invalid signature for store ${storeId}`)
+        return c.json({ message: 'Invalid signature' }, 401)
+      }
+    } else {
+      console.warn(`[mp-point-webhook] mpClientSecret not set for store ${storeId} — skipping signature validation`)
+    }
   }
 
   const currentMetadata = (orderData.metadata as Record<string, unknown>) || {}

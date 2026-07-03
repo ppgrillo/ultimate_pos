@@ -16,6 +16,7 @@ export interface StoreSettings {
   mpPointEnabled: boolean
   mpPointTerminalId: string
   mpPointAccessToken: string
+  mpClientSecret?: string
   preferenceFields: PreferenceField[]
   // Loyalty
   pointsPerCurrency?: number
