@@ -13,6 +13,8 @@ import { CustomerDrawer } from '@/components/pos/CustomerDrawer'
 import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { PackageOpen } from 'lucide-react'
 import type { Product } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 
@@ -81,15 +83,27 @@ export default function PosPage() {
           ) : undefined}
           products={
             isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(140px,1fr))]">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="rounded-xl bg-surface-container/30 border border-outline-variant/30 p-3 space-y-2">
+                    <Skeleton className="aspect-square rounded-lg w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <p className="text-on-surface-variant">No products found</p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-container/50 border border-outline-variant/40 mb-4">
+                  <PackageOpen className="h-6 w-6 text-on-surface-variant/60" />
+                </div>
+                <p className="font-label font-bold text-sm text-on-surface-variant mb-1">No products found</p>
+                <p className="text-xs text-on-surface-variant/60">
+                  {searchQuery ? 'Try a different search term' : 'No products in this category'}
+                </p>
               </div>
             ) : (
-              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+              <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(140px,1fr))]">
                 {filtered.map((product) => (
                   <ProductCard
                     key={product.id}

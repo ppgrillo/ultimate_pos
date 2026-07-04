@@ -12,7 +12,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         className={cn(
           'rounded-xl p-6',
-          glass && 'bg-surface-container bg-opacity-50 backdrop-blur-glass glass-border',
+          glass && 'bg-surface-container/50 backdrop-blur-glass glass-border',
           className,
         )}
         {...props}

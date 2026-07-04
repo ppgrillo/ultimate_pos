@@ -56,9 +56,16 @@ const config: Config = {
         'on-background': '#e2e4cf',
       },
       fontFamily: {
-        headline: ['Lexend', 'sans-serif'],
-        body: ['Hanken Grotesk', 'sans-serif'],
-        label: ['Hanken Grotesk', 'sans-serif'],
+        headline: ['var(--font-headline)', 'sans-serif'],
+        body: ['var(--font-body)', 'sans-serif'],
+        label: ['var(--font-body)', 'sans-serif'],
+      },
+      fontSize: {
+        'headline-xl': ['48px', { lineHeight: '1.1', fontWeight: '800' }],
+        'headline-lg': ['32px', { lineHeight: '1.2', fontWeight: '700' }],
+        'headline-md': ['24px', { lineHeight: '1.3', fontWeight: '600' }],
+        'body-lg': ['18px', { lineHeight: '1.5' }],
+        'body-md': ['16px', { lineHeight: '1.5' }],
       },
       borderRadius: {
         sm: '0.25rem',
@@ -70,6 +77,12 @@ const config: Config = {
         'bento': '20px',
         'gutter': '16px',
         'container': '24px',
+      },
+      boxShadow: {
+        'elevation-1': '0 1px 3px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.3)',
+        'elevation-2': '0 4px 6px rgba(0,0,0,0.45), 0 2px 4px rgba(0,0,0,0.2)',
+        'elevation-3': '0 10px 25px rgba(0,0,0,0.55), 0 4px 10px rgba(0,0,0,0.3)',
+        'elevation-4': '0 20px 50px rgba(0,0,0,0.65), 0 8px 20px rgba(0,0,0,0.3)',
       },
       backdropBlur: {
         glass: '20px',

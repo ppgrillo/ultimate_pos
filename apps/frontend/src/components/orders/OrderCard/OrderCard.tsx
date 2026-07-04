@@ -55,7 +55,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className={cn(
-                'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-label font-bold tracking-wider',
+                'inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-label font-bold tracking-wider',
                 typeStyle.classes,
               )}>
                 {typeStyle.label}
@@ -86,7 +86,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
             <span className="font-label font-bold text-base text-primary">
               <ElapsedTimer createdAt={order.created_at} />
             </span>
-            <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">Time Elapsed</span>
+            <span className="text-[11px] text-on-surface-variant uppercase tracking-wider">Time Elapsed</span>
           </div>
 
           <div className="border-t border-outline-variant/40 pt-2 space-y-1.5">
@@ -97,18 +97,18 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
                   <span className="font-label font-semibold text-on-surface truncate">{item.product_name}</span>
                 </div>
                 {item.modifiers && item.modifiers.length > 0 && (
-                  <p className="text-[11px] text-on-surface-variant ml-4 truncate">{item.modifiers.join(', ')}</p>
+                  <p className="text-xs text-on-surface-variant ml-4 truncate">{item.modifiers.join(', ')}</p>
                 )}
                 {item.notes && (
                   <div className="flex items-center gap-1 ml-1 mt-0.5">
                     <AlertTriangle className="h-3 w-3 text-red-400 shrink-0" />
-                    <span className="text-[11px] text-red-400 font-label font-bold">{item.notes}</span>
+                    <span className="text-xs text-red-400 font-label font-bold">{item.notes}</span>
                   </div>
                 )}
               </div>
             ))}
             {(order.items?.length || 0) > 6 && (
-              <p className="text-[11px] text-on-surface-variant font-label font-bold">
+              <p className="text-xs text-on-surface-variant font-label font-bold">
                 +{order.items!.length - 6} more items
               </p>
             )}
@@ -145,7 +145,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
         <div className="flex items-center gap-2 mb-1">
           <OrderStatusBadge status={order.status} size="sm" />
           {order.order_number && (
-            <span className="text-[11px] text-on-surface-variant font-label font-bold">#{order.order_number}</span>
+            <span className="text-xs text-on-surface-variant font-label font-bold">#{order.order_number}</span>
           )}
           {order.table_number && (
             <span className="text-xs text-on-surface-variant flex items-center gap-1">
@@ -157,7 +157,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
           {order.items?.slice(0, 2).map(i => i.product_name).filter(Boolean).join(', ')}
           {(order.items?.length || 0) > 2 && <span className="text-on-surface-variant font-normal"> +{order.items!.length - 2}</span>}
         </p>
-        <div className="flex items-center gap-2 mt-1 text-[11px] text-on-surface-variant">
+        <div className="flex items-center gap-2 mt-1 text-xs text-on-surface-variant">
           <Clock className="h-3 w-3" />
           <ElapsedTimer createdAt={order.created_at} />
           {order.payments?.[0] && (
@@ -171,7 +171,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
       </div>
       <div className="text-right shrink-0">
         <p className="font-headline font-bold text-base text-on-surface">{formatCurrency(order.total)}</p>
-        <p className="text-[11px] text-on-surface-variant">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
+        <p className="text-xs text-on-surface-variant">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
       </div>
       <ChevronRight className="h-4 w-4 text-on-surface-variant/50 shrink-0" />
     </div>

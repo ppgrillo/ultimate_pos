@@ -62,7 +62,7 @@ const STATE_CONFIG: Record<PaymentState, {
   },
   paid: {
     icon: CheckCircle2,
-    title: 'Pago exitoso!',
+    title: 'Pago exitoso',
     description: 'El pago fue procesado correctamente',
     color: 'text-primary',
     bg: 'bg-primary/10',
@@ -106,6 +106,7 @@ type OrderResponse = {
 function toPaymentState(res: OrderResponse | undefined): PaymentState | undefined {
   if (!res) return undefined
   if (res.status === 'paid' || res.payment_status === 'paid') return 'paid'
+  if (res.status === 'cancelled') return 'canceled'
   const raw = res.metadata?.mpOrderStatus
   if (raw === 'processed') return 'paid'
   if (raw && (STATE_CONFIG as Record<string, unknown>)[raw]) return raw as PaymentState
@@ -168,7 +169,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
 
     const interval = setInterval(() => {
       poll()
-    }, 3000)
+    }, 2000)
 
     return () => clearInterval(interval)
   }, [open, currentState, poll, isCreating, orderId])

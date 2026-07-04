@@ -34,7 +34,7 @@ export function Header() {
         </button>
 
         <div className="flex items-center gap-2 pl-3 border-l border-outline-variant">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-highest text-sm font-label font-bold text-on-surface">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-container-highest text-sm font-label font-bold text-on-surface">
             {(user?.name ?? 'A').charAt(0).toUpperCase()}
           </div>
           <div className="hidden text-sm sm:block">

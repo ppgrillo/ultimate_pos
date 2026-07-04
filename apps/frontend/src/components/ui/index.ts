@@ -39,3 +39,7 @@ export {
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table'
 
 export { ExpandableText } from './ExpandableText'
+
+export { Skeleton } from './Skeleton'
+
+export { Pagination } from './Pagination'

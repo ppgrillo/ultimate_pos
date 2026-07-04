@@ -5,17 +5,17 @@ import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-label font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-label font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97]',
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-on hover:bg-primary/90 glow-primary',
+        primary: 'bg-primary text-primary-on hover:bg-primary/80 glow-primary',
         secondary:
           'bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 glow-secondary',
         outline:
-          'bg-transparent border border-outline text-on-surface hover:bg-surface-container',
-        ghost: 'text-on-surface hover:bg-surface-container',
-        danger: 'bg-error text-error-on hover:bg-error/90',
+          'bg-transparent border border-outline text-on-surface hover:bg-surface-container hover:text-on-surface',
+        ghost: 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container',
+        danger: 'bg-error text-error-on hover:bg-error/80',
       },
       size: {
         sm: 'h-8 px-3 text-xs',

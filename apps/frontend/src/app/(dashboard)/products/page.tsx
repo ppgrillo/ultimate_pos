@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen } from 'lucide-react'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
@@ -377,8 +378,16 @@ export default function ProductsPage() {
       {/* Mobile view */}
       <div className="lg:hidden space-y-3 pb-6">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/30 p-4">
+                <Skeleton className="h-10 w-10 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/5" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -448,7 +457,22 @@ export default function ProductsPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <p className="text-on-surface-variant">Loading products...</p>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 py-3">
+                  <Skeleton className="h-4 w-8" />
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-20 ml-auto" />
+                </div>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="flex items-center gap-3 py-3 border-t border-outline-variant/20">
+                    <Skeleton className="h-5 w-5 rounded" />
+                    <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+                    <Skeleton className="h-4 w-2/5" />
+                    <Skeleton className="h-4 w-16 ml-auto" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                ))}
+              </div>
             ) : products.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <p className="text-on-surface-variant mb-4">No products yet</p>

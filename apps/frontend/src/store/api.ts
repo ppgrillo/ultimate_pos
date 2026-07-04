@@ -291,17 +291,17 @@ export const api = createApi({
         { type: 'Customer', id: `contact-${customerId}` },
       ],
     }),
-    getOrders: builder.query<Order[], OrderTab | undefined>({
-      query: (tab) => ({
+    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number } | undefined>({
+      query: (params) => ({
         url: '/orders',
-        params: tab ? { tab } : undefined,
+        params: params?.tab ? { tab: params.tab, limit: params.limit ?? 50, offset: params.offset ?? 0 } : { limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
       }),
-      transformResponse: (response: { data: Order[] }) => response.data,
+      transformResponse: (response: { data: Order[]; total: number }) => ({ items: response.data, total: response.total }),
       providesTags: (result) =>
-        result
+        result?.items
           ? [
               { type: 'Order' as const, id: 'LIST' },
-              ...result.map((item) => ({ type: 'Order' as const, id: item.id })),
+              ...result.items.map((item) => ({ type: 'Order' as const, id: item.id })),
             ]
           : [{ type: 'Order' as const, id: 'LIST' }],
     }),

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveTab } from '@/store/slices/orderSlice'
 import type { OrderTab } from '@/store/slices/orderSlice'
 import { OrderHeader, OrderList, OrderDetailModal, useOrderStream } from '@/components/orders'
+import { Pagination } from '@/components/ui/Pagination'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import type { Order, OrderStatus } from '@ultimate-pos/shared'
@@ -17,7 +18,24 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<Order | null>(null)
   const [statusLoading, setStatusLoading] = useState<Record<string, boolean>>({})
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
-  const { data: items = [], isFetching: loading } = useGetOrdersQuery(activeTab)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+
+  const queryParams = useMemo(() => ({
+    tab: activeTab,
+    limit: pageSize,
+    offset: page * pageSize,
+  }), [activeTab, page, pageSize])
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size)
+    setPage(0)
+  }, [])
+
+  const { data: result, isFetching: loading, isError, refetch } = useGetOrdersQuery(queryParams)
+  const items = result?.items ?? []
+  const totalOrders = result?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalOrders / pageSize))
   const [updateOrderStatus] = useUpdateOrderStatusMutation()
 
   useOrderStream()
@@ -31,11 +49,12 @@ export default function OrdersPage() {
 
   const handleTabChange = useCallback((tab: OrderTab) => {
     dispatch(setActiveTab(tab))
+    setPage(0)
   }, [dispatch])
 
   const handleRefresh = useCallback(() => {
-    void activeTab
-  }, [activeTab])
+    refetch()
+  }, [refetch])
 
   const handleStatusChange = useCallback(async (id: string, status: OrderStatus) => {
     if (status === 'cancelled') {
@@ -75,8 +94,8 @@ export default function OrdersPage() {
   }, [])
 
   return (
-    <div>
-      <h1 className="font-headline text-headline-lg text-on-surface mb-6">Orders</h1>
+    <div className="flex flex-col h-full overflow-hidden">
+      <h1 className="font-headline text-headline-lg text-on-surface mb-6 shrink-0">Orders</h1>
       <OrderHeader
         activeTab={activeTab}
         onTabChange={handleTabChange}
@@ -85,14 +104,30 @@ export default function OrdersPage() {
         loading={loading}
         hasKitchen={hasKitchen}
       />
-      <OrderList
-        orders={items}
-        hasKitchen={hasKitchen}
-        loading={loading}
-        statusLoading={statusLoading}
-        onStatusChange={handleStatusChange}
-        onTap={handleTap}
-      />
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <OrderList
+          orders={items}
+          hasKitchen={hasKitchen}
+          loading={loading}
+          error={isError}
+          statusLoading={statusLoading}
+          onStatusChange={handleStatusChange}
+          onTap={handleTap}
+          onRetry={refetch}
+        />
+      </div>
+      {!hasKitchen && (
+        <div className="shrink-0 pt-4">
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalOrders}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        </div>
+      )}
       <OrderDetailModal
         order={detailOrder}
         open={detailOrder !== null}

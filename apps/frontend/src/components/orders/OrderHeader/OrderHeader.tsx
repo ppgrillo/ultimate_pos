@@ -1,6 +1,7 @@
 'use client'
 
 import { RotateCw } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import type { OrderTab } from '@/store/slices/orderSlice'
 
 interface OrderHeaderProps {
@@ -24,21 +25,15 @@ export function OrderHeader({ activeTab, onTabChange, onRefresh, orderCount, loa
   const tabs = getTabs(hasKitchen)
   return (
     <div className="flex items-center justify-between gap-4 mb-6">
-      <div className="flex items-center gap-1 rounded-xl bg-surface-container/50 border border-outline-variant/40 p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => onTabChange(tab.value)}
-            className={`px-4 py-2 rounded-lg text-xs font-label font-bold transition-all duration-150 ${
-              activeTab === tab.value
-                ? 'bg-primary text-primary-on shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(val) => onTabChange(val as OrderTab)}>
+        <TabsList className="bg-surface-container/50 border border-outline-variant/40">
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="px-4 py-1.5 text-xs">
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="flex items-center gap-3">
         <span className="text-xs text-on-surface-variant">

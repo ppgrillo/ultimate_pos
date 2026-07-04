@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { PhoneInput } from '@/components/ui/PhoneInput'
-import { Search, Plus, Tags, ArrowUpDown, User, ShoppingCart, Star, TrendingUp } from 'lucide-react'
+import { Search, Plus, Tags, ArrowUpDown, User, ShoppingCart, Star, TrendingUp, Users } from 'lucide-react'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { formatCurrency } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useCreateCustomerMutation, useGetCustomerStatsQuery, useGetCustomersQuery, useUpdateCustomerMutation } from '@/store/api'
@@ -188,10 +189,35 @@ export default function CustomersPage() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-8 text-center text-on-surface-variant">Loading customers...</div>
+            <div className="space-y-2 p-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex items-center gap-3 py-3">
+                  <Skeleton className="h-9 w-9 rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-2/5" />
+                    <Skeleton className="h-3 w-1/4" />
+                  </div>
+                  <Skeleton className="h-4 w-16" />
+                </div>
+              ))}
+            </div>
           ) : typedCustomers.length === 0 ? (
-            <div className="p-8 text-center text-on-surface-variant">
-              {search ? 'No customers match your search.' : 'No customers yet. Click "Add Customer" to get started.'}
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-container/50 border border-outline-variant/40 mb-4">
+                <Users className="h-6 w-6 text-on-surface-variant/60" />
+              </div>
+              <p className="font-label font-bold text-sm text-on-surface-variant mb-1">
+                {search ? 'No customers match your search' : 'No customers yet'}
+              </p>
+              <p className="text-xs text-on-surface-variant/60 mb-4">
+                {search ? 'Try a different name, email, or phone number' : 'Click "Add Customer" to get started'}
+              </p>
+              {!search && (
+                <Button onClick={() => { resetForm(); setShowCreate(true) }} variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add Customer
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

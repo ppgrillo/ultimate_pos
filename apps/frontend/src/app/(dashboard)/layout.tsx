@@ -11,14 +11,22 @@ export default function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <MobileDrawer />
         <DashboardContent>
           <DashboardShell />
-          <main className="flex-1 p-6">{children}</main>
+          <main id="main-content" className="flex-1 p-6 overflow-y-auto">
+            {children}
+            <footer className="mt-auto pt-8 pb-2 text-center">
+              <p className="text-[11px] text-on-surface-variant/40">
+                &copy; {new Date().getFullYear()} Ultimate POS
+              </p>
+            </footer>
+          </main>
         </DashboardContent>
       </div>
+      <div className="grain" />
     </SidebarProvider>
   )
 }

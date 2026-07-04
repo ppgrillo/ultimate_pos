@@ -28,10 +28,12 @@ ordersRouter.get('/', async (c) => {
   const storeId = c.get('storeId')
   const status = c.req.query('status')
   const tab = c.req.query('tab')
+  const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
+  const offset = Number(c.req.query('offset')) || 0
 
   let query = supabase
     .from('orders')
-    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)', { count: 'exact' })
     .eq('store_id', storeId)
 
   if (status) {
@@ -39,14 +41,16 @@ ordersRouter.get('/', async (c) => {
   } else if (tab === 'active') {
     query = query.in('status', ['pending', 'preparing', 'ready'])
   } else if (tab === 'completed') {
-    query = query.in('status', ['served', 'paid', 'cancelled'])
+    query = query.in('status', ['served', 'paid'])
   }
 
-  const { data, error } = await query.order('created_at', { ascending: false })
+  const { data, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
 
   if (error) throw badRequest(error.message)
 
-  return c.json({ data: (data || []).map(enrichOrder) })
+  return c.json({ data: (data || []).map(enrichOrder), total: count ?? 0 })
 })
 
 ordersRouter.get('/realtime', async (c) => {
@@ -157,6 +161,16 @@ ordersRouter.get('/:id', async (c) => {
             await processMpLoyalty(supabaseAdmin, id, data.store_id as string).catch(() => {})
           } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
             await reverseMpLoyalty(supabaseAdmin, id).catch(() => {})
+          }
+
+          const { data: updatedOrder } = await supabase
+            .from('orders')
+            .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
+            .eq('id', id)
+            .single()
+
+          if (updatedOrder) {
+            orderBus.emit('order:status-changed', enrichOrder(updatedOrder))
           }
         }
       }
