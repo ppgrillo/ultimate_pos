@@ -13,8 +13,9 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
 import { QRCodeSVG } from 'qrcode.react';
+import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import {
-   ShoppingBag,
+  ShoppingBag,
   X,
   Percent,
   CheckCircle2,
@@ -33,6 +34,7 @@ import {
   QrCode,
   UserPlus,
   Maximize2,
+  RotateCcw,
 } from 'lucide-react'
 import type { Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData } from '@ultimate-pos/shared'
 
@@ -75,18 +77,23 @@ export default function SelfCheckoutPage() {
   const [showPromo, setShowPromo] = useState(false)
   const [promoInput, setPromoInput] = useState('')
   const [promoMode, setPromoMode] = useState<'percent' | 'fixed'>('percent')
-
-  // ─── Customer ─────────────────────────────────────────────────────────────
-  const [customerSearchQuery, setCustomerSearchQuery] = useState('')
-  const [customerSearchResults, setCustomerSearchResults] = useState<Customer | null | undefined>(undefined)
-  const [searchingCustomer, setSearchingCustomer] = useState(false)
-  const [scannerOpen, setScannerOpen] = useState(false)
+  const [promoPin, setPromoPin] = useState('')
+  const [showPromoPinPrompt, setShowPromoPinPrompt] = useState(false)
+  const [promoPinInput, setPromoPinInput] = useState('')
+  const [promoPinError, setPromoPinError] = useState('')
+  const [showQRModal, setShowQRModal] = useState(false)
   const [registerName, setRegisterName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
   const [registeringCustomer, setRegisteringCustomer] = useState(false)
-  const [showRegisterForm, setShowRegisterForm] = useState(false)
-  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrExpanded, setQrExpanded] = useState(true)
+  const [formExpanded, setFormExpanded] = useState(false)
+  const [cameraExpanded, setCameraExpanded] = useState(true)
+
+  // ─── Customer search ─────────────────────────────────────────────────────
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [customerSearchResults, setCustomerSearchResults] = useState<Customer | null | undefined>(undefined)
+  const [searchingCustomer, setSearchingCustomer] = useState(false)
 
   // ─── Customer detail (rich profile) ────────────────────────────────────────
   interface CustomerProfile {
@@ -118,7 +125,7 @@ export default function SelfCheckoutPage() {
     if (!token) return
     setApiToken(token)
     loadData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   async function loadData() {
@@ -137,6 +144,7 @@ export default function SelfCheckoutPage() {
       setTaxEnabled((settings?.taxEnabled as boolean) ?? false)
       setTaxLabel((settings?.taxLabel as string) ?? 'Tax')
       setTaxInclusive((settings?.taxInclusive as boolean) ?? false)
+      setPromoPin((settings?.promoPin as string) ?? '')
       setProducts(productsRes.data)
       setCategories(categoriesRes.data)
       setPageState('browsing')
@@ -175,7 +183,7 @@ export default function SelfCheckoutPage() {
         setSearchingCustomer(false)
       }
     }, 500)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearchQuery])
 
   // ─── Safe fetch (avoids SessionSyncProvider token overwrite) ────────────
@@ -209,7 +217,10 @@ export default function SelfCheckoutPage() {
       customer: result.customer,
       loyalty: result.loyaltyCard,
     })
-    setProfileExpanded(true)
+    setProfileExpanded(false)
+    setQrExpanded(false)
+    setFormExpanded(false)
+    setCameraExpanded(false)
   }, [])
 
   const handleRegisterCustomer = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -229,6 +240,9 @@ export default function SelfCheckoutPage() {
 
       setCustomerProfile({ customer: res.data })
       setProfileExpanded(false)
+      setQrExpanded(false)
+      setFormExpanded(false)
+      setCameraExpanded(false)
       setCustomerSearchQuery('')
       setCustomerSearchResults(undefined)
       setRegisterName('')
@@ -247,6 +261,9 @@ export default function SelfCheckoutPage() {
     setCustomerSearchQuery('')
     setCustomerSearchResults(undefined)
     setLoadingProfile(true)
+    setQrExpanded(false)
+    setFormExpanded(false)
+    setCameraExpanded(false)
     try {
       const json = await apiFetch<{ data: { customer: Customer; loyaltyCard: LoyaltyCardData | null; recentOrders: Array<{ id: string; order_number: number; total: number; created_at: string; items: Array<{ product_name: string; quantity: number }> }> } }>(
         `/customers/${customer.id}/detail`,
@@ -260,7 +277,7 @@ export default function SelfCheckoutPage() {
       setCustomerProfile({ customer })
     } finally {
       setLoadingProfile(false)
-      setProfileExpanded(true)
+      setProfileExpanded(false)
     }
   }, [apiFetch])
 
@@ -307,6 +324,11 @@ export default function SelfCheckoutPage() {
 
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
+    if (cartItems.length === 0) {
+      setQrExpanded(false)
+      setFormExpanded(false)
+      setCameraExpanded(false)
+    }
     setCartItems((prev) => {
       const existing = prev.find((i) => i.product_id === product.id)
       if (existing) {
@@ -341,6 +363,22 @@ export default function SelfCheckoutPage() {
     setCartItems([])
     setDiscount(0)
     setDiscountLabel('')
+  }
+
+  function handleResetAll() {
+    setCartItems([])
+    setDiscount(0)
+    setDiscountLabel('')
+    setShowPromo(false)
+    setPromoInput('')
+    setCustomerProfile(null)
+    setProfileExpanded(false)
+    setCustomerSearchQuery('')
+    setCustomerSearchResults(undefined)
+    setSearchingCustomer(false)
+    setQrExpanded(true)
+    setFormExpanded(false)
+    setCameraExpanded(true)
   }
 
   // ─── Promo ────────────────────────────────────────────────────────────────
@@ -411,6 +449,8 @@ export default function SelfCheckoutPage() {
     setCustomerSearchQuery('')
     setOrderId(null)
     setLastOrder(null)
+    setQrExpanded(true)
+    setCameraExpanded(true)
     setPageState('browsing')
   }
 
@@ -486,16 +526,24 @@ export default function SelfCheckoutPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* ── LEFT: Products ─────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden relative">
         {/* Store header */}
         <header className="shrink-0 border-b border-outline-variant/50 bg-surface-container/80 px-4 py-2.5 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div>
+            <div className="flex-1">
               <h1 className="text-base font-headline font-bold text-on-surface leading-tight">
                 {storeName}
               </h1>
               <p className="text-xs text-on-surface-variant">{stationName}</p>
             </div>
+            <button
+              onClick={handleResetAll}
+              className="flex items-center gap-1.5 rounded-xl bg-error/10 px-3 py-1.5 text-xs font-label font-bold text-error hover:bg-error/20 transition-colors"
+              title="Reiniciar todo"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reiniciar
+            </button>
           </div>
         </header>
 
@@ -532,364 +580,390 @@ export default function SelfCheckoutPage() {
             </div>
           )}
         </div>
+
       </div>
 
       {/* ── RIGHT: Cart sidebar ─────────────────────────────────────── */}
-      <div className="flex w-[340px] shrink-0 flex-col border-l border-outline-variant/50 bg-surface-container/30">
+      <div className="flex w-[360px] shrink-0 flex-col border-l border-outline-variant/50 bg-surface-container/30">
 
-        <div id="registro" className="shrink-0 border-b border-outline-variant/50 px-4 py-3">
-          <div className="rounded-2xl border border-primary/30 bg-primary/10 p-3">
-            <div className="flex items-center gap-2.5 mb-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
-                <UserPlus className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-label font-bold uppercase tracking-wider text-primary">
-                  Identifícate
-                </p>
-                <p className="text-sm font-headline font-bold text-on-surface leading-tight">
-                  Regístrate con tu celular
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center w-full">
-              <div className="w-full max-w-[215px] p-0.5 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
-                {registerUrl ? (
-                  <QRCodeSVG
-                    value={registerUrl}
-                    size={200}
-                    style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
-                    bgColor="#fff"
-                    fgColor="#222"
-                  />
-                ) : (
-                  <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
-                    <QrCode className="h-12 w-12" />
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowQRModal(true)}
-                className="mt-1 flex items-center justify-center gap-1 text-[11px] font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
-              >
-                <Maximize2 className="h-3 w-3" />
-                Ampliar QR
-              </button>
-
-              <div className="w-full max-w-[215px] mt-2 text-center">
-                <p className="text-xs text-on-surface-variant mb-2">
-                  Escanea para registrarte o toca el botón si prefieres hacerlo aquí.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowRegisterForm((v) => !v)}
-                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-label font-bold text-primary-on transition-colors hover:bg-primary/90"
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Registrar aquí
-                </button>
-              </div>
-
-              {showRegisterForm && (
-                <form onSubmit={handleRegisterCustomer} className="w-full max-w-[225px] mt-3 space-y-2 rounded-2xl border border-outline-variant/50 bg-surface-container/80 p-3">
-                  <div>
-                    <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
-                      Nombre
-                    </label>
-                    <input
-                      type="text"
-                      value={registerName}
-                      onChange={(e) => setRegisterName(e.target.value)}
-                      placeholder="Tu nombre"
-                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="email"
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
-                      placeholder="Email"
-                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    />
-                    <input
-                      type="tel"
-                      value={registerPhone}
-                      onChange={(e) => setRegisterPhone(e.target.value)}
-                      placeholder="Teléfono"
-                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={!registerName.trim() || registeringCustomer}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {registeringCustomer ? 'Registrando...' : 'Guardar cliente'}
-                  </button>
-                </form>
+        {/* QR collapsible section */}
+        <CollapsibleSection
+          title="Identifícate"
+          expanded={qrExpanded}
+          onToggle={() => setQrExpanded((v) => !v)}
+          icon={<QrCode className="h-3.5 w-3.5" />}
+        >
+          <div className="flex flex-col items-center p-3">
+            <div className="w-full max-w-[180px] p-0.5 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+              {registerUrl ? (
+                <QRCodeSVG
+                  value={registerUrl}
+                  size={180}
+                  style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
+                  bgColor="#fff"
+                  fgColor="#222"
+                />
+              ) : (
+                <div className="flex h-[160px] w-[160px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
+                  <QrCode className="h-12 w-12" />
+                </div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowQRModal(true)}
+              className="mt-2 flex items-center justify-center gap-1 text-[10px] font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
+            >
+              <Maximize2 className="h-3 w-3" />
+              Ampliar QR
+            </button>
+            <p className="mt-2 text-xs text-on-surface-variant text-center">
+              Escanea el código QR para REGISTRARTE
+            </p>
+            <p className="mt-2 text-xs text-on-surface-variant text-center">
+              y recibir grandes descuentos!
+            </p>
           </div>
-        </div>
+        </CollapsibleSection>
 
-        {/* Customer section */}
-        <div className="relative shrink-0 border-b border-outline-variant/50 px-4 py-3 space-y-2">
-          {!customerProfile && (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-              <input
-                type="text"
-                value={customerSearchQuery}
-                onChange={(e) => {
-                  setCustomerSearchQuery(e.target.value)
-                  if (!e.target.value) {
-                    setCustomerSearchResults(undefined)
-                  }
-                }}
-                placeholder="Buscar cliente..."
-                className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container pl-10 pr-10 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
+        {/* Form collapsible section */}
+        <CollapsibleSection
+          title="Registro"
+          expanded={formExpanded}
+          onToggle={() => setFormExpanded((v) => !v)}
+          icon={<UserPlus className="h-3.5 w-3.5" />}
+        >
+          <div className="p-3">
+            <form onSubmit={handleRegisterCustomer} className="space-y-2">
+              <div>
+                <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                  Nombre
+                </label>
+                <input
+                  type="text"
+                  value={registerName}
+                  onChange={(e) => setRegisterName(e.target.value)}
+                  placeholder="Tu nombre"
+                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="email"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  placeholder="Email"
+                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+                <input
+                  type="tel"
+                  value={registerPhone}
+                  onChange={(e) => setRegisterPhone(e.target.value)}
+                  placeholder="Teléfono"
+                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
               <button
-                onClick={() => setScannerOpen(true)}
-                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
-                title="Escanear tarjeta de lealtad"
+                type="submit"
+                disabled={!registerName.trim() || registeringCustomer}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                <Scan className="h-4 w-4" />
+                {registeringCustomer ? 'Registrando...' : 'Guardar cliente'}
               </button>
-            </div>
-          )}
+            </form>
+          </div>
+        </CollapsibleSection>
 
+        {/* Camera collapsible section */}
+        <CollapsibleSection
+          title="Escáner"
+          expanded={cameraExpanded}
+          onToggle={() => setCameraExpanded((v) => !v)}
+          icon={<Scan className="h-3.5 w-3.5" />}
+        >
           <QRScannerPopover
-            open={scannerOpen}
-            onClose={() => setScannerOpen(false)}
-            variant="popover"
+            open={cameraExpanded}
+            onClose={() => setCameraExpanded(false)}
+            variant="inline"
             onScan={handleScan}
             onScanSuccess={handleScanSuccess}
           />
+        </CollapsibleSection>
 
-          {/* Customer profile card (POS-style) */}
-          {customerProfile ? (
-            <div className="rounded-2xl border border-outline-variant/50 bg-surface-container/60 p-3 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-sm font-headline font-bold text-on-surface">
-                  {customerProfile.customer.name.charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <p className="min-w-0 truncate font-headline font-bold text-sm text-on-surface">{customerProfile.customer.name}</p>
-                    {customerProfile.loyalty?.tier && (
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-label font-bold uppercase tracking-wider ${
-                        customerProfile.loyalty.tier === 'platinum' ? 'bg-primary/20 text-primary' :
-                        customerProfile.loyalty.tier === 'gold' ? 'bg-amber-400/20 text-amber-400' :
-                        customerProfile.loyalty.tier === 'silver' ? 'bg-slate-400/20 text-slate-300' :
-                        'bg-orange-600/20 text-orange-400'
-                      }`}>
-                        {customerProfile.loyalty.tier}
-                      </span>
+        {/* Re-expand buttons (when sections are collapsed) */}
+        {(!qrExpanded || !formExpanded || !cameraExpanded) && (
+          <div className="flex gap-2 px-4 py-2.5 border-b border-outline-variant/50 bg-surface-container/20">
+            {!qrExpanded && (
+              <button
+                type="button"
+                onClick={() => setQrExpanded(true)}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/60 px-3 py-1.5 text-[11px] font-label font-bold text-on-surface-variant hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                QR
+              </button>
+            )}
+            {!formExpanded && (
+              <button
+                type="button"
+                onClick={() => setFormExpanded(true)}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/60 px-3 py-1.5 text-[11px] font-label font-bold text-on-surface-variant hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Registro
+              </button>
+            )}
+            {!cameraExpanded && (
+              <button
+                type="button"
+                onClick={() => setCameraExpanded(true)}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/60 px-3 py-1.5 text-[11px] font-label font-bold text-on-surface-variant hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                <Scan className="h-3.5 w-3.5" />
+                Escáner
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Customer section */}
+        <div className="shrink-0 border-b border-outline-variant/50">
+          <div className="px-4 py-3">
+            {!customerProfile ? (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+                <input
+                  type="text"
+                  value={customerSearchQuery}
+                  onChange={(e) => {
+                    setCustomerSearchQuery(e.target.value)
+                    if (!e.target.value) {
+                      setCustomerSearchResults(undefined)
+                    }
+                  }}
+                  placeholder="Buscar cliente..."
+                  className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container pl-10 pr-10 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+                <button
+                  onClick={() => setCameraExpanded(true)}
+                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
+                  title="Escanear tarjeta de lealtad"
+                >
+                  <Scan className="h-4 w-4" />
+                </button>
+
+                {customerSearchQuery && !searchingCustomer && (
+                  <div className="mt-2">
+                    {customerSearchResults ? (
+                      <button
+                        onClick={() => handleSelectSearchResult(customerSearchResults)}
+                        className="flex w-full items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container/60 px-3 py-2 hover:bg-surface-container transition-colors"
+                      >
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-container-highest text-xs font-bold text-on-surface">
+                          {customerSearchResults.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="truncate text-xs font-bold text-on-surface">
+                            {customerSearchResults.name}
+                          </p>
+                          <p className="truncate text-[10px] text-on-surface-variant">
+                            {customerSearchResults.email || customerSearchResults.phone || ''}
+                          </p>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-on-surface-variant" />
+                      </button>
+                    ) : (
+                      <p className="rounded-xl border border-outline-variant/40 bg-surface-container/30 px-3 py-2 text-xs text-on-surface-variant">
+                        No se encontró cliente
+                      </p>
                     )}
                   </div>
-                  {customerProfile.customer.email && (
-                    <p className="truncate text-[11px] text-on-surface-variant">{maskEmail(customerProfile.customer.email)}</p>
-                  )}
-                  {customerProfile.customer.phone && (
-                    <p className="truncate text-[11px] text-on-surface-variant">{maskPhone(customerProfile.customer.phone)}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => setProfileExpanded((v) => !v)}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${
-                    profileExpanded
+                )}
+
+                {searchingCustomer && (
+                  <p className="mt-2 text-xs text-on-surface-variant">Buscando...</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-sm font-headline font-bold text-on-surface">
+                    {customerProfile.customer.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 truncate font-headline font-bold text-sm text-on-surface">
+                        {customerProfile.customer.name}
+                      </p>
+                      {customerProfile.loyalty?.tier && (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-label font-bold uppercase tracking-wider ${customerProfile.loyalty.tier === 'platinum' ? 'bg-primary/20 text-primary' :
+                          customerProfile.loyalty.tier === 'gold' ? 'bg-amber-400/20 text-amber-400' :
+                            customerProfile.loyalty.tier === 'silver' ? 'bg-slate-400/20 text-slate-300' :
+                              'bg-orange-600/20 text-orange-400'
+                          }`}>
+                          {customerProfile.loyalty.tier}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                      <Star className="h-3 w-3 text-primary" />
+                      <span className="font-label font-bold">{customerProfile.loyalty?.points || 0} pts</span>
+                      <span className="text-outline-variant">·</span>
+                      <span>{customerProfile.customer.total_visits} visits</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setProfileExpanded((v) => !v)}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ${profileExpanded
                       ? 'border-primary/40 bg-primary/15 text-primary shadow-[0_0_0_1px_rgba(204,255,0,0.12),0_0_18px_rgba(204,255,0,0.18)]'
                       : 'border-outline-variant/70 bg-surface-container/70 text-on-surface-variant hover:border-primary/30 hover:bg-surface-container-high hover:text-on-surface'
-                  }`}
-                >
-                  {profileExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-                <button
-                  onClick={() => {
-                    setCustomerProfile(null)
-                    setCustomerSearchQuery('')
-                    setCustomerSearchResults(undefined)
-                  }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                <div className="flex items-center gap-1">
-                  <Star className="h-3 w-3 text-primary" />
-                  <span className="font-label font-bold">{customerProfile.loyalty?.points || 0} Points</span>
+                      }`}
+                  >
+                    {profileExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCustomerProfile(null)
+                      setCustomerSearchQuery('')
+                      setCustomerSearchResults(undefined)
+                      setQrExpanded(true)
+                      setCameraExpanded(true)
+                    }}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <span className="text-outline-variant">·</span>
-                <div className="flex items-center gap-1">
-                  <Heart className="h-3 w-3 text-secondary" />
-                  <span>{customerProfile.customer.total_visits} visits</span>
-                </div>
-              </div>
 
-              {/* Expandable details */}
-              <div className={`grid transition-[grid-template-rows,opacity,transform,margin-top] duration-300 ease-in-out ${
-                profileExpanded ? 'mt-0 opacity-100 grid-rows-[1fr]' : '-mt-1 opacity-0 grid-rows-[0fr] pointer-events-none'
-              }`}>
-                <div className="overflow-hidden">
-                  <div className="space-y-2 pt-1">
-                    {/* Stats cards */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
-                        <Star className="mx-auto mb-1 h-4 w-4 text-primary" />
-                        <p className="text-sm font-bold text-on-surface">{customerProfile.loyalty?.points || 0}</p>
-                        <p className="text-[10px] text-on-surface-variant">Points</p>
+                {/* Expanded details */}
+                <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${profileExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                  }`}>
+                  <div className="overflow-hidden">
+                    <div className="space-y-2 pt-3">
+                      {/* Contact info */}
+                      <div className="space-y-1 text-xs text-on-surface-variant bg-surface-container/40 rounded-xl px-3 py-2">
+                        {customerProfile.customer.email && (
+                          <p className="flex items-center gap-2">
+                            <span className="font-medium">Email:</span>
+                            <span className="truncate">{maskEmail(customerProfile.customer.email)}</span>
+                          </p>
+                        )}
+                        {customerProfile.customer.phone && (
+                          <p className="flex items-center gap-2">
+                            <span className="font-medium">Phone:</span>
+                            <span className="truncate">{maskPhone(customerProfile.customer.phone)}</span>
+                          </p>
+                        )}
                       </div>
-                      <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
-                        <ShoppingBag className="mx-auto mb-1 h-4 w-4 text-secondary" />
-                        <p className="text-sm font-bold text-on-surface">${Number(customerProfile.customer.total_spent || 0).toLocaleString()}</p>
-                        <p className="text-[10px] text-on-surface-variant">Total Spent</p>
-                      </div>
-                      <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
-                        <Tag className="mx-auto mb-1 h-4 w-4 text-tertiary" />
-                        <p className="text-sm font-bold text-on-surface">{customerProfile.customer.total_visits}</p>
-                        <p className="text-[10px] text-on-surface-variant">Visits</p>
-                      </div>
-                    </div>
 
-                    {/* Last visit + Birthday */}
-                    <div className="space-y-2">
-                      {(customerProfile.recentOrders && customerProfile.recentOrders.length > 0) && (
-                        <div className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container/40 px-3 py-2">
-                          <Clock className="h-4 w-4 text-on-surface-variant" />
-                          <span className="text-xs text-on-surface-variant">
-                            Last visit: <span className="font-bold text-on-surface">{formatDate(customerProfile.recentOrders[0].created_at)}</span>
-                          </span>
+                      {/* Stats cards */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                          <Star className="mx-auto mb-1 h-4 w-4 text-primary" />
+                          <p className="text-sm font-bold text-on-surface">{customerProfile.loyalty?.points || 0}</p>
+                          <p className="text-[10px] text-on-surface-variant">Points</p>
                         </div>
-                      )}
-
-                      {calcUpcomingBirthday(customerProfile.customer.birthday) !== null && (
-                        <div className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container/40 px-3 py-2">
-                          <Heart className="h-4 w-4 text-primary" />
-                          <span className="text-xs text-on-surface-variant">
-                            Birthday in <span className="font-bold text-primary">{calcUpcomingBirthday(customerProfile.customer.birthday)} days</span>
-                          </span>
+                        <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                          <ShoppingBag className="mx-auto mb-1 h-4 w-4 text-secondary" />
+                          <p className="text-sm font-bold text-on-surface">${Number(customerProfile.customer.total_spent || 0).toLocaleString()}</p>
+                          <p className="text-[10px] text-on-surface-variant">Total Spent</p>
                         </div>
-                      )}
-                    </div>
+                        <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                          <Tag className="mx-auto mb-1 h-4 w-4 text-tertiary" />
+                          <p className="text-sm font-bold text-on-surface">{customerProfile.customer.total_visits}</p>
+                          <p className="text-[10px] text-on-surface-variant">Visits</p>
+                        </div>
+                      </div>
 
-                    {/* Tags */}
-                    {customerProfile.customer.tags?.length > 0 && (
-                      <div>
-                        <p className="mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                          <Tag className="h-3 w-3" /> Tags
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {customerProfile.customer.tags.map((tag) => (
-                            <span key={tag} className="rounded-full border border-outline-variant/50 bg-surface-container-high px-2.5 py-0.5 text-[10px] text-on-surface-variant">
-                              {tag}
+                      {/* Last visit + Birthday */}
+                      <div className="space-y-2">
+                        {(customerProfile.recentOrders && customerProfile.recentOrders.length > 0) && (
+                          <div className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container/40 px-3 py-2">
+                            <Clock className="h-4 w-4 text-on-surface-variant" />
+                            <span className="text-xs text-on-surface-variant">
+                              Last visit: <span className="font-bold text-on-surface">{formatDate(customerProfile.recentOrders[0].created_at)}</span>
                             </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Preferences */}
-                    {Object.keys(customerProfile.customer.preferences || {}).length > 0 && (
-                      <div className="space-y-1">
-                        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Preferences</p>
-                        {Object.entries(customerProfile.customer.preferences).map(([key, value]) => (
-                          <div key={key} className="flex items-center justify-between rounded-lg bg-surface-container/40 px-3 py-1.5 text-xs">
-                            <span className="capitalize text-on-surface-variant">{key.replace(/_/g, ' ')}</span>
-                            <span className="font-bold text-on-surface">{String(value)}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )}
 
-                    {/* Recent orders */}
-                    {customerProfile.recentOrders && customerProfile.recentOrders.length > 0 && (
-                      <div>
-                        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Recent Orders</p>
-                        <div className="space-y-1.5">
-                          {customerProfile.recentOrders.map((order) => (
-                            <div key={order.id} className="rounded-lg bg-surface-container/40 px-3 py-2 text-xs space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <ShoppingBag className="h-3 w-3 text-on-surface-variant" />
-                                  <span className="text-on-surface-variant">#{String(order.order_number ?? '').slice(-6) || order.id.slice(0, 6)}</span>
-                                </div>
-                                <span className="font-bold text-on-surface">${Number(order.total || 0).toLocaleString()}</span>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                {order.items.map((item, i) => (
-                                  <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
-                                    {item.product_name || 'Product'}
-                                    {item.quantity > 1 && <span className="text-primary/50">x{item.quantity}</span>}
-                                  </span>
-                                ))}
-                              </div>
+                        {calcUpcomingBirthday(customerProfile.customer.birthday) !== null && (
+                          <div className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container/40 px-3 py-2">
+                            <Heart className="h-4 w-4 text-primary" />
+                            <span className="text-xs text-on-surface-variant">
+                              Birthday in <span className="font-bold text-primary">{calcUpcomingBirthday(customerProfile.customer.birthday)} days</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Tags */}
+                      {customerProfile.customer.tags?.length > 0 && (
+                        <div>
+                          <p className="mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                            <Tag className="h-3 w-3" /> Tags
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {customerProfile.customer.tags.map((tag) => (
+                              <span key={tag} className="rounded-full border border-outline-variant/50 bg-surface-container-high px-2.5 py-0.5 text-[10px] text-on-surface-variant">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preferences */}
+                      {Object.keys(customerProfile.customer.preferences || {}).length > 0 && (
+                        <div className="space-y-1">
+                          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Preferences</p>
+                          {Object.entries(customerProfile.customer.preferences).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between rounded-lg bg-surface-container/40 px-3 py-1.5 text-xs">
+                              <span className="capitalize text-on-surface-variant">{key.replace(/_/g, ' ')}</span>
+                              <span className="font-bold text-on-surface">{String(value)}</span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {loadingProfile && (
-                      <div className="flex items-center justify-center py-2">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      </div>
-                    )}
+                      {/* Recent orders */}
+                      {customerProfile.recentOrders && customerProfile.recentOrders.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Recent Orders</p>
+                          <div className="space-y-1.5">
+                            {customerProfile.recentOrders.map((order) => (
+                              <div key={order.id} className="rounded-lg bg-surface-container/40 px-3 py-2 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <ShoppingBag className="h-3 w-3 text-on-surface-variant" />
+                                    <span className="text-on-surface-variant">#{String(order.order_number ?? '').slice(-6) || order.id.slice(0, 6)}</span>
+                                  </div>
+                                  <span className="font-bold text-on-surface">${Number(order.total || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {order.items.map((item, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                      {item.product_name || 'Product'}
+                                      {item.quantity > 1 && <span className="text-primary/50">x{item.quantity}</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {loadingProfile && (
+                        <div className="flex items-center justify-center py-2">
+                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {!customerSearchQuery && (
-                <div>
-                  <p className="text-xs text-on-surface-variant">Busca un cliente</p>
-                  <p className="text-[10px] text-on-surface-variant/60">
-                    Por nombre, email o teléfono
-                  </p>
-                </div>
-              )}
-
-              {/* Search results */}
-              {customerSearchQuery && !searchingCustomer && (
-                <>
-                  {customerSearchResults ? (
-                    <button
-                      onClick={() => handleSelectSearchResult(customerSearchResults)}
-                      className="flex w-full items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface-container/60 px-3 py-2 hover:bg-surface-container transition-colors"
-                    >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-container-highest text-xs font-bold text-on-surface">
-                        {customerSearchResults.name.charAt(0)}
-                      </div>
-                      <div className="min-w-0 flex-1 text-left">
-                        <p className="truncate text-xs font-bold text-on-surface">
-                          {customerSearchResults.name}
-                        </p>
-                        <p className="truncate text-[10px] text-on-surface-variant">
-                          {customerSearchResults.email || customerSearchResults.phone || ''}
-                        </p>
-                      </div>
-                      <ArrowRight className="h-3.5 w-3.5 text-on-surface-variant" />
-                    </button>
-                  ) : (
-                    <p className="rounded-xl border border-outline-variant/40 bg-surface-container/30 px-3 py-2 text-xs text-on-surface-variant">
-                      No se encontró cliente
-                    </p>
-                  )}
-                </>
-              )}
-
-              {searchingCustomer && (
-                <p className="text-xs text-on-surface-variant">Buscando...</p>
-              )}
-            </>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Order summary header */}
@@ -953,7 +1027,15 @@ export default function SelfCheckoutPage() {
         <div className="shrink-0 border-t border-outline-variant/50 p-3 space-y-2">
           <div className="flex gap-2">
             <button
-              onClick={() => setShowPromo(true)}
+              onClick={() => {
+                if (promoPin) {
+                  setPromoPinInput('')
+                  setPromoPinError('')
+                  setShowPromoPinPrompt(true)
+                } else {
+                  setShowPromo(true)
+                }
+              }}
               disabled={cartItems.length === 0}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-outline-variant py-2.5 text-xs font-label font-bold text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
             >
@@ -1017,6 +1099,51 @@ export default function SelfCheckoutPage() {
         </div>
       )}
 
+      {/* ── Promo PIN prompt ────────────────────────────────────────── */}
+      {showPromoPinPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-xs rounded-2xl border border-outline-variant bg-surface-container p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-headline font-bold text-base text-on-surface">Código de descuento</h3>
+              <button
+                onClick={() => { setShowPromoPinPrompt(false); setPromoPinInput(''); setPromoPinError('') }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs text-on-surface-variant">Ingresa el código para aplicar un descuento</p>
+            <input
+              type="password"
+              maxLength={6}
+              value={promoPinInput}
+              onChange={(e) => { setPromoPinInput(e.target.value); setPromoPinError('') }}
+              placeholder="••••"
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-center text-xl font-headline tracking-[0.3em] text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              autoFocus
+            />
+            {promoPinError && (
+              <p className="text-xs text-error text-center">{promoPinError}</p>
+            )}
+            <button
+              onClick={() => {
+                if (promoPinInput === promoPin) {
+                  setShowPromoPinPrompt(false)
+                  setPromoPinInput('')
+                  setShowPromo(true)
+                } else {
+                  setPromoPinError('Código incorrecto')
+                }
+              }}
+              disabled={!promoPinInput}
+              className="w-full rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on disabled:opacity-40 transition-colors"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Promo modal ────────────────────────────────────────────── */}
       {showPromo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1034,21 +1161,19 @@ export default function SelfCheckoutPage() {
             <div className="flex gap-1 rounded-xl bg-surface-container-high p-1">
               <button
                 onClick={() => setPromoMode('percent')}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-label font-bold transition-colors ${
-                  promoMode === 'percent'
-                    ? 'bg-primary text-primary-on'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-label font-bold transition-colors ${promoMode === 'percent'
+                  ? 'bg-primary text-primary-on'
+                  : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
               >
                 % Porcentaje
               </button>
               <button
                 onClick={() => setPromoMode('fixed')}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-label font-bold transition-colors ${
-                  promoMode === 'fixed'
-                    ? 'bg-primary text-primary-on'
-                    : 'text-on-surface-variant hover:text-on-surface'
-                }`}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-label font-bold transition-colors ${promoMode === 'fixed'
+                  ? 'bg-primary text-primary-on'
+                  : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
               >
                 $ Fijo
               </button>

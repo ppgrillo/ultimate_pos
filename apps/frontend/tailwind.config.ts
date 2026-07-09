@@ -96,10 +96,21 @@ const config: Config = {
           '0%': { transform: 'translateY(0)' },
           '100%': { transform: 'translateY(100%)' },
         },
+        'float': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-4px)' },
+        },
+        'ping-slow': {
+          '0%': { transform: 'scale(0.95)', opacity: '0.7' },
+          '50%': { transform: 'scale(1.1)', opacity: '0.3' },
+          '100%': { transform: 'scale(0.95)', opacity: '0.7' },
+        },
       },
       animation: {
         'slide-up': 'slide-up 0.3s ease-out',
         'slide-down': 'slide-down 0.3s ease-out',
+        'float': 'float 2s ease-in-out infinite',
+        'ping-slow': 'ping-slow 3s ease-in-out infinite',
       },
     },
   },

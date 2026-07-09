@@ -191,9 +191,23 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent className="max-w-sm text-center" onInteractOutside={(e) => e.preventDefault()}>
         <div className="flex flex-col items-center gap-4 py-6">
-          <div className={`rounded-full p-4 ${config.bg}`}>
-            <Icon className={`h-10 w-10 ${config.color} ${currentState === 'created' || currentState === 'processing' ? 'animate-spin' : ''}`} />
-          </div>
+          {currentState === 'at_terminal' ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative flex items-center justify-center">
+                <div className="absolute h-24 w-24 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
+                <div className="rounded-full p-5 bg-primary/10">
+                  <Smartphone className="h-8 w-8 text-primary" />
+                </div>
+              </div>
+              <p className="text-sm font-label font-bold text-on-surface-variant tracking-wider uppercase">
+                Esperando pago en la terminal...
+              </p>
+            </div>
+          ) : (
+            <div className={`rounded-full p-4 ${config.bg}`}>
+              <Icon className={`h-10 w-10 ${config.color} ${currentState === 'created' || currentState === 'processing' ? 'animate-spin' : ''}`} />
+            </div>
+          )}
 
           <div>
             <h2 className="text-lg font-headline font-bold text-on-surface">{config.title}</h2>
@@ -204,20 +218,19 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             {formatCurrency(total)}
           </div>
 
-          {(currentState === 'created' || currentState === 'at_terminal' || currentState === 'processing') && (
+          {(currentState === 'created' || currentState === 'processing') && (
             <div className="flex flex-col items-center gap-3">
-              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Esperando pago en la terminal...
+              <div className="text-xs text-on-surface-variant">
+                <AnimatedDots />
               </div>
-              {(currentState === 'created' || currentState === 'at_terminal') && (
-                <div className="mt-2 w-full rounded-xl bg-surface-container/40 border border-outline-variant/50 p-3 text-left flex items-center gap-2.5">
-                  <ChevronLeft className="h-5 w-5 text-on-surface shrink-0" />
-                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    para cancelar presiona el botón <span className="font-bold text-on-surface">◀</span> (<span className="font-bold text-on-surface">inferior izq</span>) en la terminal
-                  </p>
-                </div>
-              )}
+            </div>
+          )}
+          {currentState === 'at_terminal' && (
+            <div className="mt-2 w-full rounded-xl bg-surface-container/40 border border-outline-variant/50 p-3 text-left flex items-center gap-2.5">
+              <ChevronLeft className="h-5 w-5 text-on-surface shrink-0" />
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                para cancelar presiona el botón <span className="font-bold text-on-surface">◀</span> (<span className="font-bold text-on-surface">inferior izq</span>) en la terminal
+              </p>
             </div>
           )}
 
@@ -280,5 +293,19 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
         </div>
       </ModalContent>
     </Modal>
+  )
+}
+
+// ─── Animated loading dots ────────────────────────────────────────────────────
+function AnimatedDots() {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-on-surface-variant">
+      Esperando pago en la terminal
+      <span className="inline-flex">
+        <span className="animate-bounce [animation-delay:0ms]">.</span>
+        <span className="animate-bounce [animation-delay:200ms]">.</span>
+        <span className="animate-bounce [animation-delay:400ms]">.</span>
+      </span>
+    </span>
   )
 }

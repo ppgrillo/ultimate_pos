@@ -51,6 +51,7 @@ export default function SettingsPage() {
   const [currencyUnit, setCurrencyUnit] = useState('points')
   const [signupBonusPoints, setSignupBonusPoints] = useState(0)
   const [pointsExpirationDays, setPointsExpirationDays] = useState(0)
+  const [promoPin, setPromoPin] = useState('')
 
   const [mounted, setMounted] = useState(false)
   const [registrationUrl, setRegistrationUrl] = useState('')
@@ -115,6 +116,7 @@ export default function SettingsPage() {
     setCurrencyUnit((settings?.currencyUnit as string) ?? 'points')
     setSignupBonusPoints((settings?.signupBonusPoints as number) ?? 0)
     setPointsExpirationDays((settings?.pointsExpirationDays as number) ?? 0)
+    setPromoPin((settings?.promoPin as string) ?? '')
 
     const design = (settings?.walletPassDesign as Record<string, unknown>) || {}
     setWalletPassDesignHexColor((design?.hexColor as string) ?? '#1F1F1F')
@@ -170,6 +172,7 @@ export default function SettingsPage() {
     currencyUnit !== ((settings?.currencyUnit as string) ?? 'points') ||
     signupBonusPoints !== ((settings?.signupBonusPoints as number) ?? 0) ||
     pointsExpirationDays !== ((settings?.pointsExpirationDays as number) ?? 0) ||
+    promoPin !== ((settings?.promoPin as string) ?? '') ||
 
     walletPassDesignHexColor !== (((settings?.walletPassDesign as Record<string, unknown>)?.hexColor as string) ?? '#1F1F1F') ||
     walletPassDesignLogoImageUrl !== (((settings?.walletPassDesign as Record<string, unknown>)?.logoImageUrl as string) ?? '') ||
@@ -219,6 +222,7 @@ export default function SettingsPage() {
         currencyUnit,
         signupBonusPoints,
         pointsExpirationDays,
+        promoPin: promoPin || undefined,
 
         name: designIssuerName,
         walletPassDesign: {
@@ -647,6 +651,7 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+
           </div>
         </TabsContent>
         <TabsContent value="checkout">
@@ -888,6 +893,39 @@ export default function SettingsPage() {
                     )}
                   </>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Discount PIN</CardTitle>
+                <CardDescription>Set a PIN for applying discounts in self-checkout — only staff who know the PIN can use it</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                  <label className="mb-1 block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                    Promo PIN
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="password"
+                      maxLength={6}
+                      value={promoPin}
+                      onChange={(e) => setPromoPin(e.target.value)}
+                      placeholder="Sin PIN"
+                      className="h-10 w-32 rounded-xl border border-outline-variant bg-background px-3 text-center text-lg font-headline tracking-[0.3em] text-on-surface placeholder:text-on-surface-variant/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                    <button
+                      onClick={() => setPromoPin('')}
+                      className="text-xs font-label font-bold text-on-surface-variant hover:text-error transition-colors"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    Déjalo vacío para permitir descuentos sin PIN
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>

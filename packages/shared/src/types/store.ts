@@ -25,6 +25,8 @@ export interface StoreSettings {
   pointsExpirationDays?: number
   // Business Info
   address?: string
+  // Promo
+  promoPin?: string
   // Self-Checkout
   selfCheckoutStations?: SelfCheckoutStation[]
   // Wallet

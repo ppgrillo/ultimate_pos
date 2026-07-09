@@ -13,7 +13,7 @@ import type { ScanLoyaltyResult } from '@ultimate-pos/shared'
 interface QRScannerPopoverProps {
   open: boolean
   onClose: () => void
-  variant?: 'popover' | 'modal'
+  variant?: 'popover' | 'modal' | 'inline'
   onScan?: (barcode: string) => Promise<ScanLoyaltyResult>
   onScanSuccess?: (result: ScanLoyaltyResult) => void
 }
@@ -159,6 +159,70 @@ export function QRScannerPopover({ open, onClose, variant = 'popover', onScan, o
 
   if (!open) return null
 
+  const isInline = variant === 'inline'
+
+  const cameraBody = (
+    <>
+      <div className="relative w-[200px] h-[200px] bg-black rounded-2xl overflow-hidden">
+        <div id={containerId} className="absolute inset-0" />
+
+        {!cameraError && !isSuccess && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 shadow-[inset_0_0_0_40px_rgba(0,0,0,0.35)] rounded-2xl" />
+            <div className="absolute left-8 right-8 h-px bg-primary"
+              style={{
+                top: '50%',
+                boxShadow: '0 0 8px #ccff00',
+                animation: 'scanLaser 2s ease-in-out infinite',
+              }}
+            />
+          </div>
+        )}
+
+        {isSuccess && (
+          <div className="absolute inset-0 bg-primary flex flex-col items-center justify-center gap-2 z-10">
+            <CheckCircle2 className="h-8 w-8 text-primary-on" />
+            <span className="text-sm font-bold text-primary-on">¡Éxito!</span>
+          </div>
+        )}
+
+        {cameraError && (
+          <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10 px-4 text-center">
+            <AlertCircle className="h-8 w-8 text-error" />
+            <span className="text-xs font-bold text-on-surface">{cameraError}</span>
+            <span className="text-[10px] text-on-surface-variant">Asegúrate de permitir el acceso a la cámara</span>
+          </div>
+        )}
+
+        {isLoading && !isSuccess && (
+          <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="text-xs font-bold text-on-surface">Validando...</span>
+          </div>
+        )}
+
+        {error && !isLoading && !isSuccess && (
+          <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10 px-4 text-center">
+            <AlertCircle className="h-8 w-8 text-error" />
+            <span className="text-xs font-bold text-on-surface">{error}</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-on-surface-variant text-center">
+        Coloca el código QR frente a la cámara
+      </p>
+    </>
+  )
+
+  if (isInline) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-4">
+        {cameraBody}
+      </div>
+    )
+  }
+
   const content = (
     <div className={cn(
       'flex flex-col',
@@ -179,55 +243,7 @@ export function QRScannerPopover({ open, onClose, variant = 'popover', onScan, o
       </div>
 
       <div className="flex flex-col items-center p-5 gap-4">
-        <div className="relative w-[200px] h-[200px] bg-black rounded-2xl overflow-hidden">
-          <div id={containerId} className="absolute inset-0" />
-
-          {!cameraError && !isSuccess && (
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 shadow-[inset_0_0_0_40px_rgba(0,0,0,0.35)] rounded-2xl" />
-              <div className="absolute left-8 right-8 h-px bg-primary"
-                style={{
-                  top: '50%',
-                  boxShadow: '0 0 8px #ccff00',
-                  animation: 'scanLaser 2s ease-in-out infinite',
-                }}
-              />
-            </div>
-          )}
-
-          {isSuccess && (
-            <div className="absolute inset-0 bg-primary flex flex-col items-center justify-center gap-2 z-10">
-              <CheckCircle2 className="h-8 w-8 text-primary-on" />
-              <span className="text-sm font-bold text-primary-on">¡Éxito!</span>
-            </div>
-          )}
-
-          {cameraError && (
-            <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10 px-4 text-center">
-              <AlertCircle className="h-8 w-8 text-error" />
-              <span className="text-xs font-bold text-on-surface">{cameraError}</span>
-              <span className="text-[10px] text-on-surface-variant">Asegúrate de permitir el acceso a la cámara</span>
-            </div>
-          )}
-
-          {isLoading && !isSuccess && (
-            <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="text-xs font-bold text-on-surface">Validando...</span>
-            </div>
-          )}
-
-          {error && !isLoading && !isSuccess && (
-            <div className="absolute inset-0 bg-surface/90 flex flex-col items-center justify-center gap-2 z-10 px-4 text-center">
-              <AlertCircle className="h-8 w-8 text-error" />
-              <span className="text-xs font-bold text-on-surface">{error}</span>
-            </div>
-          )}
-        </div>
-
-        <p className="text-xs text-on-surface-variant text-center">
-          Coloca el código QR frente a la cámara
-        </p>
+        {cameraBody}
       </div>
     </div>
   )

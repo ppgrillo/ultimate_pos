@@ -43,3 +43,5 @@ export { ExpandableText } from './ExpandableText'
 export { Skeleton } from './Skeleton'
 
 export { Pagination } from './Pagination'
+
+export { CollapsibleSection } from './CollapsibleSection'
