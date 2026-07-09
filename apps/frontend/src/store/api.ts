@@ -183,7 +183,7 @@ export const api = createApi({
       query: () => '/stores/current',
       providesTags: [{ type: 'Store', id: 'CURRENT' }],
     }),
-    updateStoreSettings: builder.mutation<Store, Partial<StoreSettings & { taxRate?: number }>>({
+    updateStoreSettings: builder.mutation<Store, Partial<StoreSettings & { taxRate?: number; name?: string }>>({
       query: (settings) => ({
         url: '/stores/settings',
         method: 'PUT',

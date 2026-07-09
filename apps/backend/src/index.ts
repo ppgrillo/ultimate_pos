@@ -17,6 +17,7 @@ import { appleWalletRouter } from './routes/apple-wallet'
 import { walletRouter } from './routes/wallet'
 import { filesRouter } from './routes/files'
 import { selfCheckoutRouter } from './routes/self-checkout'
+import { publicRouter } from './routes/public'
 
 const app = new Hono()
 
@@ -39,6 +40,7 @@ app.route('/apple-wallet', appleWalletRouter)
 app.route('/wallet', walletRouter)
 app.route('/files', filesRouter)
 app.route('/self-checkout', selfCheckoutRouter)
+app.route('/public', publicRouter)
 
 const port = Number(process.env.PORT) || 3001
 

@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, Plus, Trash2, ImageIcon, ExternalLink, Store, Globe, RefreshCw } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, Plus, Trash2, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy } from 'lucide-react'
 
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
@@ -15,8 +15,9 @@ import { api } from '@/lib/api/client'
 import { SelfCheckoutSettings } from './SelfCheckoutSettings'
 
 export default function SettingsPage() {
-  const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
-  const taxRate = useAppSelector((s) => s.storeConfig.currentStore?.tax_rate)
+  const currentStore = useAppSelector((s) => s.storeConfig.currentStore)
+  const settings = currentStore?.settings
+  const taxRate = currentStore?.tax_rate
 
   const [hasVariants, setHasVariants] = useState(false)
   const [hasLoyalty, setHasLoyalty] = useState(false)
@@ -51,6 +52,15 @@ export default function SettingsPage() {
   const [signupBonusPoints, setSignupBonusPoints] = useState(0)
   const [pointsExpirationDays, setPointsExpirationDays] = useState(0)
 
+  const [mounted, setMounted] = useState(false)
+  const [registrationUrl, setRegistrationUrl] = useState('')
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+    if (currentStore?.slug) {
+      setRegistrationUrl(`${window.location.origin}/tienda/${currentStore.slug}/registro`)
+    }
+  }, [currentStore?.slug])
   const [walletPassDesignHexColor, setWalletPassDesignHexColor] = useState('#1F1F1F')
   const [walletPassDesignLogoImageUrl, setWalletPassDesignLogoImageUrl] = useState('')
   const [walletPassDesignLogoText, setWalletPassDesignLogoText] = useState('')
@@ -210,6 +220,7 @@ export default function SettingsPage() {
         signupBonusPoints,
         pointsExpirationDays,
 
+        name: designIssuerName,
         walletPassDesign: {
           hexColor: walletPassDesignHexColor,
           logoImageUrl: walletPassDesignLogoImageUrl,
@@ -410,6 +421,47 @@ export default function SettingsPage() {
                     <span className="block text-xs text-on-surface-variant mt-0.5">Show kitchen-related messaging — disable for retail or service-based businesses</span>
                   </div>
                 </label>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Registro público de clientes</CardTitle>
+                <CardDescription>Comparte este enlace con tus clientes para que se registren y obtengan su tarjeta de lealtad</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Globe className="h-5 w-5 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-label font-bold text-on-surface-variant">Slug de tu tienda</p>
+                      <p className="text-sm font-mono text-on-surface truncate">{currentStore?.slug || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Store className="h-5 w-5 text-primary shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-label font-bold text-on-surface-variant">URL de registro</p>
+                      <p className="text-sm font-mono text-on-surface truncate">
+                        {mounted && registrationUrl ? registrationUrl : 'Cargando...'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!mounted || !registrationUrl}
+                      onClick={() => {
+                        navigator.clipboard.writeText(registrationUrl).then(() => {
+                          setCopiedUrl(true)
+                          setTimeout(() => setCopiedUrl(false), 2000)
+                        })
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors"
+                      title="Copiar enlace"
+                    >
+                      {copiedUrl ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 

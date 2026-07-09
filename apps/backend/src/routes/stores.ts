@@ -63,6 +63,38 @@ storesRouter.post('/upload-logo', requireRole('admin'), async (c) => {
   return c.json({ url: publicUrl.publicUrl })
 })
 
+storesRouter.put('/slug', requireRole('admin'), async (c) => {
+  const storeId = c.get('storeId')
+  if (!storeId) throw notFound('No store assigned')
+
+  const { slug } = await c.req.json()
+  if (!slug || typeof slug !== 'string' || !slug.trim()) {
+    throw badRequest('Slug is required')
+  }
+
+  const newSlug = slug.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+
+  const { data: existing } = await supabaseAdmin
+    .from('stores')
+    .select('id')
+    .eq('slug', newSlug)
+    .neq('id', storeId)
+    .maybeSingle()
+
+  if (existing) throw badRequest('Este slug ya está en uso por otra tienda')
+
+  const { data, error } = await supabaseAdmin
+    .from('stores')
+    .update({ slug: newSlug })
+    .eq('id', storeId)
+    .select('slug')
+    .single()
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ slug: data.slug })
+})
+
 storesRouter.put('/settings', requireRole('admin'), async (c) => {
   const storeId = c.get('storeId')
   if (!storeId) throw notFound('No store assigned')
@@ -79,6 +111,8 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
 
   const incoming = { ...settings }
   delete (incoming as any).taxRate
+  const storeName = (incoming as any).name
+  delete (incoming as any).name
 
   const encrypted = encryptSettings(incoming)
   const merged = { ...(current?.settings as Record<string, unknown> ?? {}), ...encrypted }
@@ -87,6 +121,10 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
 
   if (typeof settings.taxRate === 'number') {
     updateData.tax_rate = settings.taxRate
+  }
+
+  if (typeof storeName === 'string' && storeName.trim()) {
+    updateData.name = storeName.trim()
   }
 
   const { data, error } = await supabaseAdmin

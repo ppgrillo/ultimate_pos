@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
 import { useParams } from 'next/navigation'
 import { api, setApiToken } from '@/lib/api/client'
 import { formatCurrency } from '@/lib/utils'
@@ -12,8 +12,9 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { QRCodeSVG } from 'qrcode.react';
 import {
-  ShoppingBag,
+   ShoppingBag,
   X,
   Percent,
   CheckCircle2,
@@ -29,6 +30,9 @@ import {
   Tag,
   Clock,
   ArrowRight,
+  QrCode,
+  UserPlus,
+  Maximize2,
 } from 'lucide-react'
 import type { Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData } from '@ultimate-pos/shared'
 
@@ -77,6 +81,12 @@ export default function SelfCheckoutPage() {
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer | null | undefined>(undefined)
   const [searchingCustomer, setSearchingCustomer] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [registerName, setRegisterName] = useState('')
+  const [registerEmail, setRegisterEmail] = useState('')
+  const [registerPhone, setRegisterPhone] = useState('')
+  const [registeringCustomer, setRegisteringCustomer] = useState(false)
+  const [showRegisterForm, setShowRegisterForm] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
 
   // ─── Customer detail (rich profile) ────────────────────────────────────────
   interface CustomerProfile {
@@ -140,6 +150,11 @@ export default function SelfCheckoutPage() {
   // ─── Customer search ──────────────────────────────────────────────────────
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const publicCheckoutUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/self-checkout/${token}`
+    : ''
+  const registerUrl = publicCheckoutUrl ? `${publicCheckoutUrl}#registro` : ''
+
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     if (!customerSearchQuery.trim()) {
@@ -149,11 +164,12 @@ export default function SelfCheckoutPage() {
     setSearchingCustomer(true)
     searchTimeout.current = setTimeout(async () => {
       try {
-        const res = await api.get<{ data: Customer | null }>(
-          `/self-checkout/customers/lookup?code=${encodeURIComponent(customerSearchQuery.trim())}`,
+        const res = await apiFetch<{ data: Customer | null }>(
+          `/customers/lookup?code=${encodeURIComponent(customerSearchQuery.trim())}`,
         )
         setCustomerSearchResults(res.data)
-      } catch {
+      } catch (err) {
+        console.error('Customer lookup error:', err)
         setCustomerSearchResults(null)
       } finally {
         setSearchingCustomer(false)
@@ -195,6 +211,36 @@ export default function SelfCheckoutPage() {
     })
     setProfileExpanded(true)
   }, [])
+
+  const handleRegisterCustomer = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!registerName.trim()) return
+
+    setRegisteringCustomer(true)
+    try {
+      const res = await apiFetch<{ data: Customer }>('/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: registerName.trim(),
+          email: registerEmail.trim() || undefined,
+          phone: registerPhone.trim() || undefined,
+        }),
+      })
+
+      setCustomerProfile({ customer: res.data })
+      setProfileExpanded(false)
+      setCustomerSearchQuery('')
+      setCustomerSearchResults(undefined)
+      setRegisterName('')
+      setRegisterEmail('')
+      setRegisterPhone('')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error registering customer'
+      setErrorMsg(msg)
+    } finally {
+      setRegisteringCustomer(false)
+    }
+  }, [registerEmail, registerName, registerPhone, apiFetch])
 
   // ─── Customer search → profile ──────────────────────────────────────────
   const handleSelectSearchResult = useCallback(async (customer: Customer) => {
@@ -491,6 +537,105 @@ export default function SelfCheckoutPage() {
       {/* ── RIGHT: Cart sidebar ─────────────────────────────────────── */}
       <div className="flex w-[340px] shrink-0 flex-col border-l border-outline-variant/50 bg-surface-container/30">
 
+        <div id="registro" className="shrink-0 border-b border-outline-variant/50 px-4 py-3">
+          <div className="rounded-2xl border border-primary/30 bg-primary/10 p-3">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
+                <UserPlus className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-label font-bold uppercase tracking-wider text-primary">
+                  Identifícate
+                </p>
+                <p className="text-sm font-headline font-bold text-on-surface leading-tight">
+                  Regístrate con tu celular
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center w-full">
+              <div className="w-full max-w-[215px] p-0.5 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+                {registerUrl ? (
+                  <QRCodeSVG
+                    value={registerUrl}
+                    size={200}
+                    style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
+                    bgColor="#fff"
+                    fgColor="#222"
+                  />
+                ) : (
+                  <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
+                    <QrCode className="h-12 w-12" />
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowQRModal(true)}
+                className="mt-1 flex items-center justify-center gap-1 text-[11px] font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
+              >
+                <Maximize2 className="h-3 w-3" />
+                Ampliar QR
+              </button>
+
+              <div className="w-full max-w-[215px] mt-2 text-center">
+                <p className="text-xs text-on-surface-variant mb-2">
+                  Escanea para registrarte o toca el botón si prefieres hacerlo aquí.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterForm((v) => !v)}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-label font-bold text-primary-on transition-colors hover:bg-primary/90"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Registrar aquí
+                </button>
+              </div>
+
+              {showRegisterForm && (
+                <form onSubmit={handleRegisterCustomer} className="w-full max-w-[225px] mt-3 space-y-2 rounded-2xl border border-outline-variant/50 bg-surface-container/80 p-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      value={registerName}
+                      onChange={(e) => setRegisterName(e.target.value)}
+                      placeholder="Tu nombre"
+                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="email"
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      placeholder="Email"
+                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                    <input
+                      type="tel"
+                      value={registerPhone}
+                      onChange={(e) => setRegisterPhone(e.target.value)}
+                      placeholder="Teléfono"
+                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!registerName.trim() || registeringCustomer}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {registeringCustomer ? 'Registrando...' : 'Guardar cliente'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Customer section */}
         <div className="relative shrink-0 border-b border-outline-variant/50 px-4 py-3 space-y-2">
           {!customerProfile && (
@@ -548,10 +693,10 @@ export default function SelfCheckoutPage() {
                     )}
                   </div>
                   {customerProfile.customer.email && (
-                    <p className="truncate text-[11px] text-on-surface-variant">{customerProfile.customer.email}</p>
+                    <p className="truncate text-[11px] text-on-surface-variant">{maskEmail(customerProfile.customer.email)}</p>
                   )}
                   {customerProfile.customer.phone && (
-                    <p className="truncate text-[11px] text-on-surface-variant">{customerProfile.customer.phone}</p>
+                    <p className="truncate text-[11px] text-on-surface-variant">{maskPhone(customerProfile.customer.phone)}</p>
                   )}
                 </div>
                 <button
@@ -821,7 +966,7 @@ export default function SelfCheckoutPage() {
               className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-outline-variant py-2.5 text-xs font-label font-bold text-on-surface hover:bg-surface-container transition-colors disabled:opacity-40"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Limpiar
+              Nuevo pedido
             </button>
           </div>
 
@@ -844,6 +989,33 @@ export default function SelfCheckoutPage() {
           </button>
         </div>
       </div>
+
+      {/* ── QR expand modal ──────────────────────────────────────────── */}
+      {showQRModal && registerUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setShowQRModal(false)}
+        >
+          <div
+            className="relative rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowQRModal(false)}
+              className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full bg-surface-container text-on-surface shadow-lg hover:bg-surface-container-high transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <QRCodeSVG
+              value={registerUrl}
+              size={280}
+              bgColor="#fff"
+              fgColor="#222"
+              style={{ borderRadius: 16, display: 'block', margin: '0 auto' }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Promo modal ────────────────────────────────────────────── */}
       {showPromo && (
@@ -936,6 +1108,21 @@ export default function SelfCheckoutPage() {
       />
     </div>
   )
+}
+
+// ─── Masking helpers ─────────────────────────────────────────────────────────
+function maskEmail(v: string) {
+  const [local, domain] = v.split('@')
+  if (!domain) return v
+  const show = Math.min(local.length, 2)
+  return local.slice(0, show) + '******@' + domain
+}
+
+function maskPhone(v: string) {
+  const digits = v.replace(/\D/g, '')
+  if (digits.length <= 4) return digits.slice(0, 1) + '****'
+  const prefix = v.startsWith('+') ? 3 : 2
+  return v.slice(0, prefix) + '****' + v.slice(-4)
 }
 
 // ─── Inline cart item row (no Redux dependency) ──────────────────────────────

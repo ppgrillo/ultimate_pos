@@ -155,7 +155,7 @@ export async function syncGoogleWallet(cardId: string) {
 
     const { data: card } = await supabaseAdmin
       .from('loyalty_cards')
-      .select('*, digital_passes(*), customers(name), stores(name)')
+      .select('*, digital_passes(*), customers(name), stores(name, settings)')
       .eq('id', cardId)
       .single()
 
@@ -164,9 +164,13 @@ export async function syncGoogleWallet(cardId: string) {
     const suffix = getObjectSuffix(card.digital_passes.id)
     const classSuffix = getObjectSuffix(card.store_id)
 
+    // Use store settings' walletPassDesign.pointsLabel when available
+    const storeSettings = ((card.stores as any)?.settings || {}) as StoreSettings
+    const pointsLabel = ((storeSettings?.walletPassDesign as Record<string, unknown>)?.pointsLabel as string) || 'Puntos'
+
     await gws.patchObject(suffix, {
       loyaltyPoints: {
-        label: 'Puntos',
+        label: pointsLabel,
         balance: { string: String(card.points) },
       },
       accountName: card.customers?.name || 'Miembro',

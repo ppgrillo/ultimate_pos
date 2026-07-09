@@ -97,12 +97,16 @@ selfCheckoutRouter.get('/customers/lookup', async (c) => {
 
   if (!code) throw badRequest('Code is required')
 
-  const { data } = await supabaseAdmin
+  const { data: customers, error } = await supabaseAdmin
     .from('customers')
     .select('*')
     .eq('store_id', storeId)
-    .or(`id.eq.${code},phone.eq.${code},email.eq.${code}`)
-    .maybeSingle()
+    .or(`phone.eq.${code},phone.ilike.%${code}%,email.eq.${code},email.ilike.%${code}%,name.ilike.%${code}%`)
+    .limit(1)
+
+  if (error) throw badRequest(`Lookup query failed: ${error.message}`)
+
+  const data = customers?.[0] ?? null
 
   if (!data) return c.json({ data: null })
 
