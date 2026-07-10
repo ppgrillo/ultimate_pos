@@ -44,6 +44,7 @@ interface CartItem {
   price: number
   quantity: number
   image_url?: string | null
+  points?: number
 }
 
 type PageState = 'loading' | 'error' | 'browsing' | 'payment' | 'success'
@@ -61,6 +62,8 @@ export default function SelfCheckoutPage() {
   const [taxEnabled, setTaxEnabled] = useState(false)
   const [taxLabel, setTaxLabel] = useState('Tax')
   const [taxInclusive, setTaxInclusive] = useState(false)
+  const [hasLoyalty, setHasLoyalty] = useState(false)
+  const [pointsPerCurrency, setPointsPerCurrency] = useState(10)
 
   // ─── Catalogue ───────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([])
@@ -72,6 +75,7 @@ export default function SelfCheckoutPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [discount, setDiscount] = useState(0)
   const [discountLabel, setDiscountLabel] = useState('')
+  const [dismissedWelcome, setDismissedWelcome] = useState(false)
 
   // ─── Promo modal ──────────────────────────────────────────────────────────
   const [showPromo, setShowPromo] = useState(false)
@@ -144,6 +148,8 @@ export default function SelfCheckoutPage() {
       setTaxEnabled((settings?.taxEnabled as boolean) ?? false)
       setTaxLabel((settings?.taxLabel as string) ?? 'Tax')
       setTaxInclusive((settings?.taxInclusive as boolean) ?? false)
+      setHasLoyalty((settings?.hasLoyalty as boolean) ?? false)
+      setPointsPerCurrency((settings?.pointsPerCurrency as number) ?? 10)
       setPromoPin((settings?.promoPin as string) ?? '')
       setProducts(productsRes.data)
       setCategories(categoriesRes.data)
@@ -213,6 +219,7 @@ export default function SelfCheckoutPage() {
   }, [apiFetch])
 
   const handleScanSuccess = useCallback((result: ScanLoyaltyResult) => {
+    setDismissedWelcome(true)
     setCustomerProfile({
       customer: result.customer,
       loyalty: result.loyaltyCard,
@@ -238,6 +245,7 @@ export default function SelfCheckoutPage() {
         }),
       })
 
+      setDismissedWelcome(true)
       setCustomerProfile({ customer: res.data })
       setProfileExpanded(false)
       setQrExpanded(false)
@@ -268,12 +276,14 @@ export default function SelfCheckoutPage() {
       const json = await apiFetch<{ data: { customer: Customer; loyaltyCard: LoyaltyCardData | null; recentOrders: Array<{ id: string; order_number: number; total: number; created_at: string; items: Array<{ product_name: string; quantity: number }> }> } }>(
         `/customers/${customer.id}/detail`,
       )
+      setDismissedWelcome(true)
       setCustomerProfile({
         customer: json.data.customer,
         loyalty: json.data.loyaltyCard || undefined,
         recentOrders: json.data.recentOrders,
       })
     } catch {
+      setDismissedWelcome(true)
       setCustomerProfile({ customer })
     } finally {
       setLoadingProfile(false)
@@ -324,6 +334,7 @@ export default function SelfCheckoutPage() {
 
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
+    setDismissedWelcome(true)
     if (cartItems.length === 0) {
       setQrExpanded(false)
       setFormExpanded(false)
@@ -344,6 +355,7 @@ export default function SelfCheckoutPage() {
           price: Number(product.price),
           quantity: 1,
           image_url: product.image_url,
+          points: product.points ?? undefined,
         },
       ]
     })
@@ -376,6 +388,7 @@ export default function SelfCheckoutPage() {
     setCustomerSearchQuery('')
     setCustomerSearchResults(undefined)
     setSearchingCustomer(false)
+    setDismissedWelcome(false)
     setQrExpanded(true)
     setFormExpanded(false)
     setCameraExpanded(true)
@@ -542,7 +555,7 @@ export default function SelfCheckoutPage() {
               title="Reiniciar todo"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Reiniciar
+              Comenzar de Cero
             </button>
           </div>
         </header>
@@ -557,9 +570,41 @@ export default function SelfCheckoutPage() {
           />
         </div>
 
-        {/* Products grid */}
+        {/* Products grid or welcome hero */}
         <div className="flex-1 overflow-y-auto px-3 pb-6">
-          {filtered.length === 0 ? (
+          {!customerProfile && cartItems.length === 0 && !dismissedWelcome ? (
+            <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
+              <div className="relative mb-8">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="h-32 w-32 rounded-full bg-primary/5 blur-3xl" />
+                </div>
+                <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 via-amber-400/10 to-primary/5 ring-1 ring-primary/30">
+                  <Star className="h-9 w-9 text-primary" />
+                </div>
+              </div>
+
+              <h1 className="text-3xl font-headline font-black text-on-surface leading-tight">
+                ¡Bienvenido!
+              </h1>
+              <p className="mt-3 max-w-xs text-sm text-on-surface-variant leading-relaxed">
+                Escanea el QR para registrarte.
+                <br />
+                ¿Ya tienes tu tarjeta de lealtad? Escanéala arriba para <span className="font-bold text-primary">ganar puntos y descuentos</span>.
+              </p>
+
+              <button
+                onClick={() => { setDismissedWelcome(true); setQrExpanded(false); setFormExpanded(false); setCameraExpanded(false) }}
+                className="mt-8 flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-label font-bold text-primary-on transition-transform active:scale-[0.98] hover:bg-primary/90"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                Continuar como invitado sin beneficios
+              </button>
+
+              <p className="mt-4 text-[11px] text-on-surface-variant/50">
+                o escanea el código QR en la barra lateral para registrarte
+              </p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center py-20 text-center">
               <ShoppingCart className="mb-3 h-10 w-10 text-on-surface-variant/30" />
               <p className="text-sm text-on-surface-variant">No se encontraron productos</p>
@@ -588,7 +633,7 @@ export default function SelfCheckoutPage() {
 
         {/* QR collapsible section */}
         <CollapsibleSection
-          title="Identifícate"
+          title="Registrate Escane AQUI"
           expanded={qrExpanded}
           onToggle={() => setQrExpanded((v) => !v)}
           icon={<QrCode className="h-3.5 w-3.5" />}
@@ -990,6 +1035,8 @@ export default function SelfCheckoutPage() {
                   key={item.product_id}
                   item={item}
                   onQuantityChange={handleQuantityChange}
+                  hasLoyalty={hasLoyalty}
+                  pointsPerCurrency={pointsPerCurrency}
                 />
               ))}
             </div>
@@ -1254,14 +1301,23 @@ function maskPhone(v: string) {
 interface SelfCheckoutCartRowProps {
   item: CartItem
   onQuantityChange: (productId: string, qty: number) => void
+  hasLoyalty?: boolean
+  pointsPerCurrency?: number
 }
 
-function SelfCheckoutCartRow({ item, onQuantityChange }: SelfCheckoutCartRowProps) {
+function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPerCurrency: ppc }: SelfCheckoutCartRowProps) {
   const [imgError, setImgError] = useState(false)
   const imageUrl =
     item.image_url && !imgError
       ? (proxyImageUrl(item.image_url) ?? item.image_url)
       : null
+
+  const productPoints = item.points ?? 0
+  const itemPoints = hl
+    ? productPoints > 0
+      ? productPoints * item.quantity
+      : Math.floor(item.price * (ppc ?? 10)) * item.quantity
+    : 0
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-outline-variant bg-surface-container/50 p-3">
@@ -1279,9 +1335,17 @@ function SelfCheckoutCartRow({ item, onQuantityChange }: SelfCheckoutCartRowProp
       </div>
       <div className="flex-1 min-w-0">
         <p className="truncate font-headline font-bold text-sm text-on-surface">{item.name}</p>
-        <p className="font-headline font-bold text-sm text-primary mt-0.5">
-          {formatCurrency(item.price)}
-        </p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="font-headline font-bold text-sm text-primary">
+            {formatCurrency(item.price)}
+          </p>
+          {itemPoints > 0 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              <Star className="h-2.5 w-2.5 fill-primary" />
+              {itemPoints}
+            </span>
+          )}
+        </div>
       </div>
       <QuantityStepper
         value={item.quantity}

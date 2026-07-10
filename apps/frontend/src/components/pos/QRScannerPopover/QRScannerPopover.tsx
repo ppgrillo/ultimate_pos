@@ -61,6 +61,12 @@ export function QRScannerPopover({ open, onClose, variant = 'popover', onScan, o
     if (!open) return
 
     isMountedRef.current = true
+    setIsSuccess(false)
+    setError(null)
+    setCameraError(null)
+    setIsLoading(false)
+    isProcessingRef.current = false
+    lastScannedRef.current = null
 
     const startScanner = async () => {
       await new Promise((resolve) => setTimeout(resolve, 300))
