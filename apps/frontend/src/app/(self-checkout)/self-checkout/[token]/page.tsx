@@ -314,20 +314,27 @@ export default function SelfCheckoutPage() {
   }
 
   // ─── Derived ──────────────────────────────────────────────────────────────
-  const filtered = products.filter((p) => {
-    if (!p.is_active) return false
-    if (selectedCategory && p.category_id !== selectedCategory) return false
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const cat = categories.find((c) => c.id === p.category_id)
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.description?.toLowerCase().includes(q) ?? false) ||
-        (cat?.name.toLowerCase().includes(q) ?? false)
-      )
-    }
-    return true
-  })
+  const filtered = products
+    .filter((p) => {
+      if (!p.is_active) return false
+      if (selectedCategory && p.category_id !== selectedCategory) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const cat = categories.find((c) => c.id === p.category_id)
+        const matchesSearch =
+          p.name.toLowerCase().includes(q) ||
+          (p.description?.toLowerCase().includes(q) ?? false) ||
+          (cat?.name.toLowerCase().includes(q) ?? false)
+        return (p as Product & { pinned?: boolean }).pinned || matchesSearch
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const pa = (a as Product & { pinned?: boolean }).pinned ?? false
+      const pb = (b as Product & { pinned?: boolean }).pinned ?? false
+      if (pa !== pb) return pa ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0)
@@ -612,7 +619,7 @@ export default function SelfCheckoutPage() {
           ) : (
             <div
               className="grid gap-3"
-              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}
+              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}
             >
               {filtered.map((product) => (
                 <ProductCard
@@ -721,7 +728,7 @@ export default function SelfCheckoutPage() {
 
         {/* Camera collapsible section */}
         <CollapsibleSection
-          title="Escáner"
+          title="Escanea tu Tarjeta de Lealtad"
           expanded={cameraExpanded}
           onToggle={() => setCameraExpanded((v) => !v)}
           icon={<Scan className="h-3.5 w-3.5" />}

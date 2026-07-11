@@ -159,6 +159,17 @@ export const api = createApi({
       }),
       invalidatesTags: [{ type: 'Product', id: 'LIST' }],
     }),
+    toggleProductPin: builder.mutation<Product, { id: string }>({
+      query: ({ id }) => ({
+        url: `/products/${id}/toggle-pin`,
+        method: 'POST',
+      }),
+      transformResponse: (response: { data: Product }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Product', id },
+        { type: 'Product', id: 'LIST' },
+      ],
+    }),
     getCategories: builder.query<ProductCategory[], void>({
       query: () => '/categories',
       transformResponse: (response: { data: ProductCategory[] }) => response.data,
@@ -406,6 +417,7 @@ export const {
   useCreateProductMutation,
   useUpdateProductMutation,
   useDeleteProductsBatchMutation,
+  useToggleProductPinMutation,
   useGetCategoriesQuery,
   useCreateCategoryMutation,
   useGetCurrentStoreQuery,

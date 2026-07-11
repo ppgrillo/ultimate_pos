@@ -42,6 +42,7 @@ selfCheckoutRouter.get('/products', async (c) => {
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
+    .order('pinned', { ascending: false })
     .order('name')
 
   if (error) throw badRequest(error.message)

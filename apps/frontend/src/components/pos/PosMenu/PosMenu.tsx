@@ -19,17 +19,22 @@ export function PosMenu() {
   const products = sliceProducts.length > 0 ? sliceProducts : queryProducts
   const categories = sliceCategories.length > 0 ? sliceCategories : queryCategories
 
-  const filtered = products.filter((p) => {
-    if (!p.is_active) return false
-    if (selectedCategory && p.category_id !== selectedCategory) return false
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const category = categories.find((c) => c.id === p.category_id)
-      const matchesCategory = category?.name.toLowerCase().includes(q) ?? false
-      return p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false) || matchesCategory
-    }
-    return true
-  })
+  const filtered = products
+    .filter((p) => {
+      if (!p.is_active) return false
+      if (selectedCategory && p.category_id !== selectedCategory) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const category = categories.find((c) => c.id === p.category_id)
+        const matchesSearch = p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false) || (category?.name.toLowerCase().includes(q) ?? false)
+        return p.pinned || matchesSearch
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
 
   const handleAdd = (product: Product) => {
     if (product.modifiers && product.modifiers.length > 0) {

@@ -42,6 +42,7 @@ export const productSchema = z.object({
   low_stock_threshold: z.number().int().min(0).nullable().optional(),
   is_active: z.boolean().optional().default(true),
   tax_exempt: z.boolean().optional().default(false),
+  pinned: z.boolean().optional().default(false),
 })
 
 export const orderSchema = z.object({

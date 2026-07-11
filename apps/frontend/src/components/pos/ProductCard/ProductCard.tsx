@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, ShoppingCart } from 'lucide-react'
+import { Plus, ShoppingCart, Star } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
@@ -32,7 +32,12 @@ export function ProductCard({ product, onAdd, variant = 'compact' }: ProductCard
         onClick={() => onAdd(product)}
         className="group relative flex flex-col rounded-lg bg-surface-container/40 border border-outline-variant/60 overflow-hidden transition-all hover:border-primary/40 hover:shadow-md active:scale-[0.97] cursor-pointer"
       >
-        <div className="aspect-[4/3] bg-surface-container-high overflow-hidden">
+        <div className="relative aspect-[4/3] bg-surface-container-high overflow-hidden">
+          {product.pinned && (
+            <div className="absolute top-1.5 left-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#fbbf24] shadow-sm">
+              <Star className="h-3 w-3 fill-white text-white" />
+            </div>
+          )}
           {showImg ? (
             <img
               src={proxyImageUrl(product.image_url) ?? undefined}

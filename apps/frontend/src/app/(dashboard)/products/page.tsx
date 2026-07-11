@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen } from 'lucide-react'
+import { Plus, Pencil, Search, X, Upload, Trash2, CheckSquare, Square, ImagePlus, PackageOpen, Pin, PinOff } from 'lucide-react'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { Button } from '@/components/ui/Button'
@@ -15,7 +15,7 @@ import { BulkImageUpload } from '@/components/products/BulkImageUpload'
 import { formatCurrency } from '@/lib/utils'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery } from '@/store/api'
+import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery, useToggleProductPinMutation } from '@/store/api'
 
 interface ProductRow {
   id: string
@@ -25,6 +25,7 @@ interface ProductRow {
   modifiers: number
   category: string
   is_active: boolean
+  pinned: boolean
   stock_qty: number | null
   track_inventory: boolean
   low_stock_threshold: number | null
@@ -65,6 +66,7 @@ export default function ProductsPage() {
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
   const [deleteProductsBatch] = useDeleteProductsBatchMutation()
+  const [toggleProductPin] = useToggleProductPinMutation()
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -82,6 +84,7 @@ export default function ProductsPage() {
         modifiers: p.modifiers?.length ?? 0,
         category: p.category_id ? categoryMap.get(p.category_id) ?? '-' : '-',
         is_active: p.is_active,
+        pinned: p.pinned,
         stock_qty: p.stock_qty,
         track_inventory: p.track_inventory,
         low_stock_threshold: p.low_stock_threshold,
@@ -267,6 +270,30 @@ export default function ProductsPage() {
       },
     },
     {
+      id: 'pinned',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const p = row.original as ProductRow
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleProductPin({ id: p.id })
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
+            title={p.pinned ? 'Unpin' : 'Pin'}
+          >
+            {p.pinned ? (
+              <Pin className="h-4 w-4 fill-primary text-primary" />
+            ) : (
+              <PinOff className="h-4 w-4" />
+            )}
+          </button>
+        )
+      },
+    },
+    {
       id: 'actions',
       header: '',
       enableSorting: false,
@@ -435,8 +462,10 @@ export default function ProductsPage() {
                       price={p.price}
                       category=""
                       isActive={p.is_active}
+                      pinned={p.pinned}
                       selected={selectedIds.has(p.id)}
                       onToggle={toggleSelect}
+                      onPinToggle={(id) => toggleProductPin({ id })}
                     />
                   ))}
                 </div>

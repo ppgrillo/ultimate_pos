@@ -78,6 +78,7 @@ productsRouter.get('/', async (c) => {
     .from('products')
     .select('*')
     .eq('store_id', storeId)
+    .order('pinned', { ascending: false })
     .order('name')
 
   if (error) throw badRequest(error.message)
@@ -488,6 +489,33 @@ productsRouter.delete('/upload-image', requireRole('admin'), async (c) => {
   if (error) throw badRequest(error.message)
 
   return c.json({ message: 'Image deleted' })
+})
+
+productsRouter.post('/:id/toggle-pin', authMiddleware, async (c) => {
+  const supabase = supabaseAdmin
+  const id = c.req.param('id')
+  const storeId = c.get('storeId')
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('pinned')
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .single()
+
+  if (!product) throw notFound('Product not found')
+
+  const { data, error } = await supabase
+    .from('products')
+    .update({ pinned: !product.pinned })
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .select()
+    .single()
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ data })
 })
 
 productsRouter.put('/:id', requireRole('admin'), zValidator('json', productSchema), async (c) => {

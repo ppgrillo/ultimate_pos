@@ -32,6 +32,7 @@ export interface Product {
   low_stock_threshold: number | null
   is_active: boolean
   tax_exempt: boolean
+  pinned: boolean
   created_at: string
   updated_at: string
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { Pin, PinOff } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 
 interface ProductMobileCardProps {
@@ -8,14 +9,16 @@ interface ProductMobileCardProps {
   price: number
   category: string
   isActive: boolean
+  pinned?: boolean
   selected?: boolean
   onToggle?: (id: string) => void
+  onPinToggle?: (id: string) => void
   selectionMode?: boolean
 }
 
 export function ProductMobileCard({
   id, name, price, category, isActive,
-  selected, onToggle, selectionMode,
+  pinned, selected, onToggle, onPinToggle, selectionMode,
 }: ProductMobileCardProps) {
   return (
     <div
@@ -65,6 +68,21 @@ export function ProductMobileCard({
           )}
         </div>
       </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onPinToggle?.(id)
+        }}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
+        title={pinned ? 'Unpin' : 'Pin'}
+      >
+        {pinned ? (
+          <Pin className="h-4 w-4 fill-primary text-primary" />
+        ) : (
+          <PinOff className="h-4 w-4" />
+        )}
+      </button>
     </div>
   )
 }
