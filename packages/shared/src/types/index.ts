@@ -2,7 +2,7 @@ export type { Product, ProductCategory, ModifierGroup, ModifierOption } from './
 export type { Order, OrderItem, OrderStatus, OrderType, PaymentStatus, OrderMetadata, OrderStatusTransition } from './order'
 export { KITCHEN_FLOW, getNextKitchenTransitions, getNextRetailTransitions, canTransition } from './order'
 export type { User, UserRole } from './user'
-export type { Store, StoreMember, StoreSettings, SelfCheckoutStation } from './store'
+export type { Store, StoreMember, StoreSettings, SelfCheckoutStation, RegistrationInterestsConfig } from './store'
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField, LoyaltyCardData, ScanLoyaltyResult } from './customer'
 export type { LoyaltyTierName, RewardTier, RedemptionRule, LoyaltyProgram, LoyaltyTransactionType, LoyaltyTransaction } from './loyalty'
 export type { PassType, PassStatus, DigitalPass, CreatePassInput, UpdatePassInput } from './digital-pass'

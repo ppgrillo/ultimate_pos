@@ -32,6 +32,7 @@ publicRouter.get('/stores/:slug', async (c) => {
       settings: {
         hasLoyalty: settings.hasLoyalty ?? false,
         preferenceFields: settings.preferenceFields ?? [],
+        registrationInterestsConfig: settings.registrationInterestsConfig ?? undefined,
       },
     },
   })

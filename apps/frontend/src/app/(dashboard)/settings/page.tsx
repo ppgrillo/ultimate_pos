@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, Plus, Trash2, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy } from 'lucide-react'
 
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
@@ -46,7 +46,12 @@ export default function SettingsPage() {
   const [cancellingMpOrder, setCancellingMpOrder] = useState(false)
   const [cancelMpMessage, setCancelMpMessage] = useState('')
   const [cancelMpSuccess, setCancelMpSuccess] = useState(false)
-  const [preferenceFields, setPreferenceFields] = useState<Array<{ key: string; label: string; type: 'text' | 'select' | 'multiselect'; options?: string[]; placeholder?: string }>>([])
+  const [interestsEnabled, setInterestsEnabled] = useState(true)
+  const [interestsSectionTitle, setInterestsSectionTitle] = useState('Tus gustos e intereses')
+  const [interestsSectionDescription, setInterestsSectionDescription] = useState('Ayúdanos a conocerte mejor para enviarte ofertas personalizadas')
+  const [interestsFieldLabel, setInterestsFieldLabel] = useState('Categorías de interés')
+  const [interestsPlaceholder, setInterestsPlaceholder] = useState('ropa, electrónica, hogar, mascotas...')
+  const [interestsHintText, setInterestsHintText] = useState('Ej: moda, tecnología, deportes, cocina, viajes')
   const [pointsPerCurrency, setPointsPerCurrency] = useState(1)
   const [currencyUnit, setCurrencyUnit] = useState('points')
   const [signupBonusPoints, setSignupBonusPoints] = useState(0)
@@ -111,7 +116,13 @@ export default function SettingsPage() {
     setTransferEnabled(methods.includes('transfer'))
     setMpPointEnabled(settings?.mpPointEnabled ?? false)
     setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
-    setPreferenceFields(settings?.preferenceFields ?? [])
+    const ic = settings?.registrationInterestsConfig
+    setInterestsEnabled(ic?.enabled ?? true)
+    setInterestsSectionTitle(ic?.sectionTitle ?? 'Tus gustos e intereses')
+    setInterestsSectionDescription(ic?.sectionDescription ?? 'Ayúdanos a conocerte mejor para enviarte ofertas personalizadas')
+    setInterestsFieldLabel(ic?.fieldLabel ?? 'Categorías de interés')
+    setInterestsPlaceholder(ic?.placeholder ?? 'ropa, electrónica, hogar, mascotas...')
+    setInterestsHintText(ic?.hintText ?? 'Ej: moda, tecnología, deportes, cocina, viajes')
     setPointsPerCurrency((settings?.pointsPerCurrency as number) ?? 1)
     setCurrencyUnit((settings?.currencyUnit as string) ?? 'points')
     setSignupBonusPoints((settings?.signupBonusPoints as number) ?? 0)
@@ -167,7 +178,12 @@ export default function SettingsPage() {
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
     mpPointAccessToken !== '' ||
     mpClientSecret !== '' ||
-    JSON.stringify(preferenceFields) !== JSON.stringify(settings?.preferenceFields ?? []) ||
+    interestsEnabled !== (settings?.registrationInterestsConfig?.enabled ?? true) ||
+    interestsSectionTitle !== (settings?.registrationInterestsConfig?.sectionTitle ?? 'Tus gustos e intereses') ||
+    interestsSectionDescription !== (settings?.registrationInterestsConfig?.sectionDescription ?? 'Ayúdanos a conocerte mejor para enviarte ofertas personalizadas') ||
+    interestsFieldLabel !== (settings?.registrationInterestsConfig?.fieldLabel ?? 'Categorías de interés') ||
+    interestsPlaceholder !== (settings?.registrationInterestsConfig?.placeholder ?? 'ropa, electrónica, hogar, mascotas...') ||
+    interestsHintText !== (settings?.registrationInterestsConfig?.hintText ?? 'Ej: moda, tecnología, deportes, cocina, viajes') ||
     pointsPerCurrency !== ((settings?.pointsPerCurrency as number) ?? 1) ||
     currencyUnit !== ((settings?.currencyUnit as string) ?? 'points') ||
     signupBonusPoints !== ((settings?.signupBonusPoints as number) ?? 0) ||
@@ -217,7 +233,14 @@ export default function SettingsPage() {
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         ...(mpClientSecret ? { mpClientSecret } : {}),
-        preferenceFields,
+        registrationInterestsConfig: {
+          enabled: interestsEnabled,
+          sectionTitle: interestsSectionTitle,
+          sectionDescription: interestsSectionDescription,
+          fieldLabel: interestsFieldLabel,
+          placeholder: interestsPlaceholder,
+          hintText: interestsHintText,
+        },
         pointsPerCurrency,
         currencyUnit,
         signupBonusPoints,
@@ -471,105 +494,77 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Customer Preferences</CardTitle>
-                <CardDescription>Define what preferences your customers can have — these appear in the customer form as editable fields</CardDescription>
+                <CardTitle>Formulario de registro — Gustos e intereses</CardTitle>
+                <CardDescription>Personaliza la sección de intereses que ven tus clientes al registrarse</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {preferenceFields.map((field, idx) => (
-                  <div key={idx} className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-label font-bold text-on-surface">{field.label || 'New Field'}</span>
-                      <button
-                        onClick={() => setPreferenceFields((prev) => prev.filter((_, i) => i !== idx))}
-                        className="flex h-7 w-7 items-center justify-center rounded-lg text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Key</label>
-                        <input
-                          value={field.key}
-                          onChange={(e) => {
-                            const next = [...preferenceFields]
-                            next[idx] = { ...next[idx], key: e.target.value }
-                            setPreferenceFields(next)
-                          }}
-                          placeholder="e.g. clothing_style"
-                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Label</label>
-                        <input
-                          value={field.label}
-                          onChange={(e) => {
-                            const next = [...preferenceFields]
-                            next[idx] = { ...next[idx], label: e.target.value }
-                            setPreferenceFields(next)
-                          }}
-                          placeholder="e.g. Clothing Style"
-                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 mt-3">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Type</label>
-                        <select
-                          value={field.type}
-                          onChange={(e) => {
-                            const next = [...preferenceFields]
-                            next[idx] = { ...next[idx], type: e.target.value as 'text' | 'select' | 'multiselect' }
-                            setPreferenceFields(next)
-                          }}
-                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                        >
-                          <option value="text">Text</option>
-                          <option value="select">Select (single)</option>
-                          <option value="multiselect">Multi-select</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Placeholder</label>
-                        <input
-                          value={field.placeholder || ''}
-                          onChange={(e) => {
-                            const next = [...preferenceFields]
-                            next[idx] = { ...next[idx], placeholder: e.target.value }
-                            setPreferenceFields(next)
-                          }}
-                          placeholder="Optional"
-                          className="h-8 w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                        />
-                      </div>
-                    </div>
-                    {(field.type === 'select' || field.type === 'multiselect') && (
-                      <div className="mt-3">
-                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Options <span className="text-on-surface-variant/50">(one per line)</span></label>
-                        <textarea
-                          value={(field.options || []).join('\n')}
-                          onChange={(e) => {
-                            const next = [...preferenceFields]
-                            next[idx] = { ...next[idx], options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) }
-                            setPreferenceFields(next)
-                          }}
-                          placeholder="Streetwear&#10;Formal&#10;Deportivo"
-                          rows={3}
-                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-2.5 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                        />
-                      </div>
-                    )}
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={interestsEnabled}
+                    onChange={(e) => setInterestsEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Mostrar sección de intereses</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Cuando está desactivado, los clientes solo ven datos personales</span>
                   </div>
-                ))}
-                <button
-                  onClick={() => setPreferenceFields((prev) => [...prev, { key: '', label: '', type: 'text', options: [], placeholder: '' }])}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline-variant/50 p-4 text-sm text-on-surface-variant hover:border-primary/50 hover:text-primary transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Preference Field
-                </button>
+                </label>
+
+                {interestsEnabled && (
+                  <>
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Título de la sección</label>
+                      <input
+                        value={interestsSectionTitle}
+                        onChange={(e) => setInterestsSectionTitle(e.target.value)}
+                        placeholder="Tus gustos e intereses"
+                        className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      />
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Descripción</label>
+                      <input
+                        value={interestsSectionDescription}
+                        onChange={(e) => setInterestsSectionDescription(e.target.value)}
+                        placeholder="Ayúdanos a conocerte mejor para enviarte ofertas personalizadas"
+                        className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Etiqueta del campo</label>
+                        <input
+                          value={interestsFieldLabel}
+                          onChange={(e) => setInterestsFieldLabel(e.target.value)}
+                          placeholder="Categorías de interés"
+                          className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                      <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Placeholder</label>
+                        <input
+                          value={interestsPlaceholder}
+                          onChange={(e) => setInterestsPlaceholder(e.target.value)}
+                          placeholder="ropa, electrónica, hogar, mascotas..."
+                          className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Texto de ejemplo</label>
+                      <input
+                        value={interestsHintText}
+                        onChange={(e) => setInterestsHintText(e.target.value)}
+                        placeholder="Ej: moda, tecnología, deportes, cocina, viajes"
+                        className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

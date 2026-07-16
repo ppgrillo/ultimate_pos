@@ -58,6 +58,7 @@ export default function SelfCheckoutPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [storeName, setStoreName] = useState('')
   const [stationName, setStationName] = useState('')
+  const [storeSlug, setStoreSlug] = useState('')
   const [taxRate, setTaxRate] = useState(0)
   const [taxEnabled, setTaxEnabled] = useState(false)
   const [taxLabel, setTaxLabel] = useState('Tax')
@@ -135,7 +136,7 @@ export default function SelfCheckoutPage() {
   async function loadData() {
     try {
       const [verifyRes, productsRes, categoriesRes] = await Promise.all([
-        api.get<{ data: { store: { name: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string } } }>('/self-checkout/verify'),
+        api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string } } }>('/self-checkout/verify'),
         api.get<{ data: Product[] }>('/self-checkout/products'),
         api.get<{ data: ProductCategory[] }>('/self-checkout/categories'),
       ])
@@ -143,6 +144,7 @@ export default function SelfCheckoutPage() {
       const storeData = verifyRes.data.store
       const settings = storeData.settings as Record<string, unknown> | undefined
       setStoreName(storeData.name)
+      setStoreSlug(storeData.slug)
       setStationName(verifyRes.data.station.name)
       setTaxRate(storeData.tax_rate ? Number(storeData.tax_rate) / 100 : 0)
       setTaxEnabled((settings?.taxEnabled as boolean) ?? false)
@@ -164,10 +166,9 @@ export default function SelfCheckoutPage() {
   // ─── Customer search ──────────────────────────────────────────────────────
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const publicCheckoutUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/self-checkout/${token}`
+  const registerUrl = typeof window !== 'undefined' && storeSlug
+    ? `${window.location.origin}/tienda/${storeSlug}/registro`
     : ''
-  const registerUrl = publicCheckoutUrl ? `${publicCheckoutUrl}#registro` : ''
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current)

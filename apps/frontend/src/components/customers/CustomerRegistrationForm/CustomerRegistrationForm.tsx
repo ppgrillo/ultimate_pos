@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { PreferenceField, Customer } from '@ultimate-pos/shared'
+import type { Customer, RegistrationInterestsConfig } from '@ultimate-pos/shared'
 import { Sparkles, CheckCircle2, Loader2 } from 'lucide-react'
 import { FaApple } from 'react-icons/fa'
 import { SiGooglepay } from 'react-icons/si'
@@ -23,7 +23,7 @@ interface StoreInfo {
   logoUrl: string | null
   settings: {
     hasLoyalty: boolean
-    preferenceFields: PreferenceField[]
+    registrationInterestsConfig?: RegistrationInterestsConfig
   }
 }
 
@@ -46,7 +46,6 @@ export function CustomerRegistrationForm({
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [tagsInput, setTagsInput] = useState('')
-  const [preferences, setPreferences] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -80,20 +79,7 @@ export function CustomerRegistrationForm({
     setPhone('')
     setEmail('')
     setTagsInput('')
-    setPreferences({})
     setError(null)
-  }
-
-  function handlePreferenceChange(key: string, value: unknown) {
-    setPreferences((prev) => ({ ...prev, [key]: value }))
-  }
-
-  function handleMultiselectToggle(fieldKey: string, option: string) {
-    const current: string[] = (preferences[fieldKey] as string[]) || []
-    const next = current.includes(option)
-      ? current.filter((s) => s !== option)
-      : [...current, option]
-    handlePreferenceChange(fieldKey, next)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -116,7 +102,6 @@ export function CustomerRegistrationForm({
           phone: phone.trim() || null,
           email: email.trim() || null,
           tags: tags.length > 0 ? tags : undefined,
-          preferences: Object.keys(preferences).length > 0 ? preferences : undefined,
         }),
       })
 
@@ -316,87 +301,39 @@ export function CustomerRegistrationForm({
               </div>
             </div>
 
-            {!minimal && (
-              <>
+            {!minimal && (() => {
+              const ic = storeInfo?.settings?.registrationInterestsConfig
+              const enabled = ic?.enabled ?? true
+              if (!enabled) return null
+              const sectionTitle = ic?.sectionTitle || 'Tus gustos e intereses'
+              const sectionDescription = ic?.sectionDescription || 'Ayúdanos a conocerte mejor para enviarte ofertas personalizadas'
+              const fieldLabel = ic?.fieldLabel || 'Categorías de interés'
+              const placeholder = ic?.placeholder || 'ropa, electrónica, hogar, mascotas...'
+              const hintText = ic?.hintText || 'Ej: moda, tecnología, deportes, cocina, viajes'
+              return (
                 <div className="rounded-2xl border border-outline-variant bg-surface-container p-5 space-y-4">
-                  <h2 className="text-sm font-headline font-bold text-on-surface">Tus gustos e intereses</h2>
+                  <h2 className="text-sm font-headline font-bold text-on-surface">{sectionTitle}</h2>
                   <p className="text-xs text-on-surface-variant -mt-2">
-                    Ayúdanos a conocerte mejor para enviarte ofertas personalizadas
+                    {sectionDescription}
                   </p>
 
                   <div>
                     <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">
-                      Categorías de interés <span className="text-on-surface-variant/50">(separadas por coma)</span>
+                      {fieldLabel} <span className="text-on-surface-variant/50">(separadas por coma)</span>
                     </label>
                     <input
                       value={tagsInput}
                       onChange={(e) => setTagsInput(e.target.value)}
-                      placeholder="ropa, electrónica, hogar, mascotas..."
+                      placeholder={placeholder}
                       className="h-11 w-full rounded-xl border border-outline-variant bg-surface-container px-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     />
                     <p className="mt-1.5 text-[10px] text-on-surface-variant/70">
-                      Ej: moda, tecnología, deportes, cocina, viajes
+                      {hintText}
                     </p>
                   </div>
                 </div>
-
-                {storeInfo?.settings?.preferenceFields && storeInfo.settings.preferenceFields.length > 0 && (
-                  <div className="rounded-2xl border border-outline-variant bg-surface-container p-5 space-y-4">
-                    <h2 className="text-sm font-headline font-bold text-on-surface">Preferencias</h2>
-                    <div className="space-y-4">
-                      {storeInfo.settings.preferenceFields.map((field) => (
-                        <div key={field.key}>
-                          <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">
-                            {field.label}
-                          </label>
-                          {field.type === 'text' && (
-                            <input
-                              value={(preferences[field.key] as string) || ''}
-                              onChange={(e) => handlePreferenceChange(field.key, e.target.value)}
-                              placeholder={field.placeholder || `Ingresa tu ${field.label.toLowerCase()}...`}
-                              className="h-11 w-full rounded-xl border border-outline-variant bg-surface-container px-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            />
-                          )}
-                          {field.type === 'select' && (
-                            <select
-                              value={(preferences[field.key] as string) || ''}
-                              onChange={(e) => handlePreferenceChange(field.key, e.target.value)}
-                              className="h-11 w-full rounded-xl border border-outline-variant bg-surface-container px-4 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {(field.options || []).map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          )}
-                          {field.type === 'multiselect' && (
-                            <div className="flex flex-wrap gap-2">
-                              {(field.options || []).map((opt) => {
-                                const selected = ((preferences[field.key] as string[]) || []).includes(opt)
-                                return (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => handleMultiselectToggle(field.key, opt)}
-                                    className={`rounded-full px-4 py-2 text-xs font-label font-bold transition-all ${
-                                      selected
-                                        ? 'bg-primary text-primary-on shadow-sm'
-                                        : 'bg-surface-container-high text-on-surface-variant border border-outline-variant/50'
-                                    }`}
-                                  >
-                                    {opt}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+              )
+            })()}
 
             {error && (
               <div className="rounded-xl bg-error/10 border border-error/30 px-4 py-3">

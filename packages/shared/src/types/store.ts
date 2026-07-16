@@ -1,6 +1,15 @@
 import type { PaymentMethod, PreferenceField } from './customer'
 import type { LoyaltyProgram } from './loyalty'
 
+export interface RegistrationInterestsConfig {
+  enabled: boolean
+  sectionTitle: string
+  sectionDescription: string
+  fieldLabel: string
+  placeholder: string
+  hintText: string
+}
+
 export interface StoreSettings {
   hasVariants: boolean
   hasLoyalty: boolean
@@ -18,6 +27,7 @@ export interface StoreSettings {
   mpPointAccessToken: string
   mpClientSecret?: string
   preferenceFields: PreferenceField[]
+  registrationInterestsConfig?: RegistrationInterestsConfig
   // Loyalty
   pointsPerCurrency?: number
   currencyUnit?: string
