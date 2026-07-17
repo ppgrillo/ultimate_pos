@@ -12,6 +12,7 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import type { LoyaltyData } from '@/components/pos/MPPointPayment/MPPointPayment'
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import {
@@ -27,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   Star,
+  Stars,
   Heart,
   Tag,
   Clock,
@@ -35,6 +37,10 @@ import {
   UserPlus,
   Maximize2,
   RotateCcw,
+  User,
+  Package,
+  CreditCard,
+  Banknote,
 } from 'lucide-react'
 import type { Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData } from '@ultimate-pos/shared'
 
@@ -122,7 +128,9 @@ export default function SelfCheckoutPage() {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false)
   const [lastOrder, setLastOrder] = useState<{
     total: number
-    items: { name: string; quantity: number }[]
+    items: { name: string; quantity: number; price: number }[]
+    loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }
+    customerName?: string
   } | null>(null)
 
   // ─── Init ─────────────────────────────────────────────────────────────────
@@ -449,10 +457,12 @@ export default function SelfCheckoutPage() {
     }
   }
 
-  function handlePaid() {
+  function handlePaid(loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }) {
     setLastOrder({
       total: subtotal - discount,
-      items: cartItems.map((i) => ({ name: i.name, quantity: i.quantity })),
+      items: cartItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      loyalty,
+      customerName: customerProfile?.customer?.name,
     })
     setPageState('success')
   }
@@ -506,37 +516,126 @@ export default function SelfCheckoutPage() {
 
   // ─── Success screen ───────────────────────────────────────────────────────
   if (pageState === 'success') {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-16 text-center">
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-          <CheckCircle2 className="h-10 w-10 text-primary" />
-        </div>
-        <h2 className="text-2xl font-headline font-bold text-on-surface">¡Pago exitoso!</h2>
-        <p className="mt-2 text-sm text-on-surface-variant">Tu pedido ha sido registrado</p>
+    const loyalty = lastOrder?.loyalty
+    const hasLoyaltyData = loyalty && loyalty.pointsEarned > 0
+    const customerName = lastOrder?.customerName
 
-        <div className="mt-8 w-full max-w-sm rounded-xl border border-outline-variant/50 bg-surface-container/50 p-4 text-left">
-          <div className="space-y-2 text-sm">
-            {lastOrder?.items.map((item, i) => (
-              <div key={i} className="flex justify-between text-on-surface">
-                <span>
-                  {item.quantity}x {item.name}
-                </span>
-              </div>
-            ))}
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
+        {/* Animated success glow */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-28 w-28 animate-pulse rounded-full bg-primary/10 blur-3xl" />
           </div>
-          <div className="mt-4 border-t border-outline-variant/50 pt-3">
-            <div className="flex justify-between font-headline font-bold text-lg text-on-surface">
-              <span>Total</span>
-              <span>{formatCurrency(lastOrder?.total ?? 0)}</span>
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary/25 via-primary/10 to-transparent ring-1 ring-primary/30 shadow-[0_0_40px_rgba(204,255,0,0.15)]">
+            <CheckCircle2 className="h-10 w-10 text-primary drop-shadow-[0_0_8px_rgba(204,255,0,0.4)]" />
+          </div>
+        </div>
+
+        <h2 className="text-2xl font-headline font-black text-on-surface">
+          {customerName ? `¡Gracias, ${customerName}!` : '¡Pago exitoso!'}
+        </h2>
+        <p className="mt-1.5 text-sm text-on-surface-variant">
+          {hasLoyaltyData
+            ? `Ganaste ${loyalty.pointsEarned} puntos de lealtad`
+            : 'Tu pedido ha sido registrado'}
+        </p>
+
+        {/* Premium receipt card */}
+        <div className="mt-8 w-full max-w-sm overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container/60 backdrop-blur-sm">
+          {/* Receipt header */}
+          <div className="border-b border-outline-variant/40 px-5 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15">
+                <Receipt className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Resumen de compra</p>
+                <p className="text-[10px] text-on-surface-variant/60">{storeName}</p>
+              </div>
             </div>
           </div>
+
+          {/* Items list */}
+          <div className="px-5 py-3.5">
+            <div className="space-y-2.5">
+              {lastOrder?.items.map((item, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-[11px] font-bold text-on-surface-variant">
+                    {item.quantity}x
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-on-surface">{item.name}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-headline font-bold text-on-surface">
+                    {formatCurrency(item.price * item.quantity)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="mx-5 border-t border-dashed border-outline-variant/50" />
+
+          {/* Total */}
+          <div className="px-5 py-3.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-label font-bold text-on-surface-variant">Total</span>
+              <span className="text-xl font-headline font-black text-primary">
+                {formatCurrency(lastOrder?.total ?? 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* Payment method badge */}
+          <div className="border-t border-outline-variant/40 px-5 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                <CreditCard className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-[11px] font-label font-bold text-on-surface">Pago con MP Point</p>
+                <p className="text-[10px] text-on-surface-variant">Terminal Point</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Loyalty points section */}
+          {hasLoyaltyData && (
+            <>
+              <div className="mx-5 border-t border-outline-variant/40" />
+              <div className="px-5 py-4">
+                <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-3.5 ring-1 ring-primary/20">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20 shadow-[0_0_12px_rgba(204,255,0,0.15)]">
+                    <Stars className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                      Puntos de lealtad
+                    </p>
+                    <p className="mt-0.5 text-lg font-headline font-black text-primary">
+                      {loyalty.pointsBefore} → {loyalty.pointsAfter}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-label font-bold text-primary">
+                      +{loyalty.pointsEarned}
+                    </p>
+                    <p className="text-[10px] text-on-surface-variant">ganados</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
+        {/* New order button */}
         <button
           onClick={handleNewOrder}
-          className="mt-8 flex items-center gap-2 rounded-xl bg-primary px-8 py-3 text-sm font-label font-bold text-primary-on transition-transform active:scale-[0.98]"
+          className="mt-8 flex items-center gap-2.5 rounded-2xl bg-primary px-10 py-4 text-sm font-label font-bold text-primary-on shadow-[0_8px_32px_rgba(204,255,0,0.2)] transition-all hover:shadow-[0_12px_40px_rgba(204,255,0,0.3)] active:scale-[0.97]"
         >
-          <Receipt className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4" />
           Nuevo pedido
         </button>
       </div>

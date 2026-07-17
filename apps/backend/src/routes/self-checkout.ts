@@ -365,6 +365,8 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
 
   const meta = (order.metadata as Record<string, unknown>) || {}
 
+  let loyaltyData: { pointsEarned: number; pointsBefore: number; pointsAfter: number } | undefined
+
   if (meta.mpOrderId && (meta.mpOrderStatus === 'created' || meta.mpOrderStatus === 'at_terminal')) {
     const settings = await getStoreSettings(storeId)
     const accessToken = (settings?.mpPointAccessToken as string)
@@ -384,7 +386,10 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
               .update({ status: 'completed' })
               .eq('order_id', orderId)
             const { processMpLoyalty } = await import('../routes/orders')
-            await processMpLoyalty(supabaseAdmin, orderId, storeId).catch(() => {})
+            const loyaltyResult = await processMpLoyalty(supabaseAdmin, orderId, storeId).catch(() => undefined)
+            if (loyaltyResult) {
+              loyaltyData = loyaltyResult
+            }
           } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
             updates.status = 'cancelled'
             updates.payment_status = 'unpaid'
@@ -409,6 +414,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
       status: order.status,
       payment_status: order.payment_status,
       metadata: meta,
+      ...(loyaltyData ? { loyalty: loyaltyData } : {}),
     },
   })
 })

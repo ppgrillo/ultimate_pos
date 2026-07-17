@@ -19,13 +19,19 @@ import {
   ChevronLeft,
 } from 'lucide-react'
 
+export interface LoyaltyData {
+  pointsEarned: number
+  pointsBefore: number
+  pointsAfter: number
+}
+
 interface MPPointPaymentProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   orderId: string | null
   isCreating?: boolean
   total: number
-  onPaid: () => void
+  onPaid: (loyalty?: LoyaltyData) => void
   onCancel: () => void
   fetchOrder?: (orderId: string) => Promise<{ data: OrderResponse }>
 }
@@ -101,6 +107,7 @@ type OrderResponse = {
   status?: string
   payment_status?: string
   metadata?: { mpOrderStatus?: string }
+  loyalty?: LoyaltyData
 }
 
 function toPaymentState(res: OrderResponse | undefined): PaymentState | undefined {
@@ -120,12 +127,14 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
     return state.order?.items?.find((o) => o.id === orderId)
   })
   const [localState, setLocalState] = useState<PaymentState>('created')
+  const [loyaltyData, setLoyaltyData] = useState<LoyaltyData | undefined>(undefined)
   const hasRedirected = useRef(false)
 
   useEffect(() => {
     hasRedirected.current = false
     if (!open) {
       setLocalState('created')
+      setLoyaltyData(undefined)
     }
   }, [open])
 
@@ -140,11 +149,11 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
     if (currentState === 'paid' && !hasRedirected.current) {
       hasRedirected.current = true
       const timer = setTimeout(() => {
-        onPaid()
+        onPaid(loyaltyData)
       }, 2000)
       return () => clearTimeout(timer)
     }
-  }, [currentState, onPaid])
+  }, [currentState, onPaid, loyaltyData])
 
   const poll = useCallback(async () => {
     if (!open || !orderId) return
@@ -154,6 +163,9 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
         : await api.get<{ data: OrderResponse }>(`/orders/${orderId}`)
       const s = toPaymentState(res.data)
       if (s) setLocalState(s)
+      if (res.data.loyalty) {
+        setLoyaltyData(res.data.loyalty)
+      }
     } catch {
     }
   }, [open, orderId, fetchOrder])

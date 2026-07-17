@@ -621,33 +621,39 @@ ordersRouter.patch('/:id/status', async (c) => {
   return c.json({ data: enriched })
 })
 
+export interface LoyaltyResult {
+  pointsEarned: number
+  pointsBefore: number
+  pointsAfter: number
+}
+
 export async function processMpLoyalty(
   supabase: typeof supabaseAdmin,
   orderId: string,
   storeId: string,
-) {
+): Promise<LoyaltyResult | undefined> {
   const { data: order } = await supabase
     .from('orders')
     .select('*, items:order_items(*), order_number, customer_id, discount')
     .eq('id', orderId)
     .single()
-  if (!order?.customer_id) return
+  if (!order?.customer_id) return undefined
 
   const { data: store } = await supabase
     .from('stores')
     .select('settings')
     .eq('id', storeId)
     .single()
-  if (!store) return
+  if (!store) return undefined
 
   const settings = (store.settings || {}) as Record<string, unknown>
   const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
-  if (!hasLoyalty) return
+  if (!hasLoyalty) return undefined
 
   const { getLoyaltyCard, earnPoints: doEarn, calculateEarnPoints, syncWallets } = await import('../services/loyalty.service')
 
   const card = await getLoyaltyCard(order.customer_id, storeId)
-  if (!card) return
+  if (!card) return undefined
 
   const { data: existingTxs } = await supabase
     .from('loyalty_transactions')
@@ -656,7 +662,7 @@ export async function processMpLoyalty(
     .eq('reference_type', 'order')
     .eq('type', 'earn')
     .limit(1)
-  if (existingTxs && existingTxs.length > 0) return
+  if (existingTxs && existingTxs.length > 0) return undefined
 
   const items = (order.items || []) as any[]
   const subtotal = items.reduce((s, i) => s + Number(i.unit_price) * (i.quantity || 1), 0)
@@ -669,28 +675,35 @@ export async function processMpLoyalty(
   }))
 
   const earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
+  const pointsBefore = card.points || 0
 
   if (earnedPoints > 0) {
-    await doEarn(card.id, earnedPoints, `Compra MP Point orden #${order.order_number}`, orderId)
+    const result = await doEarn(card.id, earnedPoints, `Compra MP Point orden #${order.order_number}`, orderId)
     syncWallets(card.id).catch(() => {})
-  }
 
-  const { data: cust } = await supabase
-    .from('customers')
-    .select('total_visits, total_spent')
-    .eq('id', order.customer_id)
-    .single()
+    const pointsAfter = result?.new_balance ?? (pointsBefore + earnedPoints)
 
-  if (cust) {
-    const total = subtotal - discount
-    await supabase
+    const { data: cust } = await supabase
       .from('customers')
-      .update({
-        total_visits: (cust.total_visits || 0) + 1,
-        total_spent: (Number(cust.total_spent) || 0) + total,
-      })
+      .select('total_visits, total_spent')
       .eq('id', order.customer_id)
+      .single()
+
+    if (cust) {
+      const total = subtotal - discount
+      await supabase
+        .from('customers')
+        .update({
+          total_visits: (cust.total_visits || 0) + 1,
+          total_spent: (Number(cust.total_spent) || 0) + total,
+        })
+        .eq('id', order.customer_id)
+    }
+
+    return { pointsEarned: earnedPoints, pointsBefore, pointsAfter }
   }
+
+  return { pointsEarned: 0, pointsBefore, pointsAfter: pointsBefore }
 }
 
 export async function reverseMpLoyalty(
