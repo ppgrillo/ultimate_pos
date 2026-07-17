@@ -61,7 +61,7 @@ export async function enrollCustomer(
       store_id: storeId,
       customer_id: customerId,
       points: bonusPoints,
-      tier: 'bronze',
+      tier: (settings.defaultTier || 'bronze').toLowerCase(),
     })
     .select()
     .single()
@@ -189,22 +189,23 @@ export async function syncAppleWallet(cardId: string) {
       .single()
 
     const digitalPass = card?.digital_passes as { apple_pass_id?: string; metadata?: any } | null
-    if (!digitalPass?.apple_pass_id) return
+    const passId = card?.digital_pass_id
+    if (!passId) return
 
     const { sendApplePushNotification } = await import('./appleWallet.apns')
 
-    const serial = (digitalPass as any)?.id || card?.digital_pass_id || ''
+    // Look up registrations using the digital_passes id (serial_number)
     const { data: registrations } = await supabaseAdmin
       .from('apple_registrations')
       .select('push_token')
-      .eq('serial_number', serial)
+      .eq('serial_number', passId)
 
     if (!registrations?.length) return
 
     await supabaseAdmin
       .from('digital_passes')
       .update({ updated_at: new Date().toISOString() })
-      .eq('id', card?.digital_pass_id)
+      .eq('id', passId)
 
     const tokens = registrations.filter(r => r.push_token).map(r => r.push_token!)
     await Promise.allSettled(tokens.map(t => sendApplePushNotification(t)))

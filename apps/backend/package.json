@@ -24,6 +24,7 @@
     "jose": "^5.4.0",
     "jsonwebtoken": "^9.0.3",
     "passkit-generator": "^3.5.7",
+    "sharp": "^0.35.3",
     "zod": "^3.23.0"
   },
   "devDependencies": {

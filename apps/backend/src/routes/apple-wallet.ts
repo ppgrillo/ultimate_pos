@@ -33,7 +33,14 @@ appleWalletRouter.post('/v1/devices/:deviceLibraryId/registrations/:passTypeId/:
       pass_type_id: passTypeId,
       serial_number: serialNumber,
       push_token: pushToken || null,
-    }, { onConflict: 'device_library_id,pass_type_id,serial_number' })
+    }, { onConflict: 'device_library_id,pass_type_id,serialNumber' })
+
+  // Mark the pass as registered with Apple so syncAppleWallet knows it can push
+  await supabaseAdmin
+    .from('digital_passes')
+    .update({ apple_pass_id: passTypeId })
+    .eq('id', serialNumber)
+    .is('apple_pass_id', null)
 
   return c.body(null, 201)
 })

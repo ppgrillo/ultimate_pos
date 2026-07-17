@@ -1,9 +1,14 @@
 import { Hono } from 'hono'
+import crypto from 'crypto'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
 import { GoogleWalletService } from '../services/googleWallet.service'
 import { mapProgramToGoogleClass } from '../mappers/googleClassMapper'
+
+function generateAuthToken(): string {
+  return crypto.randomBytes(20).toString('base64url')
+}
 
 // ─── Unauthenticated routes ───────────────────────────────────────────────────
 // Apple Wallet download must NOT require JWT — the iPhone downloads the pass
@@ -21,9 +26,24 @@ publicWalletRouter.get('/apple/:passId/download', async (c) => {
 
   if (error || !pass) throw notFound('Pass not found')
 
+  // Ensure apple_auth_token exists (required by Apple Wallet Web Service protocol)
+  const metadata = (pass.metadata as Record<string, unknown>) || {}
+  if (!metadata.apple_auth_token) {
+    const token = generateAuthToken()
+    await supabaseAdmin
+      .from('digital_passes')
+      .update({ metadata: { ...metadata, apple_auth_token: token } })
+      .eq('id', passId)
+    metadata.apple_auth_token = token
+  }
+
   const { AppleWalletService } = await import('../services/appleWallet.service')
   const service = new AppleWalletService()
-  const buffer = await service.createPass({ ...pass, settings: (pass.stores as any)?.settings } as any)
+  const buffer = await service.createPass({
+    ...pass,
+    metadata,
+    settings: (pass.stores as any)?.settings,
+  } as any)
 
   return c.newResponse(new Uint8Array(buffer), {
     status: 200,

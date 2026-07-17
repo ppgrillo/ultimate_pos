@@ -2,14 +2,32 @@ import http2 from 'http2'
 import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
 function resolveP8(raw: string): string {
-  if (path.isAbsolute(raw)) return raw
-  const fromCwd = path.resolve(process.cwd(), raw)
-  if (fs.existsSync(fromCwd)) return fromCwd
-  const filename = path.basename(raw)
-  const fromDockerCerts = path.resolve(process.cwd(), 'certs', filename)
+  if (path.isAbsolute(raw) && fs.existsSync(raw)) return raw
+
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+
+  // 1. Relative to apps/backend/ (where CWD runs from, matches .env convention)
+  const fromBackend = path.resolve(__dirname, '../..', raw)
+  if (fs.existsSync(fromBackend)) return fromBackend
+
+  // 2. Relative to this file (apps/backend/src/services/)
+  const fromHere = path.resolve(__dirname, raw)
+  if (fs.existsSync(fromHere)) return fromHere
+
+  // 3. certs/ relative to apps/backend/
+  const fromBackendCerts = path.resolve(__dirname, '../certs', path.basename(raw))
+  if (fs.existsSync(fromBackendCerts)) return fromBackendCerts
+
+  // 4. certs/ relative to project root (Docker / local)
+  const fromDockerCerts = path.resolve(process.cwd(), 'certs', path.basename(raw))
   if (fs.existsSync(fromDockerCerts)) return fromDockerCerts
+
+  // 5. process.cwd() fallback
+  const fromCwd = path.resolve(process.cwd(), raw)
   return fromCwd
 }
 

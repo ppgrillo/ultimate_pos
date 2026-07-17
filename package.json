@@ -1,7 +1,10 @@
 {
   "name": "ultimate-pos",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -15,3 +18,4 @@
   },
   "packageManager": "npm@10.8.0"
 }
+@
