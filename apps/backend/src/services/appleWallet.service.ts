@@ -220,10 +220,15 @@ export class AppleWalletService {
   }
 
   private buildPassProperties(passData: ApplePassData): Record<string, unknown> {
-    const customerName = (passData.customers as any)?.name || 'Miembro'
-    const storeName = (passData.stores as any)?.name || 'Ultimate POS'
-    const points = (passData.loyalty_cards as any)?.points ?? 0
-    const tier = (passData.loyalty_cards as any)?.tier ?? ''
+    const customer = Array.isArray(passData.customers) ? passData.customers[0] : (passData.customers as any)
+    const customerName = customer?.name || 'Miembro'
+
+    const store = Array.isArray(passData.stores) ? passData.stores[0] : (passData.stores as any)
+    const storeName = store?.name || 'Ultimate POS'
+
+    const loyaltyCard = Array.isArray(passData.loyalty_cards) ? passData.loyalty_cards[0] : (passData.loyalty_cards as any)
+    const points = loyaltyCard?.points ?? 0
+    const tier = loyaltyCard?.tier ?? ''
     const authToken = (passData.metadata?.apple_auth_token as string) || ''
 
     const design = ((passData.settings?.walletPassDesign as Record<string, unknown>) || {}) as Record<string, unknown>

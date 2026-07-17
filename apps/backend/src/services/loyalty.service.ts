@@ -16,8 +16,8 @@ export async function calculateEarnPoints(
     .select('id, points')
     .in('id', productIds)
 
-  const perProductPoints = new Map(
-    (products ?? []).map(p => [p.id, p.points as number | null])
+  const perProductPoints = new Map<string, number | null>(
+    (products ?? []).map((p: any) => [p.id, p.points as number | null])
   )
 
   let totalPoints = 0
@@ -61,7 +61,7 @@ export async function enrollCustomer(
       store_id: storeId,
       customer_id: customerId,
       points: bonusPoints,
-      tier: (settings.defaultTier || 'bronze').toLowerCase(),
+      tier: (settings.walletPassDesign?.defaultTier || 'bronze').toLowerCase(),
     })
     .select()
     .single()
@@ -207,8 +207,8 @@ export async function syncAppleWallet(cardId: string) {
       .update({ updated_at: new Date().toISOString() })
       .eq('id', passId)
 
-    const tokens = registrations.filter(r => r.push_token).map(r => r.push_token!)
-    await Promise.allSettled(tokens.map(t => sendApplePushNotification(t)))
+    const tokens = registrations.filter((r: any) => r.push_token).map((r: any) => r.push_token!)
+    await Promise.allSettled(tokens.map((t: any) => sendApplePushNotification(t)))
   } catch (err) {
     console.error('Failed to sync Apple Wallet:', err)
   }

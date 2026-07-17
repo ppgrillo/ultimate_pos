@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation'
 import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
@@ -17,7 +18,7 @@ const methodLabels: Record<string, string> = {
   transfer: 'Transfer',
 }
 
-export default function ReceiptPage() {
+function ReceiptPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const paymentMethod = searchParams.get('paymentMethod')
@@ -115,4 +116,13 @@ export default function ReceiptPage() {
       </div>
     </div>
   )
+}
+
+
+export default function ReceiptPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ReceiptPageContent />
+    </Suspense>
+  );
 }

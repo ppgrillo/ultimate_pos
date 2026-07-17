@@ -13,7 +13,7 @@ export const ordersRouter = new Hono()
 
 ordersRouter.use('*', authMiddleware)
 
-function enrichOrder(order: Record<string, unknown>) {
+function enrichOrder(order: Record<string, unknown>): any {
   const customer = order.customer as { name?: string } | null
   return {
     ...order,

@@ -21,6 +21,17 @@ function matchesAny(path: string, patterns: string[]) {
 export default auth((req) => {
   const path = req.nextUrl.pathname
 
+  if (path.startsWith('/apple-wallet/')) {
+    const dest = new URL(path + req.nextUrl.search, API_URL)
+    const isBodyMethod = !['GET', 'HEAD'].includes(req.method)
+    return fetch(dest, {
+      method: req.method,
+      headers: req.headers,
+      body: isBodyMethod ? req.body : undefined,
+      duplex: isBodyMethod ? 'half' : undefined,
+    } as any)
+  }
+
   if (path.startsWith('/api/') && !matchesAny(path, apiRoutesWithHandlers)) {
     const destPath = path.replace('/api', '')
     const dest = new URL(destPath + req.nextUrl.search, API_URL)
@@ -62,5 +73,6 @@ export const config = {
     '/employees/:path*',
     '/customers/:path*',
     '/settings/:path*',
+    '/apple-wallet/:path*',
   ],
 }
