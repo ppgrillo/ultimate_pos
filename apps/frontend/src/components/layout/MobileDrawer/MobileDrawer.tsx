@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut } from 'lucide-react'
+import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut, Tag } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { closeDrawer } from '@/store/slices/uiSlice'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
   { href: '/orders', label: 'Orders', icon: ClipboardList },
   { href: '/products', label: 'Products', icon: Package },
+  { href: '/promotions', label: 'Promotions', icon: Tag },
   { href: '/employees', label: 'Employees', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]

@@ -145,12 +145,79 @@ selfCheckoutRouter.get('/customers/:id/detail', async (c) => {
   return c.json({ data: { customer, loyaltyCard, recentOrders: recentOrders || [] } })
 })
 
+// ── POST /promotions/validate — compute cart-level promo discounts ──
+selfCheckoutRouter.post('/promotions/validate', async (c) => {
+  const storeId = c.get('storeId')
+  const body = await c.req.json()
+
+  const items: Array<{ product_id: string; quantity: number; price: number; category_id?: string | null }> = body.items || []
+  const subtotal: number = body.subtotal ?? items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+
+  const now = new Date().toISOString()
+  const { data: promos, error } = await supabaseAdmin
+    .from('promotions')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .eq('target_type', 'cart')
+    .or(`or(starts_at.is.null,starts_at.lte.${now}),or(ends_at.is.null,ends_at.gte.${now})`)
+    .order('priority', { ascending: false })
+
+  if (error) throw badRequest(error.message)
+
+  const appliedPromotions: Array<{
+    promotion_id: string
+    name: string
+    discount_amount: number
+    badge_text: string | null
+    discount_type: string
+    discount_value: number
+  }> = []
+
+  let totalDiscount = 0
+
+  for (const promo of promos || []) {
+    if (promo.target_type !== 'cart') continue
+    if (promo.max_uses != null && promo.max_uses > 0 && (promo.current_uses ?? 0) >= promo.max_uses) continue
+
+    const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0)
+    if (promo.min_quantity && totalQuantity < promo.min_quantity) continue
+    if (promo.min_subtotal && subtotal < promo.min_subtotal) continue
+
+    let discountAmount = 0
+    if (promo.discount_type === 'percentage') {
+      discountAmount = subtotal * (promo.discount_value / 100)
+    } else {
+      discountAmount = Math.min(promo.discount_value, subtotal)
+    }
+
+    if (discountAmount > 0) {
+      appliedPromotions.push({
+        promotion_id: promo.id,
+        name: promo.name,
+        discount_amount: Math.round(discountAmount * 100) / 100,
+        badge_text: promo.badge_text,
+        discount_type: promo.discount_type,
+        discount_value: promo.discount_value,
+      })
+      totalDiscount += discountAmount
+    }
+  }
+
+  return c.json({
+    data: {
+      applied_promotions: appliedPromotions,
+      total_discount: Math.round(totalDiscount * 100) / 100,
+    },
+  })
+})
+
 selfCheckoutRouter.post('/orders', async (c) => {
   const storeId = c.get('storeId')
   const station = c.get('station')
 
   const body = await c.req.json()
-  const { items, customer_id, discount, discount_label } = body
+  const { items, customer_id, discount, discount_label, promo_discount, applied_promotions } = body
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw badRequest('At least one item is required')
@@ -208,6 +275,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
   })
 
   const disc = discount || 0
+  const promoDisc = promo_discount || 0
+  const totalDiscount = disc + promoDisc
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -219,8 +288,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
   }
 
   const total = taxInclusive
-    ? Math.round((subtotal - disc) * 100) / 100
-    : Math.round((subtotal + tax - disc) * 100) / 100
+    ? Math.round((subtotal - totalDiscount) * 100) / 100
+    : Math.round((subtotal + tax - totalDiscount) * 100) / 100
 
   const { data: seqData } = await supabaseAdmin
     .from('orders')
@@ -256,6 +325,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
       tax,
       discount: disc,
       discount_label: disc > 0 ? (discount_label || 'Discount') : null,
+      promo_discount: promoDisc,
+      applied_promotions: applied_promotions || [],
       total,
       notes: null,
       metadata: { stationId: station.id, stationName: station.name, source: 'self-checkout' },
@@ -275,6 +346,46 @@ selfCheckoutRouter.post('/orders', async (c) => {
     .insert(itemsToInsert)
 
   if (itemsError) throw badRequest(itemsError.message)
+
+  // Increment current_uses for applied promotions
+  const allPromoIds: string[] = []
+  // 1. Cart-level promos from applied_promotions
+  if (applied_promotions && applied_promotions.length > 0) {
+    for (const p of applied_promotions) {
+      if (p.promotion_id) allPromoIds.push(p.promotion_id)
+    }
+  }
+  // 2. Product/category promos — resolve from active promos matching ordered items
+  const orderProductIds = orderItems.map((i: Record<string, unknown>) => i.product_id as string)
+  const { data: productsWithCategory } = await supabaseAdmin
+    .from('products')
+    .select('id, category_id')
+    .in('id', orderProductIds)
+  const catIdSet = new Set((productsWithCategory || []).map((p) => p.category_id).filter(Boolean))
+  const { data: activeProductCategoryPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, target_type, target_ids, current_uses, max_uses')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('target_type', ['product', 'category'])
+
+  for (const promo of activeProductCategoryPromos || []) {
+    if (promo.max_uses != null && promo.max_uses > 0 && (promo.current_uses ?? 0) >= promo.max_uses) continue
+    if (!promo.target_ids || !Array.isArray(promo.target_ids)) continue
+    if (promo.target_type === 'product') {
+      if (orderProductIds.some((pid) => promo.target_ids.includes(pid))) allPromoIds.push(promo.id)
+    } else if (promo.target_type === 'category') {
+      if ([...catIdSet].some((cid) => promo.target_ids.includes(cid))) allPromoIds.push(promo.id)
+    }
+  }
+
+  const uniquePromoIds = [...new Set(allPromoIds)]
+  for (const pid of uniquePromoIds) {
+    const { data: promo } = await supabaseAdmin.from('promotions').select('current_uses').eq('id', pid).single()
+    if (promo) {
+      await supabaseAdmin.from('promotions').update({ current_uses: (promo.current_uses ?? 0) + 1 }).eq('id', pid)
+    }
+  }
 
   const { error: paymentError } = await supabaseAdmin
     .from('payments')

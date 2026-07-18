@@ -6,3 +6,12 @@ export type { Store, StoreMember, StoreSettings, SelfCheckoutStation, Registrati
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField, LoyaltyCardData, ScanLoyaltyResult } from './customer'
 export type { LoyaltyTierName, RewardTier, RedemptionRule, LoyaltyProgram, LoyaltyTransactionType, LoyaltyTransaction } from './loyalty'
 export type { PassType, PassStatus, DigitalPass, CreatePassInput, UpdatePassInput } from './digital-pass'
+export type {
+  Promotion,
+  PromotionTargetType,
+  PromotionDiscountType,
+  AppliedPromotion,
+  PromotionValidationItem,
+  PromotionValidationResponse,
+  PromotionFormData,
+} from './promotion'

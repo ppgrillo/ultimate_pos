@@ -9,6 +9,9 @@ import type {
   PaymentMethod,
   Product,
   ProductCategory,
+  Promotion,
+  PromotionFormData,
+  PromotionValidationResponse,
   Store,
   StoreSettings,
   ScanLoyaltyResult,
@@ -68,6 +71,12 @@ export interface OrderCreateInput {
   notes?: string | null
   discount?: number
   discount_label?: string | null
+  promo_discount?: number
+  applied_promotions?: Array<{
+    promotion_id: string
+    name: string
+    discount_amount: number
+  }>
   redeemed_points?: number
   payment_method?: PaymentMethod
   cash_amount_given?: number
@@ -112,7 +121,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal', 'LoyaltyCard'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -408,6 +417,75 @@ export const api = createApi({
       query: () => ({ url: '/wallet/google/class', method: 'POST' }),
       transformResponse: (response: { data: { classId: string } }) => response.data,
     }),
+
+    // ── Promotions endpoints ──
+    getPromotions: builder.query<Promotion[], void>({
+      query: () => '/promotions/all',
+      transformResponse: (response: { data: Promotion[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Promotion' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Promotion' as const, id: item.id })),
+            ]
+          : [{ type: 'Promotion' as const, id: 'LIST' }],
+    }),
+    getPromotionById: builder.query<Promotion, string>({
+      query: (id) => `/promotions/${id}`,
+      transformResponse: (response: { data: Promotion }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Promotion', id }],
+    }),
+    createPromotion: builder.mutation<Promotion, PromotionFormData>({
+      query: (body) => ({
+        url: '/promotions',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Promotion }) => response.data,
+      invalidatesTags: [{ type: 'Promotion', id: 'LIST' }],
+    }),
+    updatePromotion: builder.mutation<Promotion, { id: string; body: PromotionFormData }>({
+      query: ({ id, body }) => ({
+        url: `/promotions/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: { data: Promotion }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Promotion', id },
+        { type: 'Promotion', id: 'LIST' },
+      ],
+    }),
+    deletePromotion: builder.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `/promotions/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: 'Promotion', id },
+        { type: 'Promotion', id: 'LIST' },
+      ],
+    }),
+    togglePromotion: builder.mutation<Promotion, { id: string; is_active: boolean }>({
+      query: ({ id, is_active }) => ({
+        url: `/promotions/${id}/toggle`,
+        method: 'PATCH',
+        body: { is_active },
+      }),
+      transformResponse: (response: { data: Promotion }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Promotion', id },
+        { type: 'Promotion', id: 'LIST' },
+      ],
+    }),
+    validatePromotions: builder.mutation<PromotionValidationResponse, { items: Array<{ product_id: string; quantity: number; price: number; category_id?: string }>; subtotal?: number }>({
+      query: (body) => ({
+        url: '/promotions/validate',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: PromotionValidationResponse }) => response.data,
+    }),
   }),
 })
 
@@ -449,4 +527,11 @@ export const {
   useGetAppleWalletPassUrlQuery,
   useGetGoogleWalletSaveUrlQuery,
   useSyncGoogleWalletClassMutation,
+  useGetPromotionsQuery,
+  useGetPromotionByIdQuery,
+  useCreatePromotionMutation,
+  useUpdatePromotionMutation,
+  useDeletePromotionMutation,
+  useTogglePromotionMutation,
+  useValidatePromotionsMutation,
 } = api

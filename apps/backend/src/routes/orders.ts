@@ -260,7 +260,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const productIds = input.items.map((i) => i.product_id)
   const { data: products } = await supabase
     .from('products')
-    .select('id, name, price, tax_exempt')
+    .select('id, name, price, tax_exempt, category_id')
     .in('id', productIds)
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
@@ -286,6 +286,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   })
 
   const discount = input.discount || 0
+  const promoDiscount = input.promo_discount || 0
+  const totalDiscount = discount + promoDiscount
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -297,8 +299,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   }
 
   const total = taxInclusive
-    ? Math.round((subtotal - discount) * 100) / 100
-    : Math.round((subtotal + tax - discount) * 100) / 100
+    ? Math.round((subtotal - totalDiscount) * 100) / 100
+    : Math.round((subtotal + tax - totalDiscount) * 100) / 100
 
   const hasKitchen = (settings?.hasKitchen as boolean) ?? false
   const initialStatus = !hasKitchen && paymentMethod && !isMpPoint ? 'paid' : 'pending'
@@ -329,6 +331,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       tax,
       discount,
       discount_label: input.discount_label || null,
+      promo_discount: promoDiscount,
+      applied_promotions: input.applied_promotions || [],
       total,
       notes: input.notes,
     })
@@ -347,6 +351,60 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     .insert(itemsToInsert)
 
   if (itemsError) throw badRequest(itemsError.message)
+
+  // Increment current_uses for all applied promotions
+  // 1. Cart-level promos from applied_promotions
+  const appliedPromos = input.applied_promotions
+  if (appliedPromos && appliedPromos.length > 0) {
+    const promoIds = appliedPromos.map((p) => p.promotion_id).filter(Boolean)
+    for (const pid of promoIds) {
+      const { data: promo } = await supabaseAdmin.from('promotions').select('current_uses').eq('id', pid).single()
+      if (promo) {
+        await supabaseAdmin
+          .from('promotions')
+          .update({ current_uses: (promo.current_uses ?? 0) + 1 })
+          .eq('id', pid)
+      }
+    }
+  }
+
+  // 2. Product/category promos — resolve from active promos matching ordered items
+  const orderProductIds = orderItems.map((i) => i.product_id)
+  const catIdSet = new Set((products || []).map((p) => p.category_id).filter(Boolean))
+
+  const { data: activeProductCategoryPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, target_type, target_ids, current_uses, max_uses')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('target_type', ['product', 'category'])
+
+  const promosToIncrement = new Set<string>()
+  for (const promo of activeProductCategoryPromos || []) {
+    if (promo.max_uses != null && promo.max_uses > 0 && (promo.current_uses ?? 0) >= promo.max_uses) continue
+    if (!promo.target_ids || !Array.isArray(promo.target_ids)) continue
+
+    if (promo.target_type === 'product') {
+      const matched = orderProductIds.some((pid) => promo.target_ids.includes(pid))
+      if (matched) promosToIncrement.add(promo.id)
+    } else if (promo.target_type === 'category') {
+      const matched = [...catIdSet].some((cid) => promo.target_ids.includes(cid))
+      if (matched) promosToIncrement.add(promo.id)
+    }
+  }
+
+  // Deduplicate with cart-level promos already incremented above
+  const cartPromoIds = new Set((appliedPromos || []).map((p) => p.promotion_id))
+  for (const pid of promosToIncrement) {
+    if (cartPromoIds.has(pid)) continue // already incremented
+    const { data: promo } = await supabaseAdmin.from('promotions').select('current_uses').eq('id', pid).single()
+    if (promo) {
+      await supabaseAdmin
+        .from('promotions')
+        .update({ current_uses: (promo.current_uses ?? 0) + 1 })
+        .eq('id', pid)
+    }
+  }
 
   if (paymentMethod) {
     const paymentData: Record<string, unknown> = {

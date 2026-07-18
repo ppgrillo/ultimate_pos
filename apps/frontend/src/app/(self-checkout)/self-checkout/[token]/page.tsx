@@ -12,9 +12,10 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
-import type { LoyaltyData } from '@/components/pos/MPPointPayment/MPPointPayment'
+// LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
+import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, PromotionValidationResponse } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
   X,
@@ -42,15 +43,15 @@ import {
   CreditCard,
   Banknote,
 } from 'lucide-react'
-import type { Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData } from '@ultimate-pos/shared'
-
 interface CartItem {
   product_id: string
   name: string
   price: number
+  original_price: number
   quantity: number
   image_url?: string | null
   points?: number
+  category_id?: string | null
 }
 
 type PageState = 'loading' | 'error' | 'browsing' | 'payment' | 'success'
@@ -83,6 +84,12 @@ export default function SelfCheckoutPage() {
   const [discount, setDiscount] = useState(0)
   const [discountLabel, setDiscountLabel] = useState('')
   const [dismissedWelcome, setDismissedWelcome] = useState(false)
+
+  // ─── Promotions ───────────────────────────────────────────────────────────
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [appliedPromotions, setAppliedPromotions] = useState<PromotionValidationResponse['applied_promotions']>([])
+  const [promoDiscount, setPromoDiscount] = useState(0)
+  const promoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ─── Promo modal ──────────────────────────────────────────────────────────
   const [showPromo, setShowPromo] = useState(false)
@@ -131,6 +138,12 @@ export default function SelfCheckoutPage() {
     items: { name: string; quantity: number; price: number }[]
     loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }
     customerName?: string
+    // optional summary fields for the success receipt
+    productSavings?: number
+    discount?: number
+    discountLabel?: string
+    promoDiscount?: number
+    appliedPromotions?: { promotion_id: string; name: string; discount_amount: number }[]
   } | null>(null)
 
   // ─── Init ─────────────────────────────────────────────────────────────────
@@ -143,10 +156,11 @@ export default function SelfCheckoutPage() {
 
   async function loadData() {
     try {
-      const [verifyRes, productsRes, categoriesRes] = await Promise.all([
+      const [verifyRes, productsRes, categoriesRes, promosRes] = await Promise.all([
         api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string } } }>('/self-checkout/verify'),
         api.get<{ data: Product[] }>('/self-checkout/products'),
         api.get<{ data: ProductCategory[] }>('/self-checkout/categories'),
+        api.get<{ data: Promotion[] }>('/promotions').catch(() => ({ data: [] })),
       ])
 
       const storeData = verifyRes.data.store
@@ -163,6 +177,7 @@ export default function SelfCheckoutPage() {
       setPromoPin((settings?.promoPin as string) ?? '')
       setProducts(productsRes.data)
       setCategories(categoriesRes.data)
+      setPromotions(promosRes.data || [])
       setPageState('browsing')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error loading self-checkout'
@@ -345,8 +360,78 @@ export default function SelfCheckoutPage() {
       return a.name.localeCompare(b.name)
     })
 
-  const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  // sale subtotal (prices baked with product-level promos)
+  const saleSubtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  // original subtotal (catalog prices) — used for display in OrderSummary
+  const originalSubtotal = cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0)
+  const productSavings = cartItems.reduce((sum, i) => sum + Math.max(0, i.original_price - i.price) * i.quantity, 0)
+  // actualSubtotal should represent the subtotal after product-level savings
+  const actualSubtotal = originalSubtotal - productSavings
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0)
+
+  // ─── Active promotions (filtered by date) ─────────────────────────────────
+  const activePromotions = promotions.filter((p) => {
+    if (!p.is_active) return false
+    const now = new Date()
+    if (p.starts_at && new Date(p.starts_at) > now) return false
+    if (p.ends_at && new Date(p.ends_at) < now) return false
+    return true
+  })
+
+  function getPromotionForProduct(product: Product): Promotion | null {
+    let bestPromo: Promotion | null = null
+    let bestDiscount = 0
+    for (const promo of activePromotions) {
+      if (promo.target_type === 'product') {
+        if (!promo.target_ids?.includes(product.id)) continue
+      } else if (promo.target_type === 'category') {
+        if (!promo.target_ids?.includes(product.category_id || '')) continue
+      } else {
+        continue
+      }
+      let discountAmount: number
+      if (promo.discount_type === 'percentage') {
+        discountAmount = product.price * (promo.discount_value / 100)
+      } else {
+        discountAmount = Math.min(promo.discount_value, product.price)
+      }
+      if (discountAmount > bestDiscount) {
+        bestDiscount = discountAmount
+        bestPromo = promo
+      }
+    }
+    return bestPromo
+  }
+
+  // ─── Cart-level promo validation (debounced) ──────────────────────────────
+  useEffect(() => {
+    if (promoTimerRef.current) clearTimeout(promoTimerRef.current)
+    if (cartItems.length === 0) {
+      setAppliedPromotions([])
+      setPromoDiscount(0)
+      return
+    }
+    promoTimerRef.current = setTimeout(async () => {
+      try {
+        const validationItems = cartItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: item.original_price,
+          category_id: item.category_id ?? null,
+        }))
+        const validationSubtotal = cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0)
+        const res = await apiFetch<{ data: PromotionValidationResponse }>('/promotions/validate', {
+          method: 'POST',
+          body: JSON.stringify({ items: validationItems, subtotal: validationSubtotal }),
+        })
+        setAppliedPromotions(res.data.applied_promotions || [])
+        setPromoDiscount(res.data.total_discount || 0)
+      } catch {
+        // Silent fail
+      }
+    }, 300)
+    return () => { if (promoTimerRef.current) clearTimeout(promoTimerRef.current) }
+  }, [cartItems, apiFetch])
 
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
@@ -356,6 +441,12 @@ export default function SelfCheckoutPage() {
       setFormExpanded(false)
       setCameraExpanded(false)
     }
+    const promo = getPromotionForProduct(product)
+    const salePrice = promo
+      ? promo.discount_type === 'percentage'
+        ? Math.round(product.price * (1 - promo.discount_value / 100) * 100) / 100
+        : Math.max(0, Math.round((product.price - promo.discount_value) * 100) / 100)
+      : Number(product.price)
     setCartItems((prev) => {
       const existing = prev.find((i) => i.product_id === product.id)
       if (existing) {
@@ -368,10 +459,12 @@ export default function SelfCheckoutPage() {
         {
           product_id: product.id,
           name: product.name,
-          price: Number(product.price),
+          price: salePrice,
+          original_price: Number(product.price),
           quantity: 1,
           image_url: product.image_url,
           points: product.points ?? undefined,
+          category_id: product.category_id ?? null,
         },
       ]
     })
@@ -391,12 +484,16 @@ export default function SelfCheckoutPage() {
     setCartItems([])
     setDiscount(0)
     setDiscountLabel('')
+    setAppliedPromotions([])
+    setPromoDiscount(0)
   }
 
   function handleResetAll() {
     setCartItems([])
     setDiscount(0)
     setDiscountLabel('')
+    setAppliedPromotions([])
+    setPromoDiscount(0)
     setShowPromo(false)
     setPromoInput('')
     setCustomerProfile(null)
@@ -415,11 +512,11 @@ export default function SelfCheckoutPage() {
     const val = parseFloat(promoInput)
     if (!val || val <= 0) return
     if (promoMode === 'percent') {
-      const amount = Math.round(subtotal * (val / 100) * 100) / 100
+      const amount = Math.round(saleSubtotal * (val / 100) * 100) / 100
       setDiscount(amount)
       setDiscountLabel(`${val}% Off`)
     } else {
-      const amount = Math.min(val, subtotal)
+      const amount = Math.min(val, saleSubtotal)
       setDiscount(amount)
       setDiscountLabel(`${formatCurrency(val)} Off`)
     }
@@ -436,15 +533,23 @@ export default function SelfCheckoutPage() {
         '/orders',
         {
           method: 'POST',
-          body: JSON.stringify({
-            items: cartItems.map((i) => ({
-              product_id: i.product_id,
-              quantity: i.quantity,
-              unit_price: i.price,
-            })),
+        body: JSON.stringify({
+          items: cartItems.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_price: i.price,
+          })),
             customer_id: customerProfile?.customer.id || undefined,
             discount: discount > 0 ? discount : undefined,
             discount_label: discount > 0 ? discountLabel : undefined,
+            promo_discount: promoDiscount > 0 ? promoDiscount : undefined,
+            applied_promotions: appliedPromotions.length > 0
+              ? appliedPromotions.map((p) => ({
+                  promotion_id: p.promotion_id,
+                  name: p.name,
+                  discount_amount: p.discount_amount,
+                }))
+              : undefined,
           }),
         },
       )
@@ -458,9 +563,21 @@ export default function SelfCheckoutPage() {
   }
 
   function handlePaid(loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }) {
+    const totalDiscount = discount + promoDiscount
+    const tax = !taxEnabled ? 0 : taxInclusive
+      ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+      : Math.round(actualSubtotal * taxRate * 100) / 100
+    const finalTotal = taxInclusive
+      ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
+      : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
     setLastOrder({
-      total: subtotal - discount,
+      total: finalTotal,
       items: cartItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      productSavings,
+      discount,
+      discountLabel,
+      promoDiscount,
+      appliedPromotions,
       loyalty,
       customerName: customerProfile?.customer?.name,
     })
@@ -556,7 +673,7 @@ export default function SelfCheckoutPage() {
             </div>
           </div>
 
-          {/* Items list */}
+          {/* Items list + compact summary */}
           <div className="px-5 py-3.5">
             <div className="space-y-2.5">
               {lastOrder?.items.map((item, i) => (
@@ -566,12 +683,60 @@ export default function SelfCheckoutPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-on-surface">{item.name}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">x{item.quantity} @ {formatCurrency(item.price)}</p>
                   </div>
                   <p className="shrink-0 text-sm font-headline font-bold text-on-surface">
                     {formatCurrency(item.price * item.quantity)}
                   </p>
                 </div>
               ))}
+
+              {/* Summary lines: subtotal, product savings, promotions, manual discount */}
+              {lastOrder && (
+                (() => {
+                  const itemsTotal = lastOrder.items.reduce((s, it) => s + it.price * it.quantity, 0)
+                  return (
+                    <>
+                      <div className="flex items-center justify-between text-sm text-on-surface-variant mt-2">
+                        <span>Subtotal</span>
+                        <span className="font-headline font-bold">{formatCurrency(itemsTotal)}</span>
+                      </div>
+
+                      {lastOrder.productSavings !== undefined && lastOrder.productSavings > 0 && (
+                        <div className="flex items-center justify-between text-sm text-on-surface-variant">
+                          <span className="text-on-surface-variant">Ahorro en productos</span>
+                          <span className="font-headline font-bold text-rose-500">-{formatCurrency(lastOrder.productSavings ?? 0)}</span>
+                        </div>
+                      )}
+
+                      {lastOrder.appliedPromotions && lastOrder.appliedPromotions.length > 0 && (
+                        lastOrder.appliedPromotions
+                          .filter((p) => (p.discount_amount ?? 0) > 0)
+                          .map((p) => (
+                            <div key={p.promotion_id} className="flex items-center justify-between text-sm text-on-surface-variant">
+                              <span>{p.name}</span>
+                              <span className="font-headline font-bold text-rose-500">-{formatCurrency(p.discount_amount ?? 0)}</span>
+                            </div>
+                          ))
+                      )}
+
+                      {lastOrder.promoDiscount !== undefined && lastOrder.promoDiscount > 0 && (!lastOrder.appliedPromotions || lastOrder.appliedPromotions.length === 0) && (
+                        <div className="flex items-center justify-between text-sm text-on-surface-variant">
+                          <span>{lastOrder.discountLabel || 'Promoción'}</span>
+                          <span className="font-headline font-bold text-rose-500">-{formatCurrency(lastOrder.promoDiscount ?? 0)}</span>
+                        </div>
+                      )}
+
+                      {lastOrder.discount !== undefined && lastOrder.discount > 0 && (
+                        <div className="flex items-center justify-between text-sm text-on-surface-variant">
+                          <span>{lastOrder.discountLabel || 'Descuento'}</span>
+                          <span className="font-headline font-bold text-rose-500">-{formatCurrency(lastOrder.discount ?? 0)}</span>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()
+              )}
             </div>
           </div>
 
@@ -727,6 +892,7 @@ export default function SelfCheckoutPage() {
                   product={product}
                   onAdd={handleAdd}
                   variant="dense"
+                  activePromotion={getPromotionForProduct(product)}
                 />
               ))}
             </div>
@@ -1153,9 +1319,12 @@ export default function SelfCheckoutPage() {
         {/* Totals */}
         <div className="shrink-0 border-t border-outline-variant/50 px-4 py-3">
           <OrderSummary
-            subtotal={subtotal}
+            subtotal={cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0)}
             discount={discount}
             discountLabel={discountLabel}
+            appliedPromotions={appliedPromotions}
+            promoDiscount={promoDiscount}
+            productSavings={productSavings}
             taxRate={taxRate}
             taxLabel={taxLabel}
             taxInclusive={taxInclusive}
@@ -1165,16 +1334,25 @@ export default function SelfCheckoutPage() {
 
         {/* Total row (large) */}
         <div className="shrink-0 border-t border-outline-variant/50 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="font-label font-bold text-sm text-on-surface-variant">Total</span>
-            <span className="font-headline font-bold text-xl text-primary">
-              {formatCurrency(
-                taxInclusive
-                  ? Math.round((subtotal - discount) * 100) / 100
-                  : Math.round((subtotal * (1 + (taxEnabled ? taxRate : 0)) - discount) * 100) / 100,
-              )}
-            </span>
-          </div>
+          {(() => {
+            // use originalSubtotal (catalog prices) and productSavings to compute actualSubtotal
+            const actualSubtotal = cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0) - productSavings
+            const totalDiscount = discount + promoDiscount
+            const tax = !taxEnabled ? 0 : taxInclusive
+              ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+              : Math.round(actualSubtotal * taxRate * 100) / 100
+            const finalTotal = taxInclusive
+              ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
+              : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
+            return (
+              <div className="flex items-center justify-between">
+                <span className="font-label font-bold text-sm text-on-surface-variant">Total</span>
+                <span className="font-headline font-bold text-xl text-primary">
+                  {formatCurrency(finalTotal)}
+                </span>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Footer buttons */}
@@ -1376,10 +1554,11 @@ export default function SelfCheckoutPage() {
         }}
         orderId={orderId}
         isCreating={isCreatingOrder}
+        // show total including product savings and cart-level promo discount
         total={
           taxInclusive
-            ? Math.round((subtotal - discount) * 100) / 100
-            : Math.round((subtotal * (1 + (taxEnabled ? taxRate : 0)) - discount) * 100) / 100
+            ? Math.round((actualSubtotal - (discount + promoDiscount)) * 100) / 100
+            : Math.round((actualSubtotal * (1 + (taxEnabled ? taxRate : 0)) - (discount + promoDiscount)) * 100) / 100
         }
         onPaid={handlePaid}
         onCancel={handlePaymentCancel}
@@ -1443,9 +1622,14 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
       <div className="flex-1 min-w-0">
         <p className="truncate font-headline font-bold text-sm text-on-surface">{item.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <p className="font-headline font-bold text-sm text-primary">
-            {formatCurrency(item.price)}
-          </p>
+          {item.original_price > item.price ? (
+            <>
+              <p className="line-through text-xs text-on-surface-variant/50">{formatCurrency(item.original_price)}</p>
+              <p className="font-headline font-bold text-sm text-primary">{formatCurrency(item.price)}</p>
+            </>
+          ) : (
+            <p className="font-headline font-bold text-sm text-primary">{formatCurrency(item.price)}</p>
+          )}
           {itemPoints > 0 && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
               <Star className="h-2.5 w-2.5 fill-primary" />

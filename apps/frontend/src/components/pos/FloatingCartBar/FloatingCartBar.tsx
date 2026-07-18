@@ -8,10 +8,14 @@ import { formatCurrency } from '@/lib/utils'
 export function FloatingCartBar() {
   const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
+  const discount = useAppSelector((s) => s.cart.discount)
+  const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
   const checkoutView = useAppSelector((s) => s.pos.checkoutView)
 
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
-  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const actualTotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const totalDiscount = discount + promoDiscount
+  const finalTotal = Math.max(0, actualTotal - totalDiscount)
 
   if (count === 0 || checkoutView) return null
 
@@ -27,8 +31,13 @@ export function FloatingCartBar() {
           </div>
           <div>
             <p className="font-headline font-bold text-sm text-on-surface">
-              {formatCurrency(total)}
+              {formatCurrency(finalTotal)}
             </p>
+            {totalDiscount > 0 && (
+              <p className="text-[10px] text-secondary font-bold">
+                -{formatCurrency(totalDiscount)} saved
+              </p>
+            )}
             <p className="text-[10px] text-on-surface-variant">
               {count} {count === 1 ? 'item' : 'items'}
             </p>

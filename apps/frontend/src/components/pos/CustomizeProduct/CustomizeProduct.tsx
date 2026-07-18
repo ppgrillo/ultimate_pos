@@ -9,6 +9,8 @@ import { addItem } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
 import { useGetProductsQuery } from '@/store/api'
+import { usePromotions } from '@/hooks/usePromotions'
+
 
 export function CustomizeProduct() {
   const dispatch = useAppDispatch()
@@ -23,6 +25,14 @@ export function CustomizeProduct() {
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
   const specialInstructionsEnabled = useAppSelector((s) => s.storeConfig.currentStore?.settings?.specialInstructionsEnabled ?? true)
+  const { getPromotionForProduct } = usePromotions()
+
+  const activePromotion = product ? getPromotionForProduct(product) : null
+  const basePrice = activePromotion && product
+    ? activePromotion.discount_type === 'percentage'
+      ? Math.round(product.price * (1 - activePromotion.discount_value / 100) * 100) / 100
+      : Math.max(0, Math.round((product.price - activePromotion.discount_value) * 100) / 100)
+    : product?.price ?? 0
 
   useEffect(() => {
     if (product?.modifiers) {
@@ -67,7 +77,7 @@ export function CustomizeProduct() {
       .reduce((sum, o) => sum + o.price_adjustment, 0)
   }, 0) || 0
 
-  const itemTotal = (product.price + modifiersPrice) * quantity
+  const itemTotal = (basePrice + modifiersPrice) * quantity
 
   const handleAddToCart = () => {
     const variantParts: string[] = Object.entries(selectedOptions)
@@ -77,11 +87,13 @@ export function CustomizeProduct() {
     dispatch(addItem({
       product_id: product.id,
       name: product.name,
-      price: product.price + modifiersPrice,
+      price: basePrice + modifiersPrice,
+      original_price: product.price + modifiersPrice,
       quantity,
       variant_label: variantParts.length > 0 ? variantParts.join(' · ') : '',
       modifiers: allSelectedOptions,
       notes: notes || null,
+      category_id: product.category_id,
     }))
     handleClose()
   }
@@ -121,7 +133,14 @@ export function CustomizeProduct() {
                     )}
                   </div>
                   <h3 className="font-headline font-bold text-xl text-on-surface">{product.name}</h3>
-                  <p className="font-headline font-bold text-lg text-primary mt-1">{formatCurrency(product.price)}</p>
+                  <p className="font-headline font-bold text-lg text-primary mt-1">
+                    {activePromotion && basePrice < product.price && (
+                      <span className="text-on-surface-variant line-through text-sm mr-2">
+                        {formatCurrency(product.price)}
+                      </span>
+                    )}
+                    {formatCurrency(basePrice)}
+                  </p>
                 </div>
               </div>
               {product.description && (

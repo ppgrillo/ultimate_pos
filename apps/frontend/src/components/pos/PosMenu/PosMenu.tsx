@@ -6,8 +6,16 @@ import { addItem } from '@/store/slices/cartSlice'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { CategoryChips } from '@/components/pos/CategoryChips'
 import { PosSearchBar } from '@/components/pos/PosSearchBar'
-import type { Product } from '@ultimate-pos/shared'
+import { usePromotions } from '@/hooks/usePromotions'
+import type { Product, Promotion } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
+
+function getSalePrice(product: Product, promotion: Promotion): number {
+  if (promotion.discount_type === 'percentage') {
+    return Math.round(product.price * (1 - promotion.discount_value / 100) * 100) / 100
+  }
+  return Math.max(0, Math.round((product.price - promotion.discount_value) * 100) / 100)
+}
 
 export function PosMenu() {
   const dispatch = useAppDispatch()
@@ -18,6 +26,7 @@ export function PosMenu() {
   const { data: queryCategories = [] } = useGetCategoriesQuery()
   const products = sliceProducts.length > 0 ? sliceProducts : queryProducts
   const categories = sliceCategories.length > 0 ? sliceCategories : queryCategories
+  const { getPromotionForProduct } = usePromotions()
 
   const filtered = products
     .filter((p) => {
@@ -41,14 +50,18 @@ export function PosMenu() {
       dispatch(setCustomizeProductId(product.id))
       return
     }
+    const promo = getPromotionForProduct(product)
+    const price = promo ? getSalePrice(product, promo) : product.price
     dispatch(addItem({
       product_id: product.id,
       name: product.name,
-      price: product.price,
+      price,
+      original_price: product.price,
       quantity: 1,
       variant_label: '',
       modifiers: [],
       notes: null,
+      category_id: product.category_id,
     }))
   }
 
@@ -86,6 +99,7 @@ export function PosMenu() {
               product={product}
               onAdd={handleAdd}
               variant="dense"
+              activePromotion={getPromotionForProduct(product)}
             />
           ))}
         </div>

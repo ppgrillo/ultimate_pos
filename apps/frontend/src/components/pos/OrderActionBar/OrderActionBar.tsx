@@ -16,7 +16,24 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
   const discount = useAppSelector((s) => s.cart.discount)
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
+  const store = useAppSelector((s) => s.storeConfig.currentStore)
+  const settings = store?.settings
+  const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
+  const taxInclusive = settings?.taxInclusive ?? false
+  const taxEnabled = settings?.taxEnabled ?? false
+
+  const actualSubtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const totalDiscount = discount + promoDiscount
+
+  const tax = !taxEnabled ? 0 : taxInclusive
+    ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+    : Math.round(actualSubtotal * taxRate * 100) / 100
+
+  const finalTotal = taxInclusive
+    ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
+    : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
+
   const itemsExist = items.length > 0
   const [showPromo, setShowPromo] = useState(false)
 
@@ -25,14 +42,7 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
       <div className="flex items-center justify-between text-sm">
         <span className="text-on-surface-variant">Total</span>
         <span className="font-headline font-bold text-lg text-on-surface">
-          {discount > 0 ? (
-            <span>
-              <span className="line-through text-on-surface-variant/50 mr-1.5 text-sm">{formatCurrency(subtotal)}</span>
-              {formatCurrency(subtotal - discount)}
-            </span>
-          ) : (
-            formatCurrency(subtotal)
-          )}
+          {formatCurrency(finalTotal)}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2">

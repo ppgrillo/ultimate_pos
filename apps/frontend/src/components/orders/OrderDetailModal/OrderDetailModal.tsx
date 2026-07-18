@@ -122,6 +122,25 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
               <span className="text-on-surface-variant">Subtotal</span>
               <span className="font-label font-bold text-on-surface">{formatCurrency(displayOrder.subtotal)}</span>
             </div>
+
+            {/* Render applied promotions (cart / promo level) if present */}
+            {displayOrder.applied_promotions && displayOrder.applied_promotions.length > 0 && (
+              displayOrder.applied_promotions.map((p) => (
+                <div key={p.promotion_id} className="flex justify-between text-sm">
+                  <span className="text-on-surface-variant">{p.name}</span>
+                  <span className="font-label font-bold text-secondary">-{formatCurrency(p.discount_amount)}</span>
+                </div>
+              ))
+            )}
+
+            {/* Legacy/stacked promo_discount value (backend field) */}
+            {displayOrder.promo_discount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-on-surface-variant">Promo Discount</span>
+                <span className="font-label font-bold text-secondary">-{formatCurrency(displayOrder.promo_discount)}</span>
+              </div>
+            )}
+
             {displayOrder.discount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Discount</span>

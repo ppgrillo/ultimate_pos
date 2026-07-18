@@ -23,7 +23,7 @@ import type { PaymentMethod } from '@ultimate-pos/shared'
 export function CheckoutPanel() {
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { items, customer_id, customer_name, order_type, discount, discount_label, notes, redeemed_points } = useAppSelector((s) => s.cart)
+  const { items, customer_id, customer_name, order_type, discount, discount_label, notes, redeemed_points, appliedPromotions, promoDiscount } = useAppSelector((s) => s.cart)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -49,15 +49,18 @@ export function CheckoutPanel() {
     }
   }, [settings?.acceptedPaymentMethods])
 
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const subtotal = items.reduce((sum, i) => sum + (i.original_price || i.price) * i.quantity, 0)
+  const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
+  const actualSubtotal = subtotal - productSavings
 
   const computedTax = !taxEnabled ? 0 : taxInclusive
-    ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
-    : Math.round(subtotal * taxRate * 100) / 100
+    ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+    : Math.round(actualSubtotal * taxRate * 100) / 100
 
+  const totalDiscount = discount + promoDiscount
   const totalAmount = taxInclusive
-    ? Math.round((subtotal - discount) * 100) / 100
-    : Math.round((subtotal + computedTax - discount) * 100) / 100
+    ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
+    : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
 
   const paymentRequired = checkoutMode === 'payment-required'
   const isCash = selectedMethod === 'cash'
@@ -112,6 +115,14 @@ export function CheckoutPanel() {
         notes,
         discount,
         discount_label,
+        promo_discount: promoDiscount > 0 ? promoDiscount : undefined,
+        applied_promotions: appliedPromotions.length > 0
+          ? appliedPromotions.map((p) => ({
+              promotion_id: p.promotion_id,
+              name: p.name,
+              discount_amount: p.discount_amount,
+            }))
+          : undefined,
         redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         payment_method: paymentRequired ? selectedMethod : undefined,
         cash_amount_given: isCash ? parsedCashGiven : undefined,
@@ -248,6 +259,9 @@ export function CheckoutPanel() {
             subtotal={subtotal}
             discount={discount}
             discountLabel={discount_label || undefined}
+            appliedPromotions={appliedPromotions}
+            promoDiscount={promoDiscount}
+            productSavings={productSavings}
             taxRate={taxRate}
             taxLabel={taxLabel}
             taxInclusive={taxInclusive}

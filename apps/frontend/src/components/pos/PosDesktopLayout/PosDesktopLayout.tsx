@@ -41,9 +41,13 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const discount_label = useAppSelector((s) => s.cart.discount_label)
   const notes = useAppSelector((s) => s.cart.notes)
   const redeemed_points = useAppSelector((s) => s.cart.redeemed_points)
+  const appliedPromotions = useAppSelector((s) => s.cart.appliedPromotions)
+  const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const subtotal = items.reduce((sum, i) => sum + (i.original_price || i.price) * i.quantity, 0)
+  const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
+  const actualSubtotal = subtotal - productSavings
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
 
   const store = useAppSelector((s) => s.storeConfig.currentStore)
@@ -59,12 +63,13 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
   const mpPointEnabled = settings?.mpPointEnabled ?? false
 
   const computedTax = !taxEnabled ? 0 : taxInclusive
-    ? Math.round((subtotal - subtotal / (1 + taxRate)) * 100) / 100
-    : Math.round(subtotal * taxRate * 100) / 100
+    ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+    : Math.round(actualSubtotal * taxRate * 100) / 100
 
+  const totalDiscount = discount + promoDiscount
   const totalAmount = taxInclusive
-    ? Math.round((subtotal - discount) * 100) / 100
-    : Math.round((subtotal + computedTax - discount) * 100) / 100
+    ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
+    : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
 
   const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number) => {
     const isCash = paymentMethod === 'cash'
@@ -87,6 +92,14 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
         notes,
         discount,
         discount_label,
+        promo_discount: promoDiscount > 0 ? promoDiscount : undefined,
+        applied_promotions: appliedPromotions.length > 0
+          ? appliedPromotions.map((p) => ({
+              promotion_id: p.promotion_id,
+              name: p.name,
+              discount_amount: p.discount_amount,
+            }))
+          : undefined,
         redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
@@ -253,11 +266,13 @@ export function PosDesktopLayout({ categories, products, featuredProduct, custom
               subtotal={subtotal}
               discount={discount}
               discountLabel={discount_label || undefined}
+              appliedPromotions={appliedPromotions}
+              promoDiscount={promoDiscount}
+              productSavings={productSavings}
               taxRate={taxRate}
               taxLabel={taxLabel}
               taxInclusive={taxInclusive}
               taxEnabled={taxEnabled}
-              showTotal
             />
           </div>
         </div>

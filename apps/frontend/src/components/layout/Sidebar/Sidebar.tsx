@@ -15,6 +15,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeft,
+  Tag,
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
   { href: '/orders', label: 'Orders', icon: ClipboardList },
   { href: '/products', label: 'Products', icon: Package },
+  { href: '/promotions', label: 'Promotions', icon: Tag },
   { href: '/customers', label: 'Customers', icon: ContactRound },
   { href: '/employees', label: 'Employees', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },

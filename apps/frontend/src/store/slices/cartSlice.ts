@@ -1,15 +1,18 @@
 'use client'
 
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import type { AppliedPromotion } from '@ultimate-pos/shared'
 
 export interface CartItem {
   product_id: string
   name: string
   price: number
+  original_price: number
   quantity: number
   variant_label: string
   modifiers: string[]
   notes: string | null
+  category_id?: string | null
 }
 
 export interface CartState {
@@ -25,6 +28,8 @@ export interface CartState {
   notes: string | null
   discount_label: string | null
   redeemed_points: number
+  appliedPromotions: AppliedPromotion[]
+  promoDiscount: number
 }
 
 const initialState: CartState = {
@@ -40,6 +45,8 @@ const initialState: CartState = {
   notes: null,
   discount_label: null,
   redeemed_points: 0,
+  appliedPromotions: [],
+  promoDiscount: 0,
 }
 
 const cartSlice = createSlice({
@@ -108,6 +115,10 @@ const cartSlice = createSlice({
     setNotes(state, action: PayloadAction<string | null>) {
       state.notes = action.payload
     },
+    setAppliedPromotions(state, action: PayloadAction<{ promotions: AppliedPromotion[]; totalDiscount: number }>) {
+      state.appliedPromotions = action.payload.promotions
+      state.promoDiscount = action.payload.totalDiscount
+    },
     clearCart() {
       return initialState
     },
@@ -118,6 +129,6 @@ export const {
   addItem, removeItem, updateQuantity,
   setCustomer, setOrderType, setTable,
   setDiscount, setNotes, clearCart,
-  setRedeemedPoints,
+  setRedeemedPoints, setAppliedPromotions,
 } = cartSlice.actions
 export default cartSlice.reducer

@@ -1,4 +1,5 @@
 import type { Payment } from './customer'
+import type { AppliedPromotion } from './promotion'
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
 
@@ -19,6 +20,8 @@ export interface Order {
   subtotal: number
   tax: number
   discount: number
+  promo_discount: number
+  applied_promotions: AppliedPromotion[]
   total: number
   items: OrderItem[]
   payments?: Payment[]

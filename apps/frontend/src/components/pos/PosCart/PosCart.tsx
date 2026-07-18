@@ -9,7 +9,11 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 export function PosCart() {
   const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
-  const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  const discount = useAppSelector((s) => s.cart.discount)
+  const appliedPromotions = useAppSelector((s) => s.cart.appliedPromotions)
+  const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
+  const total = items.reduce((sum, i) => sum + (i.original_price || i.price) * i.quantity, 0)
+  const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
@@ -55,8 +59,10 @@ export function PosCart() {
       <div className="border-t border-outline-variant p-4 space-y-3">
         <OrderSummary
           subtotal={total}
-          discount={0}
-          discountLabel=""
+          discount={discount}
+          appliedPromotions={appliedPromotions}
+          promoDiscount={promoDiscount}
+          productSavings={productSavings}
           taxRate={taxRate}
           taxLabel={taxLabel}
           taxInclusive={taxInclusive}

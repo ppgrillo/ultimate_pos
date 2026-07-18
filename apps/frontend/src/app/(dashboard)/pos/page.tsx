@@ -17,13 +17,24 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { PackageOpen } from 'lucide-react'
 import type { Product } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
+import { useCartPromotions } from '@/hooks/useCartPromotions'
+import { usePromotions } from '@/hooks/usePromotions'
+
+function getSalePrice(product: Product, promo: { discount_type: string; discount_value: number }): number {
+  if (promo.discount_type === 'percentage') {
+    return Math.round(product.price * (1 - promo.discount_value / 100) * 100) / 100
+  }
+  return Math.max(0, Math.round((product.price - promo.discount_value) * 100) / 100)
+}
 
 export default function PosPage() {
+  useCartPromotions()
   const dispatch = useAppDispatch()
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
+  const { getPromotionForProduct } = usePromotions()
 
   const filtered = products.filter((p) => {
     if (!p.is_active) return false
@@ -44,16 +55,20 @@ export default function PosPage() {
       dispatch(setCustomizeProductId(product.id))
       return
     }
+    const promo = getPromotionForProduct(product)
+    const price = promo ? getSalePrice(product, promo) : product.price
     dispatch(addItem({
       product_id: product.id,
       name: product.name,
-      price: product.price,
+      price,
+      original_price: product.price,
       quantity: 1,
       variant_label: '',
       modifiers: [],
       notes: null,
+      category_id: product.category_id,
     }))
-  }, [dispatch])
+  }, [dispatch, getPromotionForProduct])
 
   const customizeModal = <CustomizeProduct />
 
@@ -110,6 +125,7 @@ export default function PosPage() {
                     product={product}
                     onAdd={handleAdd}
                     variant="dense"
+                    activePromotion={getPromotionForProduct(product)}
                   />
                 ))}
               </div>

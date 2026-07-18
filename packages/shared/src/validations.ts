@@ -58,10 +58,37 @@ export const orderSchema = z.object({
   })).min(1),
   discount: z.number().min(0).optional().default(0),
   discount_label: z.string().nullable().optional(),
+  promo_discount: z.number().min(0).optional().default(0),
+  applied_promotions: z.array(z.object({
+    promotion_id: z.string().uuid(),
+    name: z.string(),
+    discount_amount: z.number().min(0),
+    badge_text: z.string().nullable().optional(),
+    discount_type: z.enum(['percentage', 'fixed']).optional(),
+    discount_value: z.number().min(0).optional(),
+  })).optional().default([]),
   redeemed_points: z.number().int().min(0).optional().default(0),
   notes: z.string().nullable().optional(),
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
+})
+
+export const promotionSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().nullable().optional(),
+  is_active: z.boolean().default(true),
+  target_type: z.enum(['product', 'category', 'cart']),
+  target_ids: z.array(z.string().uuid()).nullable().optional(),
+  discount_type: z.enum(['percentage', 'fixed']),
+  discount_value: z.number().positive(),
+  min_quantity: z.number().int().positive().nullable().optional(),
+  min_subtotal: z.number().positive().nullable().optional(),
+  max_uses: z.number().int().positive().nullable().optional(),
+  current_uses: z.number().int().min(0).default(0),
+  priority: z.number().int().min(0).default(0),
+  starts_at: z.string().nullable().optional(),
+  ends_at: z.string().nullable().optional(),
+  badge_text: z.string().max(20).nullable().optional(),
 })
 
 export const employeeInviteSchema = z.object({
@@ -91,3 +118,4 @@ export type CustomerInput = z.infer<typeof customerSchema>
 
 export type ModifierGroupInput = z.infer<typeof modifierGroupSchema>
 export type ModifierOptionInput = z.infer<typeof modifierOptionSchema>
+export type PromotionInput = z.infer<typeof promotionSchema>
