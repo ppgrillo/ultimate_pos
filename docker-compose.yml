@@ -1,0 +1,69 @@
+services:
+  backend:
+    container_name: ovejapos-dev-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-runtime
+    restart: always
+    environment:
+      - PORT=3001
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - CORS_ORIGIN=https://dev.ovejapos.ovejasautomaticas.com
+      - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY}
+      - GOOGLE_SERVICE_ACCOUNT_PATH=/app/certs/service-account-key.json
+      - GOOGLE_WALLET_ISSUER_ID=${GOOGLE_WALLET_ISSUER_ID}
+      - APPLE_PASS_TYPE_IDENTIFIER=${APPLE_PASS_TYPE_IDENTIFIER}
+      - APPLE_TEAM_ID=${APPLE_TEAM_ID}
+      - APPLE_PASS_KEY_PASSPHRASE=${APPLE_PASS_KEY_PASSPHRASE}
+      - APPLE_WALLET_WEB_SERVICE_URL=${APPLE_WALLET_WEB_SERVICE_URL}
+      - APPLE_APNS_KEY_ID=${APPLE_APNS_KEY_ID}
+      - APPLE_APNS_P8_PATH=${APPLE_APNS_P8_PATH}
+      - APPLE_APNS_USE_DEVELOPMENT=${APPLE_APNS_USE_DEVELOPMENT}
+      - ACTIVE_PAYMENT_PROVIDER=${ACTIVE_PAYMENT_PROVIDER}
+      - CLIP_API_KEY=${CLIP_API_KEY}
+      - CLIP_API_SECRET=${CLIP_API_SECRET}
+      - GETNET_MERCHANT_ID=${GETNET_MERCHANT_ID}
+      - GETNET_API_KEY=${GETNET_API_KEY}
+      - MP_CLIENT_SECRET=${MP_CLIENT_SECRET}
+    volumes:
+      - ./certs:/app/certs:ro
+    networks:
+      - proxy
+
+  frontend:
+    container_name: ovejapos-dev-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-runtime
+    restart: always
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://backend:3001
+      - NEXTAUTH_URL=https://dev.ovejapos.ovejasautomaticas.com
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST}
+      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
+      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+    depends_on:
+      - backend
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ovejapos-dev-frontend.rule=Host(`dev.ovejapos.ovejasautomaticas.com`)"
+      - "traefik.http.routers.ovejapos-dev-frontend.entrypoints=websecure"
+      - "traefik.http.routers.ovejapos-dev-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.ovejapos-dev-frontend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.ovejapos-dev-frontend.middlewares=ovejapos-rate-limit"
+      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.average=50"
+      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.burst=100"
+      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.period=1s"
+
+networks:
+  proxy:
+    external: true
