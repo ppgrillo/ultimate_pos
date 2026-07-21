@@ -485,9 +485,10 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
       try {
         const mpOrder = await mpService.getOrder(accessToken, meta.mpOrderId as string)
         const mpStatus = mpOrder.status
+        const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
         if (mpStatus !== meta.mpOrderStatus) {
           const updates: Record<string, unknown> = {
-            metadata: { ...meta, mpOrderStatus: mpStatus },
+            metadata: { ...meta, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail },
           }
           if (mpStatus === 'processed') {
             updates.status = 'paid'

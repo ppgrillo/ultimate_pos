@@ -111,6 +111,7 @@ ordersRouter.get('/:id', async (c) => {
       if (accessToken) {
         const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
         const mpStatus = mpOrder.status
+        const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
 
         if (mpStatus !== 'created' && mpStatus !== 'at_terminal') {
           let orderStatus: string
@@ -147,7 +148,7 @@ ordersRouter.get('/:id', async (c) => {
             .update({
               status: orderStatus,
               payment_status: orderPaymentStatus,
-              metadata: { ...meta, mpOrderStatus: mpStatusMapped },
+              metadata: { ...meta, mpOrderStatus: mpStatusMapped, mpPaymentDetail: paymentDetail },
               updated_at: new Date().toISOString(),
             })
             .eq('id', id)
@@ -821,11 +822,12 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
     try {
       const mpOrder = await mpService.getOrder(accessToken, mpId)
       const mpStatus = mpOrder.status
+      const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
 
       if (mpStatus === 'processed') {
         await supabase
           .from('orders')
-          .update({ status: 'paid', payment_status: 'paid', metadata: { ...meta, mpOrderStatus: 'processed' } })
+          .update({ status: 'paid', payment_status: 'paid', metadata: { ...meta, mpOrderStatus: 'processed', mpPaymentDetail: paymentDetail } })
           .eq('id', order.id)
         await supabase
           .from('payments')
@@ -838,7 +840,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
       if (mpStatus === 'canceled' || mpStatus === 'expired' || mpStatus === 'failed') {
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: mpStatus } })
+          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail } })
           .eq('id', order.id)
         await supabase
           .from('payments')

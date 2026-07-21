@@ -36,7 +36,7 @@ interface MPPointPaymentProps {
   fetchOrder?: (orderId: string) => Promise<{ data: OrderResponse }>
 }
 
-type PaymentState = 'created' | 'at_terminal' | 'processing' | 'paid' | 'failed' | 'expired' | 'canceled' | 'action_required'
+type PaymentState = 'created' | 'at_terminal' | 'processing' | 'paid' | 'failed' | 'failed_high_risk' | 'failed_in_review' | 'failed_auth_required' | 'expired' | 'canceled' | 'canceled_by_terminal' | 'action_required'
 
 const STATE_CONFIG: Record<PaymentState, {
   icon: typeof CreditCard
@@ -80,6 +80,27 @@ const STATE_CONFIG: Record<PaymentState, {
     color: 'text-error',
     bg: 'bg-error/10',
   },
+  failed_high_risk: {
+    icon: XCircle,
+    title: 'Pago rechazado',
+    description: 'El pago fue rechazado por seguridad. Verifica los datos de la tarjeta.',
+    color: 'text-error',
+    bg: 'bg-error/10',
+  },
+  failed_in_review: {
+    icon: Clock,
+    title: 'Pago en revisión',
+    description: 'El pago está siendo revisado por MercadoPago. Te notificaremos cuando se resuelva.',
+    color: 'text-warning',
+    bg: 'bg-warning/10',
+  },
+  failed_auth_required: {
+    icon: AlertTriangle,
+    title: 'Autorización requerida',
+    description: 'Necesitas llamar a tu banco para autorizar el pago. Intenta de nuevo después.',
+    color: 'text-warning',
+    bg: 'bg-warning/10',
+  },
   expired: {
     icon: Clock,
     title: 'Tiempo de espera agotado',
@@ -91,6 +112,13 @@ const STATE_CONFIG: Record<PaymentState, {
     icon: XCircle,
     title: 'Pago cancelado',
     description: 'La orden de pago fue cancelada',
+    color: 'text-on-surface-variant',
+    bg: 'bg-surface-container',
+  },
+  canceled_by_terminal: {
+    icon: XCircle,
+    title: 'Pago cancelado en terminal',
+    description: 'El pago fue cancelado desde la terminal Point',
     color: 'text-on-surface-variant',
     bg: 'bg-surface-container',
   },
@@ -106,16 +134,33 @@ const STATE_CONFIG: Record<PaymentState, {
 type OrderResponse = {
   status?: string
   payment_status?: string
-  metadata?: { mpOrderStatus?: string }
+  metadata?: { mpOrderStatus?: string; mpPaymentDetail?: string }
   loyalty?: LoyaltyData
 }
 
 function toPaymentState(res: OrderResponse | undefined): PaymentState | undefined {
   if (!res) return undefined
   if (res.status === 'paid' || res.payment_status === 'paid') return 'paid'
-  if (res.status === 'cancelled') return 'canceled'
+
   const raw = res.metadata?.mpOrderStatus
+  const detail = res.metadata?.mpPaymentDetail
+
   if (raw === 'processed') return 'paid'
+
+  if (raw === 'failed') {
+    if (detail === 'high_risk') return 'failed_high_risk'
+    if (detail === 'in_review') return 'failed_in_review'
+    if (detail === 'required_call_for_authorize') return 'failed_auth_required'
+    return 'failed'
+  }
+
+  if (raw === 'canceled') {
+    if (detail === 'cancel_by_terminal') return 'canceled_by_terminal'
+    return 'canceled'
+  }
+
+  if (raw === 'expired') return 'expired'
+
   if (raw && (STATE_CONFIG as Record<string, unknown>)[raw]) return raw as PaymentState
   return undefined
 }
@@ -177,7 +222,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
 
   useEffect(() => {
     if (isCreating || !orderId) return
-    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired' || currentState === 'canceled') return
+    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired' || currentState === 'canceled' || currentState === 'failed_high_risk' || currentState === 'failed_in_review' || currentState === 'failed_auth_required' || currentState === 'canceled_by_terminal') return
 
     const interval = setInterval(() => {
       poll()
@@ -189,7 +234,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
   const TIMEOUT_MS = 3 * 60 * 1000
   useEffect(() => {
     if (isCreating || !orderId) return
-    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired') return
+    if (!open || currentState === 'paid' || currentState === 'failed' || currentState === 'expired' || currentState === 'failed_high_risk' || currentState === 'failed_in_review' || currentState === 'failed_auth_required' || currentState === 'canceled_by_terminal') return
     const timer = setTimeout(() => {
       setLocalState('expired')
     }, TIMEOUT_MS)
@@ -285,6 +330,76 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             </div>
           )}
 
+          {currentState === 'failed_high_risk' && (
+            <div className="w-full space-y-2">
+              <div className="rounded-xl bg-error/10 border border-error/30 p-3 text-left">
+                <p className="text-xs text-error">
+                  El pago fue rechazado por el sistema de seguridad de MercadoPago. Esto puede deberse a un intento de fraude o datos incorrectos de la tarjeta.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onCancel}
+                  className="flex-1 rounded-xl border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setLocalState('created')
+                    onCancel()
+                  }}
+                  className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentState === 'failed_in_review' && (
+            <div className="w-full space-y-2">
+              <div className="rounded-xl bg-warning/10 border border-warning/30 p-3 text-left">
+                <p className="text-xs text-warning">
+                  El pago está siendo revisado por MercadoPago. Esto puede tomar unos minutos. Te notificaremos cuando se resuelva.
+                </p>
+              </div>
+              <button
+                onClick={onCancel}
+                className="w-full rounded-xl border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          )}
+
+          {currentState === 'failed_auth_required' && (
+            <div className="w-full space-y-2">
+              <div className="rounded-xl bg-warning/10 border border-warning/30 p-3 text-left">
+                <p className="text-xs text-warning">
+                  El pago requiere autorización del banco. Llama a tu banco para autorizar la transacción y luego intenta de nuevo.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onCancel}
+                  className="flex-1 rounded-xl border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setLocalState('created')
+                    onCancel()
+                  }}
+                  className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          )}
+
           {currentState === 'action_required' && (
             <button
               onClick={() => setLocalState('at_terminal')}
@@ -294,7 +409,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             </button>
           )}
 
-          {(currentState === 'expired' || currentState === 'canceled') && (
+          {(currentState === 'expired' || currentState === 'canceled' || currentState === 'canceled_by_terminal') && (
             <button
               onClick={() => onOpenChange(false)}
               className="w-full rounded-xl bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"

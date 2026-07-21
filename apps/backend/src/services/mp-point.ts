@@ -64,7 +64,7 @@ class MPService {
       headers['X-Idempotency-Key'] = idempotencyKey
     }
     const bodyStr = body ? JSON.stringify(body) : undefined
-    console.log(`[mp-service] >> ${method} ${path}`, bodyStr?.slice(0, 500))
+    console.log(`[mp-service] >> ${method} ${path}${bodyStr ? ' ' + bodyStr.slice(0, 500) : ''}`)
 
     const res = await fetch(url, {
       method,
