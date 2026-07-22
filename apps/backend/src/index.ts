@@ -19,6 +19,7 @@ import { filesRouter } from './routes/files'
 import { selfCheckoutRouter } from './routes/self-checkout'
 import { publicRouter } from './routes/public'
 import { promotionsRouter } from './routes/promotions'
+import { analyticsRouter } from './routes/analytics'
 
 const app = new Hono()
 
@@ -43,6 +44,7 @@ app.route('/files', filesRouter)
 app.route('/self-checkout', selfCheckoutRouter)
 app.route('/public', publicRouter)
 app.route('/promotions', promotionsRouter)
+app.route('/analytics', analyticsRouter)
 
 const port = Number(process.env.PORT) || 3001
 

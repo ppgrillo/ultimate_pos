@@ -4,6 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 const protectedPaths = [
   '/dashboard',
+  '/analytics',
   '/pos',
   '/products',
   '/orders',
@@ -67,6 +68,7 @@ export const config = {
   matcher: [
     '/api/:path*',
     '/dashboard/:path*',
+    '/analytics/:path*',
     '/pos/:path*',
     '/products/:path*',
     '/orders/:path*',

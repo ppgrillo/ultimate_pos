@@ -66,12 +66,14 @@ customersRouter.get('/stats', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
 
-  const now = new Date()
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
   const [totalResult, newResult, topResult, visitsResult] = await Promise.all([
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', storeId),
-    supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', storeId).gte('created_at', firstOfMonth),
+    (async () => {
+      const { data: store } = await supabase.from('stores').select('settings').eq('id', storeId).single()
+      const tz = ((store?.settings as Record<string, unknown>)?.timezone as string) || 'UTC'
+      const firstOfMonth = new Date().toLocaleDateString('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit' }) + '-01'
+      return supabase.from('customers').select('id', { count: 'exact', head: true }).eq('store_id', storeId).gte('created_at', firstOfMonth)
+    })(),
     supabase.from('customers').select('name, total_spent').eq('store_id', storeId).order('total_spent', { ascending: false }).limit(5),
     supabase.from('customers').select('total_visits').eq('store_id', storeId).order('total_visits', { ascending: false }).limit(1).maybeSingle(),
   ])

@@ -291,11 +291,14 @@ selfCheckoutRouter.post('/orders', async (c) => {
     ? Math.round((subtotal - totalDiscount) * 100) / 100
     : Math.round((subtotal + tax - totalDiscount) * 100) / 100
 
+  const tz = (settings?.timezone as string) || 'UTC'
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+
   const { data: seqData } = await supabaseAdmin
     .from('orders')
     .select('order_number')
     .eq('store_id', storeId)
-    .gte('created_at', new Date().toISOString().slice(0, 10))
+    .gte('created_at', todayKey)
     .order('order_number', { ascending: false })
     .limit(1)
 
@@ -428,6 +431,32 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .from('payments')
       .update({ reference: mpOrder.id })
       .eq('order_id', order.id)
+
+    // Poll MP status immediately — payment may already be processed at the terminal
+    try {
+      const earlyMp = await mpService.getOrder(mpPointAccessToken, mpOrder.id)
+      if (earlyMp.status === 'processed') {
+        await supabaseAdmin
+          .from('orders')
+          .update({ status: 'paid', payment_status: 'paid', metadata: { ...order.metadata, stationId: station.id, stationName: station.name, source: 'self-checkout', mpOrderId: mpOrder.id, mpOrderStatus: 'processed' } })
+          .eq('id', order.id)
+        await supabaseAdmin
+          .from('payments')
+          .update({ status: 'completed' })
+          .eq('order_id', order.id)
+      } else if (['canceled', 'expired', 'failed'].includes(earlyMp.status)) {
+        await supabaseAdmin
+          .from('orders')
+          .update({ status: 'cancelled', payment_status: 'unpaid', metadata: { ...order.metadata, stationId: station.id, stationName: station.name, source: 'self-checkout', mpOrderId: mpOrder.id, mpOrderStatus: earlyMp.status } })
+          .eq('id', order.id)
+        await supabaseAdmin
+          .from('payments')
+          .update({ status: 'failed' })
+          .eq('order_id', order.id)
+      }
+    } catch {
+      // Not yet processed — client polling will catch it
+    }
   } catch (err: unknown) {
     const mpErr = err as { message?: string; body?: unknown }
     const detail = JSON.stringify(mpErr?.body || mpErr?.message || 'MP Point error')

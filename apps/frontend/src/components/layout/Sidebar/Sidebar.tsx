@@ -16,11 +16,13 @@ import {
   PanelLeftClose,
   PanelLeft,
   Tag,
+  BarChart3,
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
   { href: '/orders', label: 'Orders', icon: ClipboardList },
   { href: '/products', label: 'Products', icon: Package },

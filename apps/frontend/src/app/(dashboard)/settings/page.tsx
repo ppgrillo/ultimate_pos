@@ -89,6 +89,7 @@ export default function SettingsPage() {
   const [designContactWebsite, setDesignContactWebsite] = useState('')
   const [designHeroImageUrl, setDesignHeroImageUrl] = useState('')
   const [businessAddress, setBusinessAddress] = useState('')
+  const [timezone, setTimezone] = useState('America/Mexico_City')
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [activeTab, setActiveTab] = useState('store')
   const { refetch: refetchStore } = useGetCurrentStoreQuery()
@@ -152,6 +153,7 @@ export default function SettingsPage() {
     setDesignContactWebsite((design?.contactWebsite as string) ?? '')
     setDesignHeroImageUrl((design?.heroImageUrl as string) ?? '')
     setBusinessAddress((settings?.address as string) ?? '')
+    setTimezone((settings?.timezone as string) ?? 'America/Mexico_City')
   }, [settings, taxRate])
 
   const currentMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
@@ -189,6 +191,7 @@ export default function SettingsPage() {
     signupBonusPoints !== ((settings?.signupBonusPoints as number) ?? 0) ||
     pointsExpirationDays !== ((settings?.pointsExpirationDays as number) ?? 0) ||
     promoPin !== ((settings?.promoPin as string) ?? '') ||
+    timezone !== ((settings?.timezone as string) ?? 'America/Mexico_City') ||
 
     walletPassDesignHexColor !== (((settings?.walletPassDesign as Record<string, unknown>)?.hexColor as string) ?? '#1F1F1F') ||
     walletPassDesignLogoImageUrl !== (((settings?.walletPassDesign as Record<string, unknown>)?.logoImageUrl as string) ?? '') ||
@@ -246,6 +249,7 @@ export default function SettingsPage() {
         signupBonusPoints,
         pointsExpirationDays,
         promoPin: promoPin || undefined,
+        timezone,
 
         name: designIssuerName,
         walletPassDesign: {
@@ -381,6 +385,56 @@ export default function SettingsPage() {
         </TabsList>
         <TabsContent value="store">
           <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> Store Timezone</CardTitle>
+                <CardDescription>All reports, analytics, and order timestamps use this timezone</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full max-w-md rounded-xl border border-outline-variant bg-surface px-4 py-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <optgroup label="Americas">
+                    <option value="America/Mexico_City">Mexico City (UTC-6)</option>
+                    <option value="America/Tijuana">Tijuana (UTC-8)</option>
+                    <option value="America/Cancun">Cancun (UTC-5)</option>
+                    <option value="America/Bogota">Bogota (UTC-5)</option>
+                    <option value="America/Lima">Lima (UTC-5)</option>
+                    <option value="America/Santiago">Santiago (UTC-4)</option>
+                    <option value="America/Buenos_Aires">Buenos Aires (UTC-3)</option>
+                    <option value="America/Sao_Paulo">Sao Paulo (UTC-3)</option>
+                    <option value="America/New_York">New York (UTC-5)</option>
+                    <option value="America/Chicago">Chicago (UTC-6)</option>
+                    <option value="America/Los_Angeles">Los Angeles (UTC-8)</option>
+                    <option value="America/Denver">Denver (UTC-7)</option>
+                    <option value="Pacific/Honolulu">Honolulu (UTC-10)</option>
+                  </optgroup>
+                  <optgroup label="Europe & Africa">
+                    <option value="Europe/London">London (UTC+0)</option>
+                    <option value="Europe/Paris">Paris (UTC+1)</option>
+                    <option value="Europe/Berlin">Berlin (UTC+1)</option>
+                    <option value="Europe/Madrid">Madrid (UTC+1)</option>
+                    <option value="Europe/Rome">Rome (UTC+1)</option>
+                    <option value="Africa/Lagos">Lagos (UTC+1)</option>
+                    <option value="Africa/Johannesburg">Johannesburg (UTC+2)</option>
+                  </optgroup>
+                  <optgroup label="Asia & Oceania">
+                    <option value="Asia/Dubai">Dubai (UTC+4)</option>
+                    <option value="Asia/Kolkata">Kolkata (UTC+5:30)</option>
+                    <option value="Asia/Bangkok">Bangkok (UTC+7)</option>
+                    <option value="Asia/Shanghai">Shanghai (UTC+8)</option>
+                    <option value="Asia/Tokyo">Tokyo (UTC+9)</option>
+                    <option value="Australia/Sydney">Sydney (UTC+10)</option>
+                  </optgroup>
+                  <optgroup label="UTC">
+                    <option value="UTC">UTC</option>
+                  </optgroup>
+                </select>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Product Defaults</CardTitle>

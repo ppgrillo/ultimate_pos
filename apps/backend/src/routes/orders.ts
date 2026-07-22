@@ -28,6 +28,8 @@ ordersRouter.get('/', async (c) => {
   const storeId = c.get('storeId')
   const status = c.req.query('status')
   const tab = c.req.query('tab')
+  const startDate = c.req.query('startDate')
+  const endDate = c.req.query('endDate')
   const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
   const offset = Number(c.req.query('offset')) || 0
 
@@ -42,6 +44,13 @@ ordersRouter.get('/', async (c) => {
     query = query.in('status', ['pending', 'preparing', 'ready'])
   } else if (tab === 'completed') {
     query = query.in('status', ['served', 'paid'])
+  }
+
+  if (startDate) {
+    query = query.gte('created_at', startDate)
+  }
+  if (endDate) {
+    query = query.lte('created_at', endDate)
   }
 
   const { data, error, count } = await query
@@ -307,11 +316,14 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const initialStatus = !hasKitchen && paymentMethod && !isMpPoint ? 'paid' : 'pending'
   const paymentStatus = paymentMethod && !isMpPoint ? 'paid' : 'unpaid'
 
+  const tz = (settings?.timezone as string) || 'UTC'
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+
   const { data: seqData } = await supabase
     .from('orders')
     .select('order_number')
     .eq('store_id', storeId)
-    .gte('created_at', new Date().toISOString().slice(0, 10))
+    .gte('created_at', todayKey)
     .order('order_number', { ascending: false })
     .limit(1)
 
@@ -489,6 +501,34 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       .from('payments')
       .update({ reference: mpOrder.id })
       .eq('order_id', order.id)
+
+    // Poll MP status immediately — payment may already be processed at the terminal
+    try {
+      await new Promise((r) => setTimeout(r, 2000))
+      const earlyMp = await mpService.getOrder(mpPointAccessToken, mpOrder.id)
+      if (earlyMp.status === 'processed') {
+        await supabaseAdmin
+          .from('orders')
+          .update({ status: 'paid', payment_status: 'paid', metadata: { mpOrderId: mpOrder.id, mpOrderStatus: 'processed' } })
+          .eq('id', order.id)
+        await supabaseAdmin
+          .from('payments')
+          .update({ status: 'completed' })
+          .eq('order_id', order.id)
+        await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => {})
+      } else if (['canceled', 'expired', 'failed'].includes(earlyMp.status)) {
+        await supabaseAdmin
+          .from('orders')
+          .update({ status: 'cancelled', payment_status: 'unpaid', metadata: { mpOrderId: mpOrder.id, mpOrderStatus: earlyMp.status } })
+          .eq('id', order.id)
+        await supabaseAdmin
+          .from('payments')
+          .update({ status: 'failed' })
+          .eq('order_id', order.id)
+      }
+    } catch {
+      // Not yet processed — webhook will handle it
+    }
   }
 
   if (input.customer_id && !isMpPoint) {

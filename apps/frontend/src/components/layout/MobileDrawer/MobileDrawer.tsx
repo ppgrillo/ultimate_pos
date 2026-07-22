@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut, Tag } from 'lucide-react'
+import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut, Tag, BarChart3 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { closeDrawer } from '@/store/slices/uiSlice'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
   { href: '/orders', label: 'Orders', icon: ClipboardList },
   { href: '/products', label: 'Products', icon: Package },

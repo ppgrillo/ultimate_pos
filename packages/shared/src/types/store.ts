@@ -28,6 +28,8 @@ export interface StoreSettings {
   mpClientSecret?: string
   preferenceFields: PreferenceField[]
   registrationInterestsConfig?: RegistrationInterestsConfig
+  // Timezone
+  timezone?: string
   // Loyalty
   pointsPerCurrency?: number
   currencyUnit?: string

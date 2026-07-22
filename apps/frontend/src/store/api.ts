@@ -32,6 +32,46 @@ export interface CustomerStats {
   avgOrderValue: number
 }
 
+export interface DashboardStats {
+  todayRevenue: number
+  todayOrderCount: number
+  activeOrders: number
+  avgOrderValue: number
+  salesByHour: Array<{ hour: number; label: string; revenue: number; count: number }>
+}
+
+export interface SalesData {
+  revenue: number
+  orderCount: number
+  avgOrderValue: number
+  previousPeriodRevenue: number
+  revenueChange: number
+  revenueByTime: Array<{ label: string; revenue: number; count: number }>
+}
+
+export interface ProductAnalytics {
+  productId: string
+  name: string
+  quantitySold: number
+  revenue: number
+}
+
+export interface AnalyticsOverview {
+  revenue: number
+  revenueChange: number
+  orderCount: number
+  orderChange: number
+  avgOrderValue: number
+  avgChange: number
+  newCustomers: number
+  ordersByType: Record<string, number>
+  ordersByPayment: Record<string, number>
+  revenueByPayment: Record<string, number>
+  paymentStatusBreakdown: Record<string, number>
+}
+
+export type AnalyticsPeriod = 'today' | 'week' | 'month' | 'year' | 'custom'
+
 export interface CustomerSummary {
   customer: CustomerWithLoyalty
   recentOrders: any[]
@@ -486,6 +526,40 @@ export const api = createApi({
       }),
       transformResponse: (response: { data: PromotionValidationResponse }) => response.data,
     }),
+
+    // ── Analytics endpoints ──
+    getDashboardStats: builder.query<DashboardStats, { tz?: string }>({
+      query: (params) => ({
+        url: '/analytics/dashboard-stats',
+        params: params.tz ? { tz: params.tz } : {},
+      }),
+      transformResponse: (response: { data: DashboardStats }) => response.data,
+      refetchOnMountOrArgChange: 300,
+    }),
+    getAnalyticsSales: builder.query<SalesData, { period: AnalyticsPeriod; from?: string; to?: string; tz?: string }>({
+      query: (params) => ({
+        url: '/analytics/sales',
+        params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), ...(params.tz ? { tz: params.tz } : {}) },
+      }),
+      transformResponse: (response: { data: SalesData }) => response.data,
+      refetchOnMountOrArgChange: 300,
+    }),
+    getAnalyticsProducts: builder.query<ProductAnalytics[], { period: AnalyticsPeriod; from?: string; to?: string; limit?: number; tz?: string }>({
+      query: (params) => ({
+        url: '/analytics/products',
+        params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), limit: params.limit ?? 10, ...(params.tz ? { tz: params.tz } : {}) },
+      }),
+      transformResponse: (response: { data: ProductAnalytics[] }) => response.data,
+      refetchOnMountOrArgChange: 300,
+    }),
+    getAnalyticsOverview: builder.query<AnalyticsOverview, { period: AnalyticsPeriod; from?: string; to?: string; tz?: string }>({
+      query: (params) => ({
+        url: '/analytics/overview',
+        params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), ...(params.tz ? { tz: params.tz } : {}) },
+      }),
+      transformResponse: (response: { data: AnalyticsOverview }) => response.data,
+      refetchOnMountOrArgChange: 300,
+    }),
   }),
 })
 
@@ -534,4 +608,8 @@ export const {
   useDeletePromotionMutation,
   useTogglePromotionMutation,
   useValidatePromotionsMutation,
+  useGetDashboardStatsQuery,
+  useGetAnalyticsSalesQuery,
+  useGetAnalyticsProductsQuery,
+  useGetAnalyticsOverviewQuery,
 } = api

@@ -1,11 +1,12 @@
 'use client'
 
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useGetProductsQuery, useGetOrdersQuery, useGetCustomerStatsQuery } from '@/store/api'
+import { useGetProductsQuery, useGetOrdersQuery, useGetCustomerStatsQuery, useGetDashboardStatsQuery } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { DollarSign, ShoppingCart, Package, Users, TrendingUp, ListPlus, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 
 function StatCard({
   label,
@@ -34,17 +35,20 @@ function StatCard({
 
 export default function DashboardPage() {
   const storeName = useAppSelector((s) => s.storeConfig.currentStore?.name)
-  const { data: products = [], isLoading: productsLoading } = useGetProductsQuery()
-  const { data: ordersResult, isLoading: ordersLoading } = useGetOrdersQuery(undefined)
-  const orders = ordersResult?.items ?? []
-  const { data: stats, isLoading: statsLoading } = useGetCustomerStatsQuery()
-  const loading = productsLoading || ordersLoading || statsLoading
+  const timezone = useAppSelector((s) => s.storeConfig.currentStore?.settings?.timezone) || 'UTC'
+  const { isLoading: productsLoading } = useGetProductsQuery()
+  const { data: dashboardStats, isLoading: statsLoading } = useGetDashboardStatsQuery({ tz: timezone })
+  const { data: ordersResult, isLoading: ordersLoading } = useGetOrdersQuery({ tab: 'active', limit: 50 })
+  const { data: customerStats, isLoading: customerStatsLoading } = useGetCustomerStatsQuery()
+  const loading = productsLoading || statsLoading || ordersLoading || customerStatsLoading
 
-  const todayOrders = orders.filter(
-    (o) => new Date(o.created_at || Date.now()).toDateString() === new Date().toDateString(),
-  )
-  const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0)
-  const activeOrders = orders.filter((o) => o.status === 'pending' || o.status === 'preparing').length
+  const todayRevenue = dashboardStats?.todayRevenue ?? 0
+  const todayOrderCount = dashboardStats?.todayOrderCount ?? 0
+  const activeOrders = dashboardStats?.activeOrders ?? 0
+  const avgOrderValue = dashboardStats?.avgOrderValue ?? 0
+  const salesByHour = dashboardStats?.salesByHour ?? []
+
+  const recentOrders = ordersResult?.items ?? []
 
   if (loading) {
     return (
@@ -86,13 +90,12 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stat tiles — 4-column bento row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Today Revenue"
           value={formatCurrency(todayRevenue)}
           icon={DollarSign}
-          trend={`${todayOrders.length} order${todayOrders.length !== 1 ? 's' : ''} today`}
+          trend={`${todayOrderCount} order${todayOrderCount !== 1 ? 's' : ''} today`}
         />
         <StatCard
           label="Active Orders"
@@ -101,57 +104,71 @@ export default function DashboardPage() {
           trend={activeOrders > 0 ? 'In progress' : 'No active orders'}
         />
         <StatCard
-          label="Total Customers"
-          value={String(stats?.totalCustomers ?? 0)}
-          icon={Users}
-          trend={stats?.newThisMonth ? `${stats.newThisMonth} new this month` : undefined}
+          label="Avg Ticket"
+          value={formatCurrency(avgOrderValue)}
+          icon={TrendingUp}
+          trend="Per order"
         />
         <StatCard
-          label="Products"
-          value={String(products.length)}
-          icon={Package}
-          trend={`${products.filter((p) => p.is_active).length} active`}
+          label="Total Customers"
+          value={String(customerStats?.totalCustomers ?? 0)}
+          icon={Users}
+          trend={customerStats?.newThisMonth ? `${customerStats.newThisMonth} new this month` : undefined}
         />
       </div>
 
-      {/* Bento row 2: Quick actions (2 cols) + Recent activity (1 col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Quick actions — spans 2 cols */}
         <div className="lg:col-span-2 rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5 transition-all duration-200 hover:bg-surface-container/70 hover:border-outline-variant/60">
-          <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Link
-              href="/pos"
-              className="flex flex-col items-center gap-2 rounded-lg bg-surface-container/60 border border-outline-variant/20 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 hover:text-primary group"
-            >
-              <ShoppingCart className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
-              <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">New Sale</span>
-            </Link>
-            <Link
-              href="/products/new"
-              className="flex flex-col items-center gap-2 rounded-lg bg-surface-container/60 border border-outline-variant/20 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 hover:text-primary group"
-            >
-              <ListPlus className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
-              <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">Add Product</span>
-            </Link>
-            <Link
-              href="/orders"
-              className="flex flex-col items-center gap-2 rounded-lg bg-surface-container/60 border border-outline-variant/20 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 hover:text-primary group"
-            >
-              <TrendingUp className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
-              <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">View Orders</span>
-            </Link>
-            <Link
-              href="/settings"
-              className="flex flex-col items-center gap-2 rounded-lg bg-surface-container/60 border border-outline-variant/20 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 hover:text-primary group"
-            >
-              <Package className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
-              <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">Settings</span>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider">Today&apos;s Sales</h2>
+            <Link href="/analytics" className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+              Full analytics <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
+          {salesByHour.length > 0 ? (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={salesByHour}>
+                  <defs>
+                    <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ccff00" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#ccff00" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#9e9e9e' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1c1c1c',
+                      border: '1px solid #333',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    formatter={(value) => [formatCurrency(Number(value)), 'Revenue']}
+                    labelStyle={{ color: '#9e9e9e' }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#ccff00"
+                    strokeWidth={2}
+                    fill="url(#salesGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-48 text-on-surface-variant/40 text-sm">
+              No sales yet today
+            </div>
+          )}
         </div>
 
-        {/* Recent activity */}
         <div className="rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5 transition-all duration-200 hover:bg-surface-container/70 hover:border-outline-variant/60">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider">Recent Orders</h2>
@@ -159,22 +176,56 @@ export default function DashboardPage() {
               View all <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-          {orders.length === 0 ? (
+          {recentOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <ShoppingCart className="h-6 w-6 text-on-surface-variant/40 mb-2" />
-              <p className="text-xs text-on-surface-variant/60">No orders yet</p>
+              <p className="text-xs text-on-surface-variant/60">No active orders</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {orders.slice(0, 5).map((order) => (
+              {recentOrders.slice(0, 5).map((order) => (
                 <div key={order.id} className="flex items-center justify-between py-1.5 border-b border-outline-variant/10 last:border-0">
-                  <span className="text-xs text-on-surface truncate max-w-[140px]">#{order.id.slice(0, 8)}</span>
+                  <div className="min-w-0">
+                    <span className="text-xs text-on-surface truncate block">#{order.id.slice(0, 8)}</span>
+                    <span className="text-[10px] text-on-surface-variant/60 capitalize">{order.payment_status || order.status}</span>
+                  </div>
                   <span className="text-xs font-bold text-on-surface">{formatCurrency(order.total || 0)}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Link
+          href="/pos"
+          className="flex flex-col items-center gap-2 rounded-xl bg-surface-container/50 border border-outline-variant/30 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 group"
+        >
+          <ShoppingCart className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
+          <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">New Sale</span>
+        </Link>
+        <Link
+          href="/products/new"
+          className="flex flex-col items-center gap-2 rounded-xl bg-surface-container/50 border border-outline-variant/30 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 group"
+        >
+          <ListPlus className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
+          <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">Add Product</span>
+        </Link>
+        <Link
+          href="/orders"
+          className="flex flex-col items-center gap-2 rounded-xl bg-surface-container/50 border border-outline-variant/30 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 group"
+        >
+          <TrendingUp className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
+          <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">View Orders</span>
+        </Link>
+        <Link
+          href="/settings"
+          className="flex flex-col items-center gap-2 rounded-xl bg-surface-container/50 border border-outline-variant/30 p-4 transition-all duration-200 hover:bg-primary/10 hover:border-primary/30 group"
+        >
+          <Package className="h-5 w-5 text-on-surface-variant group-hover:text-primary transition-colors" />
+          <span className="text-xs font-label font-bold text-on-surface-variant group-hover:text-primary transition-colors">Settings</span>
+        </Link>
       </div>
     </div>
   )

@@ -136,10 +136,32 @@ webhooksRouter.post('/mp-point', async (c) => {
     return c.json({ message: 'Already processed' }, 200)
   }
 
-  const metadata = {
+  // Fetch granular payment detail from MP API for terminal states
+  let mpPaymentDetail: string | undefined
+  let mpPaymentStatus: string | undefined
+  if (['processed', 'failed', 'canceled', 'expired'].includes(mapping.mpStatus) && storeId) {
+    try {
+      const { data: store } = await supabaseAdmin
+        .from('stores')
+        .select('settings')
+        .eq('id', storeId)
+        .single()
+      const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+      const accessToken = storeSettings?.mpPointAccessToken as string
+      if (accessToken) {
+        const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
+        mpPaymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
+        mpPaymentStatus = mpOrder.transactions?.payments?.[0]?.status
+      }
+    } catch {
+      // Fallback — use action-based detail
+    }
+  }
+
+  const metadata: Record<string, unknown> = {
     ...currentMetadata,
     mpOrderStatus: mapping.mpStatus,
-    mpStatusDetail: mapping.mpStatus,
+    mpPaymentDetail: mpPaymentDetail || mapping.mpStatus,
   }
 
   const updateData: Record<string, unknown> = {
@@ -156,6 +178,8 @@ webhooksRouter.post('/mp-point', async (c) => {
 
   if (mapping.paymentStatus === 'failed') {
     updateData.payment_status = 'unpaid'
+  } else if (mapping.paymentStatus === 'refunded') {
+    updateData.payment_status = 'refunded'
   }
 
   const { error: updateError } = await supabaseAdmin
@@ -169,7 +193,7 @@ webhooksRouter.post('/mp-point', async (c) => {
   }
 
   if (mapping.paymentStatus) {
-    const paymentUpdate: Record<string, unknown> = { status: mapping.paymentStatus }
+    const paymentUpdate: Record<string, unknown> = { status: mpPaymentStatus === 'approved' ? 'completed' : mapping.paymentStatus }
     await supabaseAdmin
       .from('payments')
       .update(paymentUpdate)
