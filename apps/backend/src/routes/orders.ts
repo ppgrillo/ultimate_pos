@@ -570,6 +570,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       if (redeemedPoints > 0) {
         try {
           await redeemPoints(effectiveCard.id, redeemedPoints, `Canje en orden #${nextOrderNumber}`)
+          syncWallets(effectiveCard.id).catch(() => {})
         } catch (err: unknown) {
           console.error('Failed to redeem points:', err)
         }
@@ -711,11 +712,16 @@ ordersRouter.patch('/:id/status', async (c) => {
       .eq('reference_id', id)
       .eq('reference_type', 'order')
     if (cancelTxs && cancelTxs.length > 0) {
-      const { redeemPoints: doRedeem } = await import('../services/loyalty.service')
+      const { redeemPoints: doRedeem, syncWallets } = await import('../services/loyalty.service')
+      const syncedCardIds = new Set<string>()
       for (const tx of cancelTxs) {
         if (tx.type === 'earn' && tx.points > 0 && tx.loyalty_card_id) {
           await doRedeem(tx.loyalty_card_id, tx.points, `Devolución orden #${data?.order_number}`).catch(() => {})
+          syncedCardIds.add(tx.loyalty_card_id)
         }
+      }
+      for (const cardId of syncedCardIds) {
+        syncWallets(cardId).catch(() => {})
       }
     }
 
@@ -839,11 +845,16 @@ export async function reverseMpLoyalty(
 
   if (!txs || txs.length === 0) return
 
-  const { redeemPoints: doRedeem } = await import('../services/loyalty.service')
+  const { redeemPoints: doRedeem, syncWallets } = await import('../services/loyalty.service')
+  const syncedCardIds = new Set<string>()
   for (const tx of txs) {
     if (tx.type === 'earn' && tx.points > 0 && tx.loyalty_card_id) {
       await doRedeem(tx.loyalty_card_id, tx.points, `Devolución MP orden #${orderId}`).catch(() => {})
+      syncedCardIds.add(tx.loyalty_card_id)
     }
+  }
+  for (const cardId of syncedCardIds) {
+    syncWallets(cardId).catch(() => {})
   }
 }
 
