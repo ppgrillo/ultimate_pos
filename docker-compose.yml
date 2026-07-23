@@ -33,6 +33,12 @@ services:
       - ./certs:/app/certs:ro
     networks:
       - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ovejapos-dev-api.rule=Host(`api-dev.ovejapos.ovejasautomaticas.com`)"
+      - "traefik.http.routers.ovejapos-dev-api.entrypoints=websecure"
+      - "traefik.http.routers.ovejapos-dev-api.tls.certresolver=myresolver"
+      - "traefik.http.services.ovejapos-dev-api.loadbalancer.server.port=3001"
 
   frontend:
     container_name: ovejapos-dev-frontend

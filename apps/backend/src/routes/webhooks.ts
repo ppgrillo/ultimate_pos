@@ -10,6 +10,8 @@ async function verifySignature(
   body: string,
   signatureHeader: string | undefined,
   clientSecret: string,
+  dataId: string | null | undefined,
+  xRequestId: string | null | undefined,
 ): Promise<boolean> {
   if (!signatureHeader || !clientSecret) return false
 
@@ -24,16 +26,17 @@ async function verifySignature(
 
   if (!ts || !receivedHash) return false
 
-  const now = Math.floor(Date.now() / 1000)
-  if (Math.abs(now - parseInt(ts, 10)) > 300) return false
+  const now = Date.now()
+  const tsNum = parseInt(ts, 10)
+  const tsMs = tsNum > 1e12 ? tsNum : tsNum * 1000
+  if (Math.abs(now - tsMs) > 300000) return false
 
-  const parsed = JSON.parse(body)
-  const orderId = parsed?.data?.id
-  const requestId = parsed?.id
+  const orderId = dataId?.toLowerCase()
+  const requestId = xRequestId
 
   if (!orderId || !requestId) return false
 
-  const dataToSign = `id=${orderId};request-id=${requestId};ts=${ts};`
+  const dataToSign = `id:${orderId};request-id:${requestId};ts:${ts};`
 
   const encoder = new TextEncoder()
   const keyData = encoder.encode(clientSecret)
@@ -120,7 +123,7 @@ webhooksRouter.post('/mp-point', async (c) => {
     const clientSecret = storeSettings?.mpClientSecret as string | undefined
 
     if (clientSecret) {
-      const valid = await verifySignature(body, signature, clientSecret)
+      const valid = await verifySignature(body, signature, clientSecret, c.req.query('data.id'), c.req.header('x-request-id'))
       if (!valid) {
         console.warn(`[mp-point-webhook] Invalid signature for store ${storeId}`)
         return c.json({ message: 'Invalid signature' }, 401)
