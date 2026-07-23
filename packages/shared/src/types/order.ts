@@ -1,7 +1,7 @@
 import type { Payment } from './customer'
 import type { AppliedPromotion } from './promotion'
 
-export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
+export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled' | 'refunded'
 
 export type OrderType = 'dine-in' | 'takeaway' | 'delivery'
 
@@ -62,6 +62,7 @@ export function getNextKitchenTransitions(current: OrderStatus): OrderStatusTran
   return [
     ...next,
     { from: current, to: 'cancelled', label: 'Cancel Order' },
+    ...(current === 'served' || current === 'paid' ? [{ from: current, to: 'refunded' as OrderStatus, label: 'Refund' }] : []),
   ]
 }
 
@@ -74,14 +75,15 @@ export function getNextRetailTransitions(current: OrderStatus): OrderStatusTrans
   }
   if (current === 'paid') {
     return [
-      { from: 'paid', to: 'cancelled', label: 'Void / Refund' },
+      { from: 'paid', to: 'refunded', label: 'Refund' },
+      { from: 'paid', to: 'cancelled', label: 'Void' },
     ]
   }
   return []
 }
 
 export function canTransition(from: OrderStatus, to: OrderStatus, hasKitchen: boolean): boolean {
-  if (to === 'cancelled') return true
+  if (to === 'cancelled' || to === 'refunded') return true
   const transitions = hasKitchen ? KITCHEN_FLOW : getNextRetailTransitions(from)
   return transitions.some(t => t.from === from && t.to === to)
 }
@@ -89,6 +91,6 @@ export function canTransition(from: OrderStatus, to: OrderStatus, hasKitchen: bo
 export interface OrderMetadata {
   [key: string]: unknown
   mpOrderId?: string
-  mpOrderStatus?: 'created' | 'at_terminal' | 'processing' | 'processed' | 'failed' | 'expired' | 'canceled' | 'action_required'
+  mpOrderStatus?: 'created' | 'at_terminal' | 'processing' | 'processed' | 'failed' | 'expired' | 'canceled' | 'refunded' | 'action_required'
   mpStatusDetail?: string
 }

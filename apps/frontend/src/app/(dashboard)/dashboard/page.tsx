@@ -38,7 +38,7 @@ export default function DashboardPage() {
   const timezone = useAppSelector((s) => s.storeConfig.currentStore?.settings?.timezone) || 'UTC'
   const { isLoading: productsLoading } = useGetProductsQuery()
   const { data: dashboardStats, isLoading: statsLoading } = useGetDashboardStatsQuery({ tz: timezone })
-  const { data: ordersResult, isLoading: ordersLoading } = useGetOrdersQuery({ tab: 'active', limit: 50 })
+  const { data: ordersResult, isLoading: ordersLoading } = useGetOrdersQuery({ limit: 10 })
   const { data: customerStats, isLoading: customerStatsLoading } = useGetCustomerStatsQuery()
   const loading = productsLoading || statsLoading || ordersLoading || customerStatsLoading
 
@@ -171,19 +171,19 @@ export default function DashboardPage() {
 
         <div className="rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5 transition-all duration-200 hover:bg-surface-container/70 hover:border-outline-variant/60">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider">Recent Orders</h2>
-            <Link href="/orders" className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
-              View all <ArrowRight className="h-3 w-3" />
-            </Link>
+            <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider">Last Orders</h2>
+              <Link href="/orders" className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                View all <ArrowRight className="h-3 w-3" />
+              </Link>
           </div>
           {recentOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <ShoppingCart className="h-6 w-6 text-on-surface-variant/40 mb-2" />
-              <p className="text-xs text-on-surface-variant/60">No active orders</p>
+              <p className="text-xs text-on-surface-variant/60">No recent orders</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {recentOrders.slice(0, 5).map((order) => (
+              {recentOrders.slice(0, 10).map((order) => (
                 <div key={order.id} className="flex items-center justify-between py-1.5 border-b border-outline-variant/10 last:border-0">
                   <div className="min-w-0">
                     <span className="text-xs text-on-surface truncate block">#{order.id.slice(0, 8)}</span>

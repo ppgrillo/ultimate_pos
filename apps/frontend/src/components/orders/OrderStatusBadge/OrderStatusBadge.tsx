@@ -10,6 +10,7 @@ const statusConfig: Record<OrderStatus, { label: string; classes: string }> = {
   served:    { label: 'Served',    classes: 'bg-teal-500/15 text-teal-400 border-teal-500/25' },
   paid:      { label: 'Paid',      classes: 'bg-lime-500/15 text-lime-400 border-lime-500/25' },
   cancelled: { label: 'Cancelled', classes: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' },
+  refunded:  { label: 'Refunded',  classes: 'bg-red-500/15 text-red-400 border-red-500/25' },
 }
 
 interface OrderStatusBadgeProps {

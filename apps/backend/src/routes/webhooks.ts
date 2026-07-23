@@ -78,7 +78,7 @@ const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string;
   'order.expired': { orderStatus: 'cancelled', paymentStatus: 'failed', mpStatus: 'expired' },
   'order.canceled': { orderStatus: 'cancelled', paymentStatus: 'failed', mpStatus: 'canceled' },
   'order.action_required': { mpStatus: 'action_required' },
-  'order.refunded': { paymentStatus: 'refunded', mpStatus: 'refunded' },
+  'order.refunded': { orderStatus: 'refunded', paymentStatus: 'refunded', mpStatus: 'refunded' },
 }
 
 webhooksRouter.post('/mp-point', async (c) => {
@@ -221,10 +221,28 @@ webhooksRouter.post('/mp-point', async (c) => {
     }
   }
 
+  if ((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') && orderData.customer_id) {
+    const { data: cust } = await supabaseAdmin
+      .from('customers')
+      .select('total_visits, total_spent')
+      .eq('id', orderData.customer_id)
+      .single()
+
+    if (cust) {
+      await supabaseAdmin
+        .from('customers')
+        .update({
+          total_visits: Math.max(0, (cust.total_visits || 0) - 1),
+          total_spent: Math.max(0, (Number(cust.total_spent) || 0) - Number(orderData.total)),
+        })
+        .eq('id', orderData.customer_id)
+    }
+  }
+
   const { processMpLoyalty, reverseMpLoyalty } = await import('../routes/orders')
   if (mapping.orderStatus === 'paid') {
     await processMpLoyalty(supabaseAdmin, orderData.id, orderData.store_id).catch(() => {})
-  } else if (mapping.orderStatus === 'cancelled') {
+  } else if (mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') {
     await reverseMpLoyalty(supabaseAdmin, orderData.id).catch(() => {})
   }
 

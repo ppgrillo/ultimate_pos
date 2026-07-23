@@ -688,9 +688,14 @@ ordersRouter.patch('/:id/status', async (c) => {
     throw badRequest(`Cannot transition from ${order.status} to ${newStatus}`)
   }
 
+  const updatePayload: Record<string, unknown> = { status: newStatus, updated_at: new Date().toISOString() }
+  if (newStatus === 'refunded') {
+    updatePayload.payment_status = 'refunded'
+  }
+
   const { data, error } = await supabase
     .from('orders')
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .update(updatePayload)
     .eq('id', id)
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .single()
@@ -699,7 +704,7 @@ ordersRouter.patch('/:id/status', async (c) => {
 
   const enriched = enrichOrder(data!)
 
-  if (newStatus === 'cancelled') {
+  if (newStatus === 'cancelled' || newStatus === 'refunded') {
     const { data: cancelTxs } = await supabase
       .from('loyalty_transactions')
       .select('type, points, loyalty_card_id')
@@ -711,6 +716,23 @@ ordersRouter.patch('/:id/status', async (c) => {
         if (tx.type === 'earn' && tx.points > 0 && tx.loyalty_card_id) {
           await doRedeem(tx.loyalty_card_id, tx.points, `Devolución orden #${data?.order_number}`).catch(() => {})
         }
+      }
+    }
+
+    if (data?.customer_id) {
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('total_visits, total_spent')
+        .eq('id', data.customer_id)
+        .single()
+      if (cust) {
+        await supabase
+          .from('customers')
+          .update({
+            total_visits: Math.max(0, (cust.total_visits || 0) - 1),
+            total_spent: Math.max(0, (Number(cust.total_spent) || 0) - Number(data.total || 0)),
+          })
+          .eq('id', data.customer_id)
       }
     }
   }
@@ -834,7 +856,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
     .select('id, metadata')
     .eq('store_id', storeId)
     .not('metadata', 'is', null)
-    .neq('status', 'paid')
+    .not('status', 'in', '("paid","cancelled","refunded")')
     .order('created_at', { ascending: false })
     .limit(50)
 

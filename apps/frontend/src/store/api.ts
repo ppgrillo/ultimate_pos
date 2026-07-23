@@ -351,11 +351,14 @@ export const api = createApi({
         { type: 'Customer', id: `contact-${customerId}` },
       ],
     }),
-    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number } | undefined>({
-      query: (params) => ({
-        url: '/orders',
-        params: params?.tab ? { tab: params.tab, limit: params.limit ?? 50, offset: params.offset ?? 0 } : { limit: params?.limit ?? 50, offset: params?.offset ?? 0 },
-      }),
+    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number; startDate?: string; endDate?: string } | undefined>({
+      query: (params) => {
+        const p: Record<string, string | number> = { limit: params?.limit ?? 50, offset: params?.offset ?? 0 }
+        if (params?.tab) p.tab = params.tab
+        if (params?.startDate) p.startDate = params.startDate
+        if (params?.endDate) p.endDate = params.endDate
+        return { url: '/orders', params: p }
+      },
       transformResponse: (response: { data: Order[]; total: number }) => ({ items: response.data, total: response.total }),
       providesTags: (result) =>
         result?.items
@@ -534,7 +537,6 @@ export const api = createApi({
         params: params.tz ? { tz: params.tz } : {},
       }),
       transformResponse: (response: { data: DashboardStats }) => response.data,
-      refetchOnMountOrArgChange: 300,
     }),
     getAnalyticsSales: builder.query<SalesData, { period: AnalyticsPeriod; from?: string; to?: string; tz?: string }>({
       query: (params) => ({
@@ -542,7 +544,6 @@ export const api = createApi({
         params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), ...(params.tz ? { tz: params.tz } : {}) },
       }),
       transformResponse: (response: { data: SalesData }) => response.data,
-      refetchOnMountOrArgChange: 300,
     }),
     getAnalyticsProducts: builder.query<ProductAnalytics[], { period: AnalyticsPeriod; from?: string; to?: string; limit?: number; tz?: string }>({
       query: (params) => ({
@@ -550,7 +551,6 @@ export const api = createApi({
         params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), limit: params.limit ?? 10, ...(params.tz ? { tz: params.tz } : {}) },
       }),
       transformResponse: (response: { data: ProductAnalytics[] }) => response.data,
-      refetchOnMountOrArgChange: 300,
     }),
     getAnalyticsOverview: builder.query<AnalyticsOverview, { period: AnalyticsPeriod; from?: string; to?: string; tz?: string }>({
       query: (params) => ({
@@ -558,7 +558,6 @@ export const api = createApi({
         params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), ...(params.tz ? { tz: params.tz } : {}) },
       }),
       transformResponse: (response: { data: AnalyticsOverview }) => response.data,
-      refetchOnMountOrArgChange: 300,
     }),
   }),
 })

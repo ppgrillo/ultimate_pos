@@ -39,6 +39,7 @@ analyticsRouter.get('/sales', async (c) => {
     .eq('store_id', storeId)
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
+    .not('status', 'eq', 'refunded')
     .order('created_at', { ascending: true })
 
   if (error) throw badRequest(error.message)
@@ -130,6 +131,7 @@ analyticsRouter.get('/products', async (c) => {
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
     .not('status', 'eq', 'cancelled')
+    .not('status', 'eq', 'refunded')
 
   if (ordersError) throw badRequest(ordersError.message)
 
@@ -188,13 +190,15 @@ analyticsRouter.get('/overview', async (c) => {
       .select('id, total, type, payment_status, created_at, payments:payments(method, status, amount)')
       .eq('store_id', storeId)
       .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString()),
+      .lte('created_at', end.toISOString())
+      .not('status', 'eq', 'refunded'),
     supabase
       .from('orders')
       .select('id, total')
       .eq('store_id', storeId)
       .gte('created_at', prevStart.toISOString())
-      .lte('created_at', prevEnd.toISOString()),
+      .lte('created_at', prevEnd.toISOString())
+      .not('status', 'eq', 'refunded'),
     supabase
       .from('customers')
       .select('id', { count: 'exact', head: true })
@@ -289,6 +293,7 @@ analyticsRouter.get('/dashboard-stats', async (c) => {
     .select('id, total, status, created_at')
     .eq('store_id', storeId)
     .gte('created_at', todayStart.toISOString())
+    .not('status', 'eq', 'refunded')
 
   if (error) throw badRequest(error.message)
 
