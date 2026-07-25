@@ -17,9 +17,72 @@ const paymentMethodStyles: Record<string, string> = {
 interface OrderTableProps {
   orders: Order[]
   onTap: (order: Order) => void
+  sortKey: SortKey
+  sortDirection: SortDirection
+  onSort: (sortKey: SortKey) => void
 }
 
-export function OrderTable({ orders, onTap }: OrderTableProps) {
+type SortKey = 'status' | 'created' | 'number' | 'total'
+type SortDirection = 'asc' | 'desc'
+
+function formatOrderCreatedAt(value: string) {
+  const date = new Date(value)
+  return {
+    day: new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date),
+    time: new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date),
+  }
+}
+
+function getOrderLabel(order: Order) {
+  return order.order_number ? `#${order.order_number}` : `#${order.id.slice(-6).toUpperCase()}`
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  activeSort,
+  direction,
+  onSort,
+  align = 'left',
+}: {
+  label: string
+  sortKey: SortKey
+  activeSort: SortKey
+  direction: SortDirection
+  onSort: (key: SortKey) => void
+  align?: 'left' | 'right'
+}) {
+  const isActive = activeSort === sortKey
+  return (
+    <TableHead className={cn('h-9 px-3', align === 'right' && 'text-right')}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider transition-colors',
+          align === 'right' ? 'ml-auto' : '',
+          isActive ? 'text-on-surface' : 'text-on-surface-variant hover:text-on-surface',
+        )}
+      >
+        <span>{label}</span>
+        {isActive ? (
+          <span className="text-[10px]">{direction === 'asc' ? '↑' : '↓'}</span>
+        ) : (
+          <span className="text-[10px] opacity-60">↕</span>
+        )}
+      </button>
+    </TableHead>
+  )
+}
+
+export function OrderTable({ orders, onTap, sortKey, sortDirection, onSort }: OrderTableProps) {
   if (orders.length === 0) return null
 
   return (
@@ -29,6 +92,7 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
         {orders.map((order) => {
           const itemCount = order.items?.reduce((s, i) => s + i.quantity, 0) || 0
           const payment = order.payments?.[0]
+          const created = formatOrderCreatedAt(order.created_at)
           return (
             <div
               key={order.id}
@@ -39,7 +103,7 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-label font-semibold text-sm text-on-surface">
-                    #{order.order_number || order.id.slice(-6).toUpperCase()}
+                    {getOrderLabel(order)}
                   </span>
                   {order.table_number && (
                     <span className="text-xs text-on-surface-variant">T{order.table_number}</span>
@@ -50,6 +114,7 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
                   {(order.items?.length || 0) > 2 && ` +${order.items!.length - 2}`}
                   <span className="ml-1 text-on-surface-variant/60">· {itemCount} item{itemCount !== 1 ? 's' : ''}</span>
                 </p>
+                <p className="text-[11px] text-on-surface-variant/65 mt-0.5">{created.day} at {created.time}</p>
               </div>
               <div className="text-right shrink-0">
                 <span className="font-label font-bold text-sm text-on-surface block">{formatCurrency(order.total)}</span>
@@ -73,11 +138,12 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="h-9 px-3">Status</TableHead>
-              <TableHead className="h-9 px-3">#</TableHead>
+              <SortableHead label="Status" sortKey="status" activeSort={sortKey} direction={sortDirection} onSort={onSort} />
+              <SortableHead label="Created" sortKey="created" activeSort={sortKey} direction={sortDirection} onSort={onSort} />
+              <SortableHead label="#" sortKey="number" activeSort={sortKey} direction={sortDirection} onSort={onSort} />
               <TableHead className="h-9 px-3">Items</TableHead>
               <TableHead className="h-9 px-3">Payment</TableHead>
-              <TableHead className="h-9 px-3 text-right">Total</TableHead>
+              <SortableHead label="Total" sortKey="total" activeSort={sortKey} direction={sortDirection} onSort={onSort} align="right" />
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -85,6 +151,7 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
             {orders.map((order) => {
               const itemCount = order.items?.reduce((s, i) => s + i.quantity, 0) || 0
               const payment = order.payments?.[0]
+              const created = formatOrderCreatedAt(order.created_at)
               return (
                 <TableRow
                   key={order.id}
@@ -95,14 +162,23 @@ export function OrderTable({ orders, onTap }: OrderTableProps) {
                     <OrderStatusBadge status={order.status} size="sm" />
                   </TableCell>
                   <TableCell className="p-2 py-2.5 px-3">
+                    <div className="leading-tight">
+                      <p className="text-sm text-on-surface tabular-nums">{created.day}</p>
+                      <p className="text-[11px] text-on-surface-variant/70 tabular-nums">{created.time}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="p-2 py-2.5 px-3">
                     <span className="font-label font-semibold text-sm text-on-surface">
-                      #{order.order_number || order.id.slice(-6).toUpperCase()}
+                      {getOrderLabel(order)}
                     </span>
                     {order.table_number && (
                       <span className="ml-1.5 text-xs text-on-surface-variant">
                         T{order.table_number}
                       </span>
                     )}
+                    <p className="text-[11px] text-on-surface-variant/65 mt-0.5">
+                      Ref {order.id.slice(-6).toUpperCase()}
+                    </p>
                   </TableCell>
                   <TableCell className="p-2 py-2.5 px-3">
                     <p className="text-sm font-label text-on-surface truncate max-w-[200px]">

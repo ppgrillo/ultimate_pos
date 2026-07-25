@@ -37,6 +37,8 @@ ordersRouter.get('/', async (c) => {
   const tab = c.req.query('tab')
   const startDate = c.req.query('startDate')
   const endDate = c.req.query('endDate')
+  const sortBy = c.req.query('sortBy') || 'created'
+  const sortDir = c.req.query('sortDir') === 'asc' ? 'asc' : 'desc'
   const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
   const offset = Number(c.req.query('offset')) || 0
 
@@ -60,7 +62,16 @@ ordersRouter.get('/', async (c) => {
     query = query.lte('created_at', endDate)
   }
 
+  const sortColumnMap: Record<string, string> = {
+    created: 'created_at',
+    status: 'status',
+    number: 'order_number',
+    total: 'total',
+  }
+  const sortColumn = sortColumnMap[sortBy] || 'created_at'
+
   const { data, error, count } = await query
+    .order(sortColumn, { ascending: sortDir === 'asc', nullsFirst: false })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 

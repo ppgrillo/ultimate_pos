@@ -9,15 +9,30 @@ import type { Order, OrderStatus } from '@ultimate-pos/shared'
 interface OrderListProps {
   orders: Order[]
   hasKitchen: boolean
+  sortKey?: 'status' | 'created' | 'number' | 'total'
+  sortDirection?: 'asc' | 'desc'
   loading?: boolean
   error?: boolean
   statusLoading?: Record<string, boolean>
   onStatusChange: (id: string, status: OrderStatus) => void
   onTap: (order: Order) => void
+  onSortChange?: (key: 'status' | 'created' | 'number' | 'total') => void
   onRetry?: () => void
 }
 
-export function OrderList({ orders, hasKitchen, loading, error, statusLoading, onStatusChange, onTap, onRetry }: OrderListProps) {
+export function OrderList({
+  orders,
+  hasKitchen,
+  sortKey = 'created',
+  sortDirection = 'desc',
+  loading,
+  error,
+  statusLoading,
+  onStatusChange,
+  onTap,
+  onSortChange,
+  onRetry,
+}: OrderListProps) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -108,6 +123,12 @@ export function OrderList({ orders, hasKitchen, loading, error, statusLoading, o
   }
 
   return (
-    <OrderTable orders={orders} onTap={onTap} />
+    <OrderTable
+      orders={orders}
+      onTap={onTap}
+      sortKey={sortKey}
+      sortDirection={sortDirection}
+      onSort={(key) => onSortChange?.(key)}
+    />
   )
 }

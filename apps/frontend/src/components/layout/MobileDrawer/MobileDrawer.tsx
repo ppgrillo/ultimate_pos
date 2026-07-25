@@ -8,22 +8,29 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { closeDrawer } from '@/store/slices/uiSlice'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
-  { href: '/orders', label: 'Orders', icon: ClipboardList },
-  { href: '/products', label: 'Products', icon: Package },
-  { href: '/promotions', label: 'Promotions', icon: Tag },
-  { href: '/employees', label: 'Employees', icon: Users },
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
-
 export function MobileDrawer() {
   const dispatch = useAppDispatch()
   const pathname = usePathname()
   const { data: session } = useSession()
   const isOpen = useAppSelector((s) => s.ui.drawerOpen)
+  const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen)
+
+  const orderNavItem = hasKitchen === undefined
+    ? { href: '/orders', label: 'Orders', icon: ClipboardList }
+    : hasKitchen
+      ? { href: '/orders/kitchen', label: 'Kitchen Orders', icon: ClipboardList }
+      : { href: '/orders/sales', label: 'Sales Orders', icon: ClipboardList }
+
+  const navItems = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
+    orderNavItem,
+    { href: '/products', label: 'Products', icon: Package },
+    { href: '/promotions', label: 'Promotions', icon: Tag },
+    { href: '/employees', label: 'Employees', icon: Users },
+    { href: '/settings', label: 'Settings', icon: Settings },
+  ]
 
   const handleClose = () => dispatch(closeDrawer())
   const user = session?.user as { name?: string; email?: string; role?: string } | undefined
@@ -80,7 +87,9 @@ export function MobileDrawer() {
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive = pathname.startsWith(item.href)
+              const isActive = item.href.startsWith('/orders')
+                ? pathname.startsWith('/orders')
+                : pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href}

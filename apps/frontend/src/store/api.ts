@@ -354,12 +354,14 @@ export const api = createApi({
         { type: 'Customer', id: `contact-${customerId}` },
       ],
     }),
-    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number; startDate?: string; endDate?: string } | undefined>({
+    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number; startDate?: string; endDate?: string; sortBy?: 'created' | 'status' | 'number' | 'total'; sortDir?: 'asc' | 'desc' } | undefined>({
       query: (params) => {
         const p: Record<string, string | number> = { limit: params?.limit ?? 50, offset: params?.offset ?? 0 }
         if (params?.tab) p.tab = params.tab
         if (params?.startDate) p.startDate = params.startDate
         if (params?.endDate) p.endDate = params.endDate
+        if (params?.sortBy) p.sortBy = params.sortBy
+        if (params?.sortDir) p.sortDir = params.sortDir
         return { url: '/orders', params: p }
       },
       transformResponse: (response: { data: Order[]; total: number }) => ({ items: response.data, total: response.total }),

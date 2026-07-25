@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
+import { useAppSelector } from '@/store/hooks'
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -20,21 +21,28 @@ import {
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
-  { href: '/orders', label: 'Orders', icon: ClipboardList },
-  { href: '/products', label: 'Products', icon: Package },
-  { href: '/promotions', label: 'Promotions', icon: Tag },
-  { href: '/customers', label: 'Customers', icon: ContactRound },
-  { href: '/employees', label: 'Employees', icon: Users },
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
-
 export function Sidebar() {
   const pathname = usePathname()
   const { collapsed, toggle } = useSidebar()
+  const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen)
+
+  const orderNavItem = hasKitchen === undefined
+    ? { href: '/orders', label: 'Orders', icon: ClipboardList }
+    : hasKitchen
+      ? { href: '/orders/kitchen', label: 'Kitchen Orders', icon: ClipboardList }
+      : { href: '/orders/sales', label: 'Sales Orders', icon: ClipboardList }
+
+  const navItems = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
+    orderNavItem,
+    { href: '/products', label: 'Products', icon: Package },
+    { href: '/promotions', label: 'Promotions', icon: Tag },
+    { href: '/customers', label: 'Customers', icon: ContactRound },
+    { href: '/employees', label: 'Employees', icon: Users },
+    { href: '/settings', label: 'Settings', icon: Settings },
+  ]
 
   return (
     <aside
@@ -79,7 +87,9 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname.startsWith(item.href)
+          const isActive = item.href.startsWith('/orders')
+            ? pathname.startsWith('/orders')
+            : pathname.startsWith(item.href)
 
           return (
             <Link
