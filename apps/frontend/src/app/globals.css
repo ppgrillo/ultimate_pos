@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-on-background font-body antialiased;
+    @apply bg-background text-on-background font-body antialiased overflow-x-hidden;
   }
 
   input,

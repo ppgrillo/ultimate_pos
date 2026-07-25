@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, ShoppingCart, Star } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, getSalePrice } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
 import { PromotionBadge } from '@/components/promotions'
@@ -15,17 +15,10 @@ interface ProductCardProps {
   activePromotion?: Promotion | null
 }
 
-function getSalePrice(product: Product, promotion: Promotion): number {
-  if (promotion.discount_type === 'percentage') {
-    return Math.round(product.price * (1 - promotion.discount_value / 100) * 100) / 100
-  }
-  return Math.max(0, Math.round((product.price - promotion.discount_value) * 100) / 100)
-}
-
 export function ProductCard({ product, onAdd, variant = 'compact', activePromotion }: ProductCardProps) {
   const [imgError, setImgError] = useState(false)
   const showImg = product.image_url && !imgError
-  const salePrice = activePromotion ? getSalePrice(product, activePromotion) : null
+  const salePrice = activePromotion ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value) : null
   const badgeText = activePromotion?.badge_text || (activePromotion?.discount_type === 'percentage' ? `-${activePromotion.discount_value}%` : null)
 
   if (variant === 'dense') {

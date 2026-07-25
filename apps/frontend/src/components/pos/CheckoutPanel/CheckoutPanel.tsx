@@ -121,6 +121,8 @@ export function CheckoutPanel() {
               promotion_id: p.promotion_id,
               name: p.name,
               discount_amount: p.discount_amount,
+              discount_type: p.discount_type,
+              discount_value: p.discount_value,
             }))
           : undefined,
         redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,

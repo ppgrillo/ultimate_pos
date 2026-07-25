@@ -14,6 +14,7 @@ export interface PosState {
   customerBarExpanded: boolean
   customizeProductId: string | null
   customerSelectSkipped: boolean
+  scannerOpen: boolean
 }
 
 const initialState: PosState = {
@@ -26,6 +27,7 @@ const initialState: PosState = {
   customerBarExpanded: false,
   customizeProductId: null,
   customerSelectSkipped: false,
+  scannerOpen: false,
 }
 
 const posSlice = createSlice({
@@ -59,6 +61,9 @@ const posSlice = createSlice({
     setCustomerSelectSkipped(state, action: PayloadAction<boolean>) {
       state.customerSelectSkipped = action.payload
     },
+    setScannerOpen(state, action: PayloadAction<boolean>) {
+      state.scannerOpen = action.payload
+    },
   },
 })
 
@@ -66,6 +71,6 @@ export const {
   setActiveView, setSelectedCategory, setSearchQuery,
   setCartOpen, setCheckoutView, setCustomerDrawerOpen,
   setCustomerBarExpanded, setCustomizeProductId,
-  setCustomerSelectSkipped,
+  setCustomerSelectSkipped, setScannerOpen,
 } = posSlice.actions
 export default posSlice.reducer

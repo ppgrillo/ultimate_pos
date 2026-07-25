@@ -21,7 +21,8 @@ export function RightPanelCustomer() {
   const sliceCustomers = useAppSelector((s) => ((s as any).customers?.customers ?? []) as CustomerWithLoyalty[])
   const sliceSummary = useAppSelector((s) => (s as any).customers?.customerSummary)
   const sliceLoadingSummary = useAppSelector((s) => Boolean((s as any).customers?.isLoadingSummary))
-  const { data: queryCustomers = [] } = useGetCustomersQuery()
+  const { data: result } = useGetCustomersQuery({ limit: 500 })
+  const queryCustomers = result?.data || []
   const { data: customerSummary, isFetching: isLoadingSummary } = useGetCustomerSummaryQuery(selectedCustomer?.id || '', {
     skip: !selectedCustomer?.id,
   })

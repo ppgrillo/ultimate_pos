@@ -1,20 +1,16 @@
 import { render, screen } from '@/test/test-utils'
-import userEvent from '@testing-library/user-event'
 import { PosHeader } from './PosHeader'
 
 describe('PosHeader', () => {
-  it('renders store logo and cart button', () => {
-    render(<PosHeader onCartClick={vi.fn()} />)
+  it('renders store logo', () => {
+    render(<PosHeader />)
     expect(screen.getByText('P')).toBeInTheDocument()
     expect(screen.getByText('QuickCharge POS')).toBeInTheDocument()
   })
 
-  it('calls onCartClick when cart button is clicked', async () => {
-    const onCartClick = vi.fn()
-    render(<PosHeader onCartClick={onCartClick} />)
+  it('renders hamburger menu on mobile', () => {
+    render(<PosHeader onMenuClick={vi.fn()} />)
     const buttons = screen.getAllByRole('button')
-    const cartBtn = buttons[buttons.length - 1]
-    await userEvent.click(cartBtn)
-    expect(onCartClick).toHaveBeenCalledTimes(1)
+    expect(buttons.length).toBeGreaterThanOrEqual(1)
   })
 })

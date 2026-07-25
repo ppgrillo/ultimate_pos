@@ -136,7 +136,7 @@ export default function CustomerDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         <button
           onClick={() => router.push('/customers')}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
@@ -170,42 +170,42 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="text-center">
-            <Star className="h-5 w-5 text-primary mx-auto mb-1" />
-            <CardTitle className="text-xl">{customer.loyalty?.points || 0}</CardTitle>
-            <CardDescription>Points</CardDescription>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 md:gap-4">
+        <Card className="!p-3 sm:!p-4 md:!p-6">
+          <CardHeader className="mb-1 text-center md:mb-4">
+            <Star className="h-4 w-4 text-primary mx-auto mb-0.5 md:h-5 md:w-5 md:mb-1" />
+            <CardTitle className="text-base md:text-xl">{customer.loyalty?.points || 0}</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Points</CardDescription>
           </CardHeader>
         </Card>
-        <Card>
-          <CardHeader className="text-center">
-            <Hash className="h-5 w-5 text-secondary mx-auto mb-1" />
-            <CardTitle className="text-xl">{customer.total_visits}</CardTitle>
-            <CardDescription>Visits</CardDescription>
+        <Card className="!p-3 sm:!p-4 md:!p-6">
+          <CardHeader className="mb-1 text-center md:mb-4">
+            <Hash className="h-4 w-4 text-secondary mx-auto mb-0.5 md:h-5 md:w-5 md:mb-1" />
+            <CardTitle className="text-base md:text-xl">{customer.total_visits}</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Visits</CardDescription>
           </CardHeader>
         </Card>
-        <Card>
-          <CardHeader className="text-center">
-            <ShoppingBag className="h-5 w-5 text-tertiary mx-auto mb-1" />
-            <CardTitle className="text-xl">{formatCurrency(customer.total_spent)}</CardTitle>
-            <CardDescription>Total Spent</CardDescription>
+        <Card className="!p-3 sm:!p-4 md:!p-6">
+          <CardHeader className="mb-1 text-center md:mb-4">
+            <ShoppingBag className="h-4 w-4 text-tertiary mx-auto mb-0.5 md:h-5 md:w-5 md:mb-1" />
+            <CardTitle className="text-base md:text-xl">{formatCurrency(customer.total_spent)}</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Total Spent</CardDescription>
           </CardHeader>
         </Card>
-        <Card>
-          <CardHeader className="text-center">
-            <History className="h-5 w-5 text-amber-400 mx-auto mb-1" />
-            <CardTitle className="text-xl">
+        <Card className="!p-3 sm:!p-4 md:!p-6">
+          <CardHeader className="mb-1 text-center md:mb-4">
+            <History className="h-4 w-4 text-amber-400 mx-auto mb-0.5 md:h-5 md:w-5 md:mb-1" />
+            <CardTitle className="text-base md:text-xl">
               {customer.total_spent > 0 && customer.total_visits > 0
                 ? formatCurrency(customer.total_spent / customer.total_visits)
                 : formatCurrency(0)}
             </CardTitle>
-            <CardDescription>Avg / Visit</CardDescription>
+            <CardDescription className="text-xs md:text-sm">Avg / Visit</CardDescription>
           </CardHeader>
         </Card>
       </div>
 
-      <div className="flex gap-1 border-b border-outline-variant">
+      <div className="flex gap-1 border-b border-outline-variant overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -378,17 +378,16 @@ export default function CustomerDetailPage() {
                 <CardDescription>Enroll this customer to start earning points</CardDescription>
               </CardHeader>
               <CardContent>
-                <button
+                <Button
                   onClick={async () => {
                     try {
                       await enroll({ customer_id: id }).unwrap()
                     } catch {}
                   }}
-                  disabled={enrolling}
-                  className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  isLoading={enrolling}
                 >
-                  {enrolling ? 'Enrolling...' : 'Enroll in Loyalty'}
-                </button>
+                  Enroll in Loyalty
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -429,6 +428,7 @@ export default function CustomerDetailPage() {
                       passId={passId}
                       applePassUrl={applePassUrl}
                       googleSaveUrl={googleSaveUrl}
+                      customerPhone={customer.phone ?? undefined}
                     />
                   </CardContent>
                 </Card>
@@ -443,34 +443,56 @@ export default function CustomerDetailPage() {
                   {transactions.length === 0 ? (
                     <div className="p-8 text-center text-on-surface-variant text-sm">No transactions yet.</div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-outline-variant text-left text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
-                            <th className="px-4 py-3">Date</th>
-                            <th className="px-4 py-3">Type</th>
-                            <th className="px-4 py-3">Points</th>
-                            <th className="px-4 py-3">Balance</th>
-                            <th className="px-4 py-3">Description</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {transactions.map((tx) => (
-                            <tr key={tx.id} className="border-b border-outline-variant/50 hover:bg-surface-container-high/50 transition-colors">
-                              <td className="px-4 py-3 text-sm text-on-surface-variant">{new Date(tx.created_at).toLocaleDateString()}</td>
-                              <td className="px-4 py-3">
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-label font-bold capitalize ${tx.type === 'earn' ? 'bg-green-500/20 text-green-400' : tx.type === 'redeem' ? 'bg-red-500/20 text-red-400' : 'bg-surface-container-high text-on-surface-variant'}`}>
-                                  {tx.type}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm font-bold text-on-surface">{tx.type === 'earn' ? '+' : '-'}{tx.points}</td>
-                              <td className="px-4 py-3 text-sm text-on-surface">{tx.balance_after}</td>
-                              <td className="px-4 py-3 text-sm text-on-surface-variant">{tx.description || '—'}</td>
+                    <>
+                      {/* Mobile card list */}
+                      <div className="lg:hidden divide-y divide-outline-variant/50">
+                        {transactions.map((tx) => (
+                          <div key={tx.id} className="flex items-center gap-3 px-4 py-3">
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-label font-bold capitalize ${tx.type === 'earn' ? 'bg-green-500/20 text-green-400' : tx.type === 'redeem' ? 'bg-red-500/20 text-red-400' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              {tx.type}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-on-surface">{tx.type === 'earn' ? '+' : '-'}{tx.points} pts</p>
+                              <p className="text-[11px] text-on-surface-variant">{tx.description || '—'}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs text-on-surface-variant">{new Date(tx.created_at).toLocaleDateString()}</p>
+                              <p className="text-[11px] text-on-surface-variant/60">bal: {tx.balance_after}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Desktop table */}
+                      <div className="overflow-x-auto hidden lg:block">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-outline-variant text-left text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
+                              <th className="px-4 py-3">Date</th>
+                              <th className="px-4 py-3">Type</th>
+                              <th className="px-4 py-3">Points</th>
+                              <th className="px-4 py-3">Balance</th>
+                              <th className="px-4 py-3">Description</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {transactions.map((tx) => (
+                              <tr key={tx.id} className="border-b border-outline-variant/50 hover:bg-surface-container-high/50 transition-colors">
+                                <td className="px-4 py-3 text-sm text-on-surface-variant">{new Date(tx.created_at).toLocaleDateString()}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-label font-bold capitalize ${tx.type === 'earn' ? 'bg-green-500/20 text-green-400' : tx.type === 'redeem' ? 'bg-red-500/20 text-red-400' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                    {tx.type}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm font-bold text-on-surface">{tx.type === 'earn' ? '+' : '-'}{tx.points}</td>
+                                <td className="px-4 py-3 text-sm text-on-surface">{tx.balance_after}</td>
+                                <td className="px-4 py-3 text-sm text-on-surface-variant">{tx.description || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -490,34 +512,53 @@ export default function CustomerDetailPage() {
             ) : orders.length === 0 ? (
               <div className="p-8 text-center text-on-surface-variant">No orders yet.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-outline-variant text-left text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
-                      <th className="px-4 py-3">Order #</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Items</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map((order: any) => (
-                      <tr key={order.id} className="border-b border-outline-variant/50 hover:bg-surface-container-high/50 transition-colors">
-                        <td className="px-4 py-3 font-label font-bold text-sm text-on-surface">#{order.order_number}</td>
-                        <td className="px-4 py-3 text-sm text-on-surface-variant">{new Date(order.created_at).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 text-sm text-on-surface-variant">{(order.items || []).length} items</td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-label font-bold text-on-surface-variant capitalize">
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-label font-bold text-sm text-on-surface">{formatCurrency(Number(order.total))}</td>
+              <>
+                {/* Mobile card list */}
+                <div className="lg:hidden divide-y divide-outline-variant/50">
+                  {orders.map((order: any) => (
+                    <div key={order.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="shrink-0 rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-label font-bold text-on-surface-variant capitalize">
+                        {order.status}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-label font-bold text-sm text-on-surface">#{order.order_number}</p>
+                        <p className="text-[11px] text-on-surface-variant">{new Date(order.created_at).toLocaleDateString()} · {(order.items || []).length} items</p>
+                      </div>
+                      <span className="font-label font-bold text-sm text-on-surface shrink-0">{formatCurrency(Number(order.total))}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="overflow-x-auto hidden lg:block">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-outline-variant text-left text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
+                        <th className="px-4 py-3">Order #</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Items</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {orders.map((order: any) => (
+                        <tr key={order.id} className="border-b border-outline-variant/50 hover:bg-surface-container-high/50 transition-colors">
+                          <td className="px-4 py-3 font-label font-bold text-sm text-on-surface">#{order.order_number}</td>
+                          <td className="px-4 py-3 text-sm text-on-surface-variant">{new Date(order.created_at).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-sm text-on-surface-variant">{(order.items || []).length} items</td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-label font-bold text-on-surface-variant capitalize">
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-label font-bold text-sm text-on-surface">{formatCurrency(Number(order.total))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -622,11 +663,11 @@ export default function CustomerDetailPage() {
           </ModalHeader>
           <div className="space-y-4 px-6 py-4">
             <Input label="Name *" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="Email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
               <Input label="Phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Source</label>
                 <select value={editForm.source} onChange={(e) => setEditForm({ ...editForm, source: e.target.value })} className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">

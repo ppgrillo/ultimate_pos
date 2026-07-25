@@ -3,6 +3,7 @@ import { jwtVerify } from 'jose'
 import { unauthorized } from './error'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
+import { getPrimaryMembership } from '../lib/membership'
 
 declare module 'hono' {
   interface ContextVariableMap {
@@ -32,9 +33,12 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
 
   try {
     const { payload } = await jwtVerify(token, getSecret())
+    const userId = payload.sub as string
+    const membership = await getPrimaryMembership(userId)
+
     c.set('userId', payload.sub as string)
-    c.set('storeId', payload.store_id as string)
-    c.set('role', payload.role as string)
+    c.set('storeId', membership?.store_id ?? (payload.store_id as string) ?? '')
+    c.set('role', membership?.role ?? (payload.role as string) ?? '')
     c.set('token', token)
     await next()
   } catch {
@@ -45,11 +49,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       c.set('userId', user.id)
       c.set('token', token)
 
-      const { data: membership } = await supabaseAdmin
-        .from('store_members')
-        .select('store_id, role')
-        .eq('profile_id', user.id)
-        .maybeSingle()
+      const membership = await getPrimaryMembership(user.id)
 
       c.set('storeId', membership?.store_id ?? '')
       c.set('role', membership?.role ?? '')

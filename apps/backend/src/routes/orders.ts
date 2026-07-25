@@ -8,6 +8,13 @@ import { orderBus } from '../events'
 import { mpService } from '../services/mp-point'
 import type { OrderMetadata } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
+import {
+  isPromotionActive,
+  getBestProductPromotion,
+  calculatePromotionDiscount,
+  computeCartPromotionDiscounts,
+} from '../lib/promotion-rules'
+import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 
 export const ordersRouter = new Hono()
 
@@ -157,7 +164,12 @@ ordersRouter.get('/:id', async (c) => {
             .update({
               status: orderStatus,
               payment_status: orderPaymentStatus,
-              metadata: { ...meta, mpOrderStatus: mpStatusMapped, mpPaymentDetail: paymentDetail },
+              metadata: {
+                ...meta,
+                ...((['canceled', 'expired', 'failed'].includes(mpStatusMapped) ? { promotionUsageReverted: true } : {})),
+                mpOrderStatus: mpStatusMapped,
+                mpPaymentDetail: paymentDetail,
+              },
               updated_at: new Date().toISOString(),
             })
             .eq('id', id)
@@ -170,6 +182,11 @@ ordersRouter.get('/:id', async (c) => {
           if (mpStatus === 'processed') {
             await processMpLoyalty(supabaseAdmin, id, data.store_id as string).catch(() => {})
           } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
+            await revertPromotionUsageIfNeeded(
+              id,
+              meta,
+              (data.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
+            ).catch(() => {})
             await reverseMpLoyalty(supabaseAdmin, id).catch(() => {})
           }
 
@@ -275,11 +292,42 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
+  const { data: activeProductCategoryPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, name, target_type, target_ids, discount_type, discount_value, priority, starts_at, ends_at, is_active, current_uses, max_uses')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('target_type', ['product', 'category'])
+
+  const now = new Date()
+  const validProductCategoryPromos = (activeProductCategoryPromos || []).filter((promo) => isPromotionActive(promo, now))
+
   let subtotal = 0
   let taxableSubtotal = 0
   const orderItems = input.items.map((item) => {
     const product = productMap.get(item.product_id)
-    const unitPrice = item.unit_price ?? (product ? Number(product.price) : 0)
+    const productPrice = product ? Number(product.price) : 0
+    const productPromotion = product
+      ? getBestProductPromotion(
+          {
+            id: product.id,
+            category_id: product.category_id ?? null,
+            price: productPrice,
+          },
+          validProductCategoryPromos,
+          now,
+        )
+      : null
+
+    const expectedPromotionalPrice = productPromotion
+      ? Math.max(0, Math.round((productPrice - calculatePromotionDiscount(productPromotion, productPrice)) * 100) / 100)
+      : productPrice
+
+    const incomingUnitPrice = item.unit_price
+    const unitPrice = incomingUnitPrice != null
+      ? Math.min(incomingUnitPrice, expectedPromotionalPrice)
+      : expectedPromotionalPrice
+
     const itemTotal = unitPrice * item.quantity
     subtotal += itemTotal
     const isExempt = taxExemptEnabled && product?.tax_exempt === true
@@ -295,8 +343,21 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   })
 
+  const totalQuantity = input.items.reduce((sum, item) => sum + item.quantity, 0)
+  const { data: activeCartPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, name, badge_text, target_type, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, starts_at, ends_at, is_active')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .eq('target_type', 'cart')
+
+  const {
+    appliedPromotions: validatedCartPromotions,
+    totalDiscount: validatedPromoDiscount,
+  } = computeCartPromotionDiscounts(activeCartPromos || [], subtotal, totalQuantity, now)
+
   const discount = input.discount || 0
-  const promoDiscount = input.promo_discount || 0
+  const promoDiscount = validatedPromoDiscount
   const totalDiscount = discount + promoDiscount
 
   let tax = 0
@@ -345,7 +406,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       discount,
       discount_label: input.discount_label || null,
       promo_discount: promoDiscount,
-      applied_promotions: input.applied_promotions || [],
+      applied_promotions: validatedCartPromotions,
       total,
       notes: input.notes,
     })
@@ -365,19 +426,14 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   if (itemsError) throw badRequest(itemsError.message)
 
-  // Increment current_uses for all applied promotions
+  // Increment current_uses atomically for all applied promotions
+  const appliedPromos = validatedCartPromotions
+  const promoIdsToIncrement = new Set<string>()
+
   // 1. Cart-level promos from applied_promotions
-  const appliedPromos = input.applied_promotions
   if (appliedPromos && appliedPromos.length > 0) {
-    const promoIds = appliedPromos.map((p) => p.promotion_id).filter(Boolean)
-    for (const pid of promoIds) {
-      const { data: promo } = await supabaseAdmin.from('promotions').select('current_uses').eq('id', pid).single()
-      if (promo) {
-        await supabaseAdmin
-          .from('promotions')
-          .update({ current_uses: (promo.current_uses ?? 0) + 1 })
-          .eq('id', pid)
-      }
+    for (const p of appliedPromos) {
+      if (p.promotion_id) promoIdsToIncrement.add(p.promotion_id)
     }
   }
 
@@ -385,38 +441,29 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const orderProductIds = orderItems.map((i) => i.product_id)
   const catIdSet = new Set((products || []).map((p) => p.category_id).filter(Boolean))
 
-  const { data: activeProductCategoryPromos } = await supabaseAdmin
-    .from('promotions')
-    .select('id, target_type, target_ids, current_uses, max_uses')
-    .eq('store_id', storeId)
-    .eq('is_active', true)
-    .in('target_type', ['product', 'category'])
-
-  const promosToIncrement = new Set<string>()
-  for (const promo of activeProductCategoryPromos || []) {
-    if (promo.max_uses != null && promo.max_uses > 0 && (promo.current_uses ?? 0) >= promo.max_uses) continue
+  for (const promo of validProductCategoryPromos) {
     if (!promo.target_ids || !Array.isArray(promo.target_ids)) continue
 
     if (promo.target_type === 'product') {
       const matched = orderProductIds.some((pid) => promo.target_ids.includes(pid))
-      if (matched) promosToIncrement.add(promo.id)
+      if (matched) promoIdsToIncrement.add(promo.id)
     } else if (promo.target_type === 'category') {
       const matched = [...catIdSet].some((cid) => promo.target_ids.includes(cid))
-      if (matched) promosToIncrement.add(promo.id)
+      if (matched) promoIdsToIncrement.add(promo.id)
     }
   }
 
-  // Deduplicate with cart-level promos already incremented above
-  const cartPromoIds = new Set((appliedPromos || []).map((p) => p.promotion_id))
-  for (const pid of promosToIncrement) {
-    if (cartPromoIds.has(pid)) continue // already incremented
-    const { data: promo } = await supabaseAdmin.from('promotions').select('current_uses').eq('id', pid).single()
-    if (promo) {
-      await supabaseAdmin
-        .from('promotions')
-        .update({ current_uses: (promo.current_uses ?? 0) + 1 })
-        .eq('id', pid)
-    }
+  // Atomic increment — avoids race condition of read-then-write
+  const promotionUsageIds = [...promoIdsToIncrement]
+  for (const pid of promotionUsageIds) {
+    await supabaseAdmin.rpc('increment_promotion_uses', { promo_id: pid })
+  }
+
+  if (promotionUsageIds.length > 0) {
+    await supabase
+      .from('orders')
+      .update({ metadata: { promotionUsageIds, promotionUsageReverted: false } })
+      .eq('id', order.id)
   }
 
   if (paymentMethod) {
@@ -491,7 +538,11 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
     mpOrderId = mpOrder.id
 
-    const metadata = { mpOrderId: mpOrder.id, mpOrderStatus: 'created' as const }
+    const metadata = {
+      ...(promotionUsageIds.length > 0 ? { promotionUsageIds, promotionUsageReverted: false } : {}),
+      mpOrderId: mpOrder.id,
+      mpOrderStatus: 'created' as const,
+    }
     await supabaseAdmin
       .from('orders')
       .update({ metadata })
@@ -653,10 +704,17 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
       status: 'cancelled',
       metadata: {
         ...meta,
+        promotionUsageReverted: true,
         mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled',
       },
     })
     .eq('id', orderId)
+
+  await revertPromotionUsageIfNeeded(
+    orderId,
+    meta as Record<string, unknown>,
+    [],
+  ).catch(() => {})
 
   await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
 
@@ -706,6 +764,12 @@ ordersRouter.patch('/:id/status', async (c) => {
   const enriched = enrichOrder(data!)
 
   if (newStatus === 'cancelled' || newStatus === 'refunded') {
+    await revertPromotionUsageIfNeeded(
+      id,
+      (data?.metadata as Record<string, unknown> | null | undefined) || {},
+      (data?.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
+    )
+
     const { data: cancelTxs } = await supabase
       .from('loyalty_transactions')
       .select('type, points, loyalty_card_id')
@@ -911,9 +975,17 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
       }
 
       if (mpStatus === 'canceled' || mpStatus === 'expired' || mpStatus === 'failed') {
+        await revertPromotionUsageIfNeeded(
+          order.id,
+          (meta as Record<string, unknown> | null | undefined) || {},
+          [],
+        ).catch(() => {})
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail } })
+          .update({
+            status: 'cancelled',
+            metadata: { ...meta, promotionUsageReverted: true, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail },
+          })
           .eq('id', order.id)
         await supabase
           .from('payments')
@@ -925,9 +997,14 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
 
       if (mpStatus === 'created' || mpStatus === 'at_terminal') {
         await mpService.cancelOrder(accessToken, mpId)
+        await revertPromotionUsageIfNeeded(
+          order.id,
+          (meta as Record<string, unknown> | null | undefined) || {},
+          [],
+        ).catch(() => {})
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, mpOrderStatus: 'canceled' } })
+          .update({ status: 'cancelled', metadata: { ...meta, promotionUsageReverted: true, mpOrderStatus: 'canceled' } })
           .eq('id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
       }

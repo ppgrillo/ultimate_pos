@@ -19,4 +19,15 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+export function getSalePrice(
+  price: number,
+  discountType: 'percentage' | 'fixed',
+  discountValue: number,
+): number {
+  if (discountType === 'percentage') {
+    return Math.round(price * (1 - discountValue / 100) * 100) / 100
+  }
+  return Math.max(0, Math.round((price - discountValue) * 100) / 100)
+}
+
 

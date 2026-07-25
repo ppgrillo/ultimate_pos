@@ -7,7 +7,7 @@ import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { addItem } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getSalePrice } from '@/lib/utils'
 import { useGetProductsQuery } from '@/store/api'
 import { usePromotions } from '@/hooks/usePromotions'
 
@@ -29,9 +29,7 @@ export function CustomizeProduct() {
 
   const activePromotion = product ? getPromotionForProduct(product) : null
   const basePrice = activePromotion && product
-    ? activePromotion.discount_type === 'percentage'
-      ? Math.round(product.price * (1 - activePromotion.discount_value / 100) * 100) / 100
-      : Math.max(0, Math.round((product.price - activePromotion.discount_value) * 100) / 100)
+    ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value)
     : product?.price ?? 0
 
   useEffect(() => {

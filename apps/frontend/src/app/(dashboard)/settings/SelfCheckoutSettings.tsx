@@ -360,27 +360,6 @@ export function SelfCheckoutSettings() {
                         </span>
                       </div>
                     )}
-
-                    {url && (
-                      <div className="grid gap-3 rounded-2xl border border-outline-variant/50 bg-surface-container-high/40 p-3 sm:grid-cols-[120px_1fr] sm:items-center">
-                        <div className="flex items-center justify-center rounded-xl bg-white p-2">
-                          <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(url)}`}
-                            alt={`QR de acceso para ${station.name}`}
-                            className="h-[104px] w-[104px]"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2">
-                            <LinkIcon className="h-3.5 w-3.5 text-on-surface-variant shrink-0" />
-                            <code className="flex-1 truncate text-xs text-on-surface-variant font-mono">{url}</code>
-                          </div>
-                          <p className="text-[11px] text-on-surface-variant">
-                            Este QR abre el registro público de esta estación.
-                          </p>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -415,6 +394,27 @@ export function SelfCheckoutSettings() {
                     </Button>
                   </div>
                 </div>
+
+                {url && (
+                  <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-outline-variant/50 bg-surface-container-high/40 p-3 sm:flex-row sm:items-center">
+                    <div className="flex items-center justify-center rounded-xl bg-white p-2 shrink-0">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(url)}`}
+                        alt={`QR de acceso para ${station.name}`}
+                        className="h-[104px] w-[104px]"
+                      />
+                    </div>
+                    <div className="space-y-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 rounded-lg bg-surface-container-high px-3 py-2 overflow-hidden">
+                        <LinkIcon className="h-3.5 w-3.5 text-on-surface-variant shrink-0" />
+                        <code className="block flex-1 min-w-0 truncate text-xs text-on-surface-variant font-mono">{url}</code>
+                      </div>
+                      <p className="text-[11px] text-on-surface-variant">
+                        Este QR abre el registro público de esta estación.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )

@@ -109,6 +109,10 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim() || form.discount_value <= 0) return
+    if (form.target_type !== 'cart' && (!form.target_ids || form.target_ids.length === 0)) {
+      setError('Select at least one target for this promotion type')
+      return
+    }
 
     setSaving(true)
     setError(null)
@@ -290,7 +294,7 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
           )}
 
           {/* Discount Type + Value */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="block text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
                 Discount Type
@@ -361,7 +365,7 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
             <label className="block text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
               Conditions <span className="font-normal normal-case text-on-surface-variant/50">(optional)</span>
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[10px] font-label text-on-surface-variant">Min. quantity</label>
                 <input
@@ -386,7 +390,7 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[10px] font-label text-on-surface-variant">Max uses (total)</label>
                 <input
@@ -417,7 +421,7 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
             <label className="block text-xs font-label font-bold text-on-surface-variant uppercase tracking-wider">
               Schedule <span className="font-normal normal-case text-on-surface-variant/50">(optional, leave empty for always active)</span>
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="block text-[10px] font-label text-on-surface-variant">Starts at</label>
                 <input
@@ -453,7 +457,7 @@ export function PromotionForm({ open, onOpenChange, onSaved, editPromotion }: Pr
             </ModalClose>
             <Button
               type="submit"
-              disabled={!form.name.trim() || form.discount_value <= 0 || saving}
+              disabled={!form.name.trim() || form.discount_value <= 0 || saving || (form.target_type !== 'cart' && (!form.target_ids || form.target_ids.length === 0))}
               isLoading={saving}
             >
               <Tag className="h-4 w-4 mr-2" />

@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setAppliedPromotions } from '@/store/slices/cartSlice'
+import { setAppliedPromotions, clearAutoPromotions } from '@/store/slices/cartSlice'
 import { api } from '@/lib/api/client'
 import type { PromotionValidationResponse } from '@ultimate-pos/shared'
 
 export function useCartPromotions() {
   const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
+  const storeId = useAppSelector((s) => s.auth.user?.store_id)
   // appliedPromotions read intentionally removed to avoid re-fetch loops; we only dispatch updates
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef(items)
@@ -28,6 +29,10 @@ export function useCartPromotions() {
       }
       return
     }
+
+    // Reset stale promotions immediately while recalculating.
+    hadPromosRef.current = false
+    dispatch(clearAutoPromotions())
 
     timerRef.current = setTimeout(async () => {
       try {
@@ -50,16 +55,26 @@ export function useCartPromotions() {
 
         if (promotions.length > 0) {
           hadPromosRef.current = true
+        } else {
+          hadPromosRef.current = false
         }
 
         dispatch(setAppliedPromotions({ promotions, totalDiscount }))
       } catch {
-        // Silently fail — promos won't apply but cart still works
+        hadPromosRef.current = false
+        dispatch(setAppliedPromotions({ promotions: [], totalDiscount: 0 }))
       }
     }, 300)
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [items, dispatch])
+  }, [items, storeId, dispatch])
+
+  useEffect(() => {
+    if (!storeId) {
+      hadPromosRef.current = false
+      dispatch(setAppliedPromotions({ promotions: [], totalDiscount: 0 }))
+    }
+  }, [storeId, dispatch])
 }

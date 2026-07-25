@@ -100,6 +100,7 @@ export default function SelfCheckoutPage() {
   const [promoPinInput, setPromoPinInput] = useState('')
   const [promoPinError, setPromoPinError] = useState('')
   const [showQRModal, setShowQRModal] = useState(false)
+  const [mobileView, setMobileView] = useState<'products' | 'cart' | 'scan' | 'customer'>('products')
   const [registerName, setRegisterName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
@@ -809,9 +810,9 @@ export default function SelfCheckoutPage() {
 
   // ─── Main POS-style layout ────────────────────────────────────────────────
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden overflow-x-hidden bg-background">
       {/* ── LEFT: Products ─────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col overflow-hidden relative">
+      <div className={`flex flex-1 flex-col overflow-hidden relative ${mobileView !== 'products' ? 'max-lg:hidden' : ''}`}>
         {/* Store header */}
         <header className="shrink-0 border-b border-outline-variant/50 bg-surface-container/80 px-4 py-2.5 backdrop-blur-sm">
           <div className="flex items-center gap-3">
@@ -843,7 +844,7 @@ export default function SelfCheckoutPage() {
         </div>
 
         {/* Products grid or welcome hero */}
-        <div className="flex-1 overflow-y-auto px-3 pb-6">
+        <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-6">
           {!customerProfile && cartItems.length === 0 && !dismissedWelcome ? (
             <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
               <div className="relative mb-8">
@@ -899,118 +900,148 @@ export default function SelfCheckoutPage() {
           )}
         </div>
 
+        {/* Mobile cart FAB */}
+        {cartCount > 0 && mobileView === 'products' && (
+          <button
+            onClick={() => setMobileView('cart')}
+            className="fixed bottom-20 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-on shadow-[0_8px_32px_rgba(204,255,0,0.3)] transition-transform active:scale-95 lg:hidden"
+          >
+            <ShoppingBag className="h-6 w-6" />
+            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white">
+              {cartCount}
+            </span>
+          </button>
+        )}
+
       </div>
 
       {/* ── RIGHT: Cart sidebar ─────────────────────────────────────── */}
-      <div className="flex w-[360px] shrink-0 flex-col border-l border-outline-variant/50 bg-surface-container/30">
+      <div className={`flex w-full shrink-0 flex-col border-l border-outline-variant/50 bg-surface-container/30 lg:w-[360px] overflow-y-auto pb-20 lg:pb-0 ${mobileView !== 'cart' ? 'max-lg:hidden' : ''}`}>
 
-        {/* QR collapsible section */}
-        <CollapsibleSection
-          title="Registrate Escane AQUI"
-          expanded={qrExpanded}
-          onToggle={() => setQrExpanded((v) => !v)}
-          icon={<QrCode className="h-3.5 w-3.5" />}
-        >
-          <div className="flex flex-col items-center p-3">
-            <div className="w-full max-w-[180px] p-0.5 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
-              {registerUrl ? (
-                <QRCodeSVG
-                  value={registerUrl}
-                  size={180}
-                  style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
-                  bgColor="#fff"
-                  fgColor="#222"
-                />
-              ) : (
-                <div className="flex h-[160px] w-[160px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
-                  <QrCode className="h-12 w-12" />
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowQRModal(true)}
-              className="mt-2 flex items-center justify-center gap-1 text-[10px] font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
-            >
-              <Maximize2 className="h-3 w-3" />
-              Ampliar QR
-            </button>
-            <p className="mt-2 text-xs text-on-surface-variant text-center">
-              Escanea el código QR para REGISTRARTE
-            </p>
-            <p className="mt-2 text-xs text-on-surface-variant text-center">
-              y recibir grandes descuentos!
-            </p>
-          </div>
-        </CollapsibleSection>
+        {/* Mobile back button */}
+        <div className="shrink-0 lg:hidden border-b border-outline-variant/50">
+          <button
+            onClick={() => setMobileView('products')}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-label font-bold text-on-surface-variant hover:text-on-surface transition-colors w-full"
+          >
+            <ArrowRight className="h-4 w-4 rotate-180" />
+            Seguir comprando
+          </button>
+        </div>
 
-        {/* Form collapsible section */}
-        <CollapsibleSection
-          title="Registro"
-          expanded={formExpanded}
-          onToggle={() => setFormExpanded((v) => !v)}
-          icon={<UserPlus className="h-3.5 w-3.5" />}
-        >
-          <div className="p-3">
-            <form onSubmit={handleRegisterCustomer} className="space-y-2">
-              <div>
-                <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
-                  Nombre
-                </label>
-                <input
-                  type="text"
-                  value={registerName}
-                  onChange={(e) => setRegisterName(e.target.value)}
-                  placeholder="Tu nombre"
-                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="email"
-                  value={registerEmail}
-                  onChange={(e) => setRegisterEmail(e.target.value)}
-                  placeholder="Email"
-                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                />
-                <input
-                  type="tel"
-                  value={registerPhone}
-                  onChange={(e) => setRegisterPhone(e.target.value)}
-                  placeholder="Teléfono"
-                  className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                />
+        {/* QR collapsible section — desktop only */}
+        <div className="hidden lg:block">
+          <CollapsibleSection
+            title="Registrate Escane AQUI"
+            expanded={qrExpanded}
+            onToggle={() => setQrExpanded((v) => !v)}
+            icon={<QrCode className="h-3.5 w-3.5" />}
+          >
+            <div className="flex flex-col items-center p-3">
+              <div className="w-full max-w-[180px] p-0.5 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+                {registerUrl ? (
+                  <QRCodeSVG
+                    value={registerUrl}
+                    size={180}
+                    style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
+                    bgColor="#fff"
+                    fgColor="#222"
+                  />
+                ) : (
+                  <div className="flex h-[160px] w-[160px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
+                    <QrCode className="h-12 w-12" />
+                  </div>
+                )}
               </div>
               <button
-                type="submit"
-                disabled={!registerName.trim() || registeringCustomer}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
+                type="button"
+                onClick={() => setShowQRModal(true)}
+                className="mt-2 flex items-center justify-center gap-1 text-[10px] font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
               >
-                {registeringCustomer ? 'Registrando...' : 'Guardar cliente'}
+                <Maximize2 className="h-3 w-3" />
+                Ampliar QR
               </button>
-            </form>
-          </div>
-        </CollapsibleSection>
+              <p className="mt-2 text-xs text-on-surface-variant text-center">
+                Escanea el código QR para REGISTRARTE
+              </p>
+              <p className="mt-2 text-xs text-on-surface-variant text-center">
+                y recibir grandes descuentos!
+              </p>
+            </div>
+          </CollapsibleSection>
+        </div>
 
-        {/* Camera collapsible section */}
-        <CollapsibleSection
-          title="Escanea tu Tarjeta de Lealtad"
-          expanded={cameraExpanded}
-          onToggle={() => setCameraExpanded((v) => !v)}
-          icon={<Scan className="h-3.5 w-3.5" />}
-        >
-          <QRScannerPopover
-            open={cameraExpanded}
-            onClose={() => setCameraExpanded(false)}
-            variant="inline"
-            onScan={handleScan}
-            onScanSuccess={handleScanSuccess}
-          />
-        </CollapsibleSection>
+        {/* Form collapsible section — desktop only */}
+        <div className="hidden lg:block">
+          <CollapsibleSection
+            title="Registro"
+            expanded={formExpanded}
+            onToggle={() => setFormExpanded((v) => !v)}
+            icon={<UserPlus className="h-3.5 w-3.5" />}
+          >
+            <div className="p-3">
+              <form onSubmit={handleRegisterCustomer} className="space-y-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    value={registerName}
+                    onChange={(e) => setRegisterName(e.target.value)}
+                    placeholder="Tu nombre"
+                    className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="email"
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                    placeholder="Email"
+                    className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                  <input
+                    type="tel"
+                    value={registerPhone}
+                    onChange={(e) => setRegisterPhone(e.target.value)}
+                    placeholder="Teléfono"
+                    className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!registerName.trim() || registeringCustomer}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {registeringCustomer ? 'Registrando...' : 'Guardar cliente'}
+                </button>
+              </form>
+            </div>
+          </CollapsibleSection>
+        </div>
 
-        {/* Re-expand buttons (when sections are collapsed) */}
+        {/* Camera collapsible section — desktop only */}
+        <div className="hidden lg:block">
+          <CollapsibleSection
+            title="Escanea tu Tarjeta de Lealtad"
+            expanded={cameraExpanded}
+            onToggle={() => setCameraExpanded((v) => !v)}
+            icon={<Scan className="h-3.5 w-3.5" />}
+          >
+            <QRScannerPopover
+              open={cameraExpanded}
+              onClose={() => setCameraExpanded(false)}
+              variant="inline"
+              onScan={handleScan}
+              onScanSuccess={handleScanSuccess}
+            />
+          </CollapsibleSection>
+        </div>
+
+        {/* Re-expand buttons (when sections are collapsed) — desktop only */}
         {(!qrExpanded || !formExpanded || !cameraExpanded) && (
-          <div className="flex gap-2 px-4 py-2.5 border-b border-outline-variant/50 bg-surface-container/20">
+          <div className="hidden lg:flex gap-2 px-4 py-2.5 border-b border-outline-variant/50 bg-surface-container/20">
             {!qrExpanded && (
               <button
                 type="button"
@@ -1044,8 +1075,8 @@ export default function SelfCheckoutPage() {
           </div>
         )}
 
-        {/* Customer section */}
-        <div className="shrink-0 border-b border-outline-variant/50">
+        {/* Customer section — desktop only */}
+        <div className="hidden lg:block shrink-0 border-b border-outline-variant/50">
           <div className="px-4 py-3">
             {!customerProfile ? (
               <div className="relative">
@@ -1403,6 +1434,246 @@ export default function SelfCheckoutPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Mobile: Customer view (full screen on mobile) ────────── */}
+      {mobileView === 'customer' && (
+        <div className="fixed inset-0 z-30 flex flex-col bg-background pt-14 pb-16 lg:hidden">
+          <div className="flex items-center justify-between border-b border-outline-variant/50 px-4 py-3">
+            <h2 className="font-headline font-bold text-base text-on-surface">Mi Cuenta</h2>
+            <button
+              onClick={() => setMobileView('products')}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4">
+              {!customerProfile ? (
+                <div className="space-y-5">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+                    <input
+                      type="text"
+                      value={customerSearchQuery}
+                      onChange={(e) => {
+                        setCustomerSearchQuery(e.target.value)
+                        if (!e.target.value) setCustomerSearchResults(undefined)
+                      }}
+                      placeholder="Buscar por nombre, email o teléfono..."
+                      className="h-11 w-full rounded-xl border border-outline-variant bg-surface-container pl-10 pr-4 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  </div>
+                  {searchingCustomer && (
+                    <div className="flex items-center justify-center py-6">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    </div>
+                  )}
+                  {customerSearchQuery && !searchingCustomer && customerSearchResults && (
+                    <button
+                      onClick={() => handleSelectSearchResult(customerSearchResults)}
+                      className="flex w-full items-center gap-3 rounded-xl border border-outline-variant/50 bg-surface-container/60 px-4 py-3 hover:bg-surface-container transition-colors"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-highest text-sm font-bold text-on-surface">
+                        {customerSearchResults.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="truncate font-label font-bold text-sm text-on-surface">{customerSearchResults.name}</p>
+                        <p className="truncate text-xs text-on-surface-variant">{customerSearchResults.email || customerSearchResults.phone || ''}</p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-on-surface-variant" />
+                    </button>
+                  )}
+                  {customerSearchQuery && !searchingCustomer && customerSearchResults === null && (
+                    <p className="text-center text-sm text-on-surface-variant py-4">No se encontró cliente</p>
+                  )}
+
+                  {/* QR Code for registration */}
+                  <div className="flex flex-col items-center gap-3 border-t border-outline-variant/30 pt-5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">O escanea el QR para registrarte</p>
+                    <div className="w-full max-w-[200px] p-1 rounded-2xl bg-white shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+                      {registerUrl ? (
+                        <QRCodeSVG
+                          value={registerUrl}
+                          size={200}
+                          style={{ width: '100%', height: 'auto', borderRadius: 16, display: 'block', margin: '0 auto' }}
+                          bgColor="#fff"
+                          fgColor="#222"
+                        />
+                      ) : (
+                        <div className="flex h-[180px] w-[180px] items-center justify-center rounded-xl bg-surface-container-high text-on-surface-variant mx-auto">
+                          <QrCode className="h-12 w-12" />
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowQRModal(true)}
+                      className="flex items-center justify-center gap-1 text-xs font-label font-bold text-on-surface-variant hover:text-primary transition-colors"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      Ampliar QR
+                    </button>
+                  </div>
+
+                  {/* Registration form */}
+                  <div className="border-t border-outline-variant/30 pt-5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-3 text-center">Registro rápido</p>
+                    <form onSubmit={handleRegisterCustomer} className="space-y-2">
+                      <input
+                        type="text"
+                        value={registerName}
+                        onChange={(e) => setRegisterName(e.target.value)}
+                        placeholder="Tu nombre"
+                        className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="email"
+                          value={registerEmail}
+                          onChange={(e) => setRegisterEmail(e.target.value)}
+                          placeholder="Email"
+                          className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        />
+                        <input
+                          type="tel"
+                          value={registerPhone}
+                          onChange={(e) => setRegisterPhone(e.target.value)}
+                          placeholder="Teléfono"
+                          className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={!registerName.trim() || registeringCustomer}
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-label font-bold text-primary-on transition-colors hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {registeringCustomer ? 'Registrando...' : 'Crear cuenta'}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-highest text-lg font-headline font-bold text-on-surface">
+                      {customerProfile.customer.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-headline font-bold text-base text-on-surface">{customerProfile.customer.name}</p>
+                        {customerProfile.loyalty?.tier && (
+                          <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-label font-bold capitalize text-primary">
+                            {customerProfile.loyalty.tier}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                        <Star className="h-3 w-3 text-primary" />
+                        <span className="font-bold">{customerProfile.loyalty?.points || 0} pts</span>
+                        <span>·</span>
+                        <span>{customerProfile.customer.total_visits} visitas</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCustomerProfile(null)
+                        setCustomerSearchQuery('')
+                        setCustomerSearchResults(undefined)
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                      <Star className="mx-auto mb-1 h-4 w-4 text-primary" />
+                      <p className="text-sm font-bold text-on-surface">{customerProfile.loyalty?.points || 0}</p>
+                      <p className="text-[10px] text-on-surface-variant">Puntos</p>
+                    </div>
+                    <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                      <ShoppingBag className="mx-auto mb-1 h-4 w-4 text-secondary" />
+                      <p className="text-sm font-bold text-on-surface">${Number(customerProfile.customer.total_spent || 0).toLocaleString()}</p>
+                      <p className="text-[10px] text-on-surface-variant">Gastado</p>
+                    </div>
+                    <div className="rounded-xl bg-surface-container/60 border border-outline-variant/50 p-3 text-center">
+                      <Tag className="mx-auto mb-1 h-4 w-4 text-tertiary" />
+                      <p className="text-sm font-bold text-on-surface">{customerProfile.customer.total_visits}</p>
+                      <p className="text-[10px] text-on-surface-variant">Visitas</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile: Scan view (full screen on mobile) ────────────── */}
+      {mobileView === 'scan' && (
+        <div className="fixed inset-0 z-30 flex flex-col bg-background pt-14 pb-16 lg:hidden">
+          <div className="flex items-center justify-between border-b border-outline-variant/50 px-4 py-3">
+            <h2 className="font-headline font-bold text-base text-on-surface">Escanear Tarjeta</h2>
+            <button
+              onClick={() => setMobileView('products')}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex flex-col items-center gap-4 p-4">
+              <p className="text-sm text-on-surface-variant text-center">
+                Coloca el código QR frente a la cámara
+              </p>
+              <div className="w-full max-w-sm">
+                <QRScannerPopover
+                  open={mobileView === 'scan'}
+                  onClose={() => setMobileView('products')}
+                  variant="inline"
+                  onScan={handleScan}
+                  onScanSuccess={handleScanSuccess}
+                />
+              </div>
+              <p className="text-xs text-on-surface-variant/50 text-center">
+                Escanea tu tarjeta de lealtad para ganar puntos y descuentos
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile bottom nav ───────────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-outline-variant bg-surface-container-low backdrop-blur-glass lg:hidden">
+        {([
+          { id: 'products' as const, label: 'Productos', icon: ShoppingBag },
+          { id: 'cart' as const, label: 'Carrito', icon: ShoppingCart },
+          { id: 'scan' as const, label: 'Escanear', icon: Scan },
+          { id: 'customer' as const, label: 'Cliente', icon: User },
+        ]).map((tab) => {
+          const Icon = tab.icon
+          const isActive = mobileView === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setMobileView(tab.id)}
+              className={`relative flex flex-col items-center gap-0.5 px-4 py-1 text-[10px] font-label font-bold transition-colors ${
+                isActive ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              {tab.label}
+              {tab.id === 'cart' && cartCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[14px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-on">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
 
       {/* ── QR expand modal ──────────────────────────────────────────── */}
       {showQRModal && registerUrl && (

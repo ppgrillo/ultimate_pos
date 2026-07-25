@@ -271,17 +271,20 @@ export const api = createApi({
       }),
       invalidatesTags: [{ type: 'Terminal', id: 'LIST' }],
     }),
-    getCustomers: builder.query<CustomerWithLoyalty[], { search?: string; tag?: string; source?: string; sort?: string } | void>({
+    getCustomers: builder.query<
+      { data: CustomerWithLoyalty[]; total: number; page: number; limit: number; totalPages: number },
+      { search?: string; tag?: string; source?: string; sort?: string; page?: number; limit?: number } | void
+    >({
       query: (params) => ({
         url: '/customers',
-        params: params ? Object.fromEntries(Object.entries(params).filter(([, value]) => value)) : undefined,
+        params: params ? Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== '')) : undefined,
       }),
-      transformResponse: (response: { data: CustomerWithLoyalty[] }) => response.data,
+      transformResponse: (response: { data: CustomerWithLoyalty[]; total: number; page: number; limit: number; totalPages: number }) => response,
       providesTags: (result) =>
         result
           ? [
               { type: 'Customer' as const, id: 'LIST' },
-              ...result.map((item) => ({ type: 'Customer' as const, id: item.id })),
+              ...result.data.map((item) => ({ type: 'Customer' as const, id: item.id })),
             ]
           : [{ type: 'Customer' as const, id: 'LIST' }],
     }),

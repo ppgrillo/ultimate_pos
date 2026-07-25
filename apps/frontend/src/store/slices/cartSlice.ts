@@ -53,6 +53,10 @@ const cartSlice = createSlice({
   name: 'cart',
   initialState,
   reducers: {
+    clearAutoPromotions(state) {
+      state.appliedPromotions = []
+      state.promoDiscount = 0
+    },
     addItem(state, action: PayloadAction<CartItem>) {
       const existing = state.items.find(
         (item) =>
@@ -64,6 +68,8 @@ const cartSlice = createSlice({
       } else {
         state.items.push(action.payload)
       }
+      state.appliedPromotions = []
+      state.promoDiscount = 0
     },
     removeItem(state, action: PayloadAction<{ product_id: string; modifiers: string[] }>) {
       state.items = state.items.filter(
@@ -71,6 +77,8 @@ const cartSlice = createSlice({
           !(item.product_id === action.payload.product_id &&
             JSON.stringify(item.modifiers) === JSON.stringify(action.payload.modifiers)),
       )
+      state.appliedPromotions = []
+      state.promoDiscount = 0
     },
     updateQuantity(state, action: PayloadAction<{ product_id: string; modifiers: string[]; quantity: number }>) {
       const item = state.items.find(
@@ -80,6 +88,8 @@ const cartSlice = createSlice({
       )
       if (item) {
         item.quantity = Math.max(0, action.payload.quantity)
+        state.appliedPromotions = []
+        state.promoDiscount = 0
       }
     },
     setCustomer(state, action: PayloadAction<{ id: string; name: string; tier?: string; points?: number; loyalty_card_id?: string } | null>) {
@@ -129,6 +139,6 @@ export const {
   addItem, removeItem, updateQuantity,
   setCustomer, setOrderType, setTable,
   setDiscount, setNotes, clearCart,
-  setRedeemedPoints, setAppliedPromotions,
+  setRedeemedPoints, setAppliedPromotions, clearAutoPromotions,
 } = cartSlice.actions
 export default cartSlice.reducer

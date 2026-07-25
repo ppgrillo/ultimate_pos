@@ -19,7 +19,7 @@ export function Pagination({ page, totalPages, totalItems, pageSize, onPageChang
   const to = Math.min((page + 1) * pageSize, totalItems)
 
   return (
-    <div className="flex items-center justify-between gap-4 pt-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
       <div className="flex items-center gap-3">
         {onPageSizeChange && (
           <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">

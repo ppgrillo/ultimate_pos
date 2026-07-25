@@ -24,7 +24,7 @@ function getTabs(hasKitchen?: boolean) {
 export function OrderHeader({ activeTab, onTabChange, onRefresh, orderCount, loading, hasKitchen }: OrderHeaderProps) {
   const tabs = getTabs(hasKitchen)
   return (
-    <div className="flex items-center justify-between gap-4 mb-6">
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
       <Tabs value={activeTab} onValueChange={(val) => onTabChange(val as OrderTab)}>
         <TabsList className="bg-surface-container/50 border border-outline-variant/40">
           {tabs.map((tab) => (

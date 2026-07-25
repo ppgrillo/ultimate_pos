@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { orderBus } from '../events'
 import { mpService } from '../services/mp-point'
 import { decryptSettings } from '../lib/settings'
+import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 
 export const webhooksRouter = new Hono()
 
@@ -163,6 +164,7 @@ webhooksRouter.post('/mp-point', async (c) => {
 
   const metadata: Record<string, unknown> = {
     ...currentMetadata,
+    ...((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
     mpOrderStatus: mapping.mpStatus,
     mpPaymentDetail: mpPaymentDetail || mapping.mpStatus,
   }
@@ -243,6 +245,12 @@ webhooksRouter.post('/mp-point', async (c) => {
   if (mapping.orderStatus === 'paid') {
     await processMpLoyalty(supabaseAdmin, orderData.id, orderData.store_id).catch(() => {})
   } else if (mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') {
+    await revertPromotionUsageIfNeeded(
+      orderData.id,
+      currentMetadata,
+      (orderData.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
+    ).catch(() => {})
+
     await reverseMpLoyalty(supabaseAdmin, orderData.id).catch(() => {})
   }
 

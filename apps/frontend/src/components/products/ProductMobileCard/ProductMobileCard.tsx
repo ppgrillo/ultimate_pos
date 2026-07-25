@@ -1,7 +1,8 @@
 'use client'
 
-import { Pin, PinOff } from 'lucide-react'
+import { Pin, PinOff, Pencil } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
+import Link from 'next/link'
 
 interface ProductMobileCardProps {
   id: string
@@ -68,6 +69,15 @@ export function ProductMobileCard({
           )}
         </div>
       </div>
+
+      <Link
+        href={`/products/${id}/edit`}
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
+        title="Edit product"
+      >
+        <Pencil className="h-4 w-4" />
+      </Link>
 
       <button
         onClick={(e) => {

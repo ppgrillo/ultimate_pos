@@ -356,7 +356,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="font-headline text-headline-lg text-on-surface">Settings</h1>
         <div className="flex items-center gap-3">
           {error && (
@@ -587,7 +587,7 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4 space-y-3">
                         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Etiqueta del campo</label>
                         <input

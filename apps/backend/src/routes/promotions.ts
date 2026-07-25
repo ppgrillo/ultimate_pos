@@ -4,6 +4,12 @@ import { zValidator } from '@hono/zod-validator'
 import { promotionSchema } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
+import {
+  isPromotionActive,
+  computeCartPromotionDiscounts,
+  isCartPromotionEligible,
+  isPromotionInDateWindow,
+} from '../lib/promotion-rules'
 
 export const promotionsRouter = new Hono()
 
@@ -13,22 +19,35 @@ promotionsRouter.use('*', authMiddleware)
 promotionsRouter.get('/', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
-  const now = new Date().toISOString()
 
   const { data, error } = await supabase
     .from('promotions')
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .or(`or(starts_at.is.null,starts_at.lte.${now}),or(ends_at.is.null,ends_at.gte.${now})`)
     .order('priority', { ascending: false })
 
   if (error) throw badRequest(error.message)
 
-  // Filter out promos that have exhausted their max uses
-  const filtered = (data || []).filter(
-    (p) => p.max_uses == null || p.max_uses <= 0 || (p.current_uses ?? 0) < p.max_uses
-  )
+  const now = new Date()
+  const filtered = (data || []).filter((p) => isPromotionActive(p, now))
+
+  if (c.req.query('debug') === '1') {
+    return c.json({
+      data: filtered,
+      debug: {
+        now: now.toISOString(),
+        evaluated: (data || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          starts_at: p.starts_at,
+          ends_at: p.ends_at,
+          inDateWindow: isPromotionInDateWindow(p, now),
+          isActive: isPromotionActive(p, now),
+        })),
+      },
+    })
+  }
 
   return c.json({ data: filtered })
 })
@@ -60,64 +79,47 @@ promotionsRouter.post('/validate', async (c) => {
   const items: Array<{ product_id: string; quantity: number; price: number; category_id?: string | null }> = body.items || []
   const subtotal: number = body.subtotal ?? items.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-  // Fetch active, in-date promotions — only cart-level
-  const now = new Date().toISOString()
+  // Fetch active promotions — final date/eligibility checks are done in code
   const { data: promos, error } = await supabase
     .from('promotions')
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
     .eq('target_type', 'cart')
-    .or(`or(starts_at.is.null,starts_at.lte.${now}),or(ends_at.is.null,ends_at.gte.${now})`)
     .order('priority', { ascending: false })
 
   if (error) throw badRequest(error.message)
 
-  const appliedPromotions: Array<{
-    promotion_id: string
-    name: string
-    discount_amount: number
-    badge_text: string | null
-    discount_type: string
-    discount_value: number
-  }> = []
+  const now = new Date()
+  const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0)
+  const { appliedPromotions, totalDiscount } = computeCartPromotionDiscounts(promos || [], subtotal, totalQuantity, now)
 
-  let totalDiscount = 0
-
-  for (const promo of promos || []) {
-    if (promo.target_type !== 'cart') continue
-
-    // Skip promos that have exhausted their max uses
-    if (promo.max_uses != null && promo.max_uses > 0 && (promo.current_uses ?? 0) >= promo.max_uses) continue
-
-    const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0)
-    if (promo.min_quantity && totalQuantity < promo.min_quantity) continue
-    if (promo.min_subtotal && subtotal < promo.min_subtotal) continue
-
-    let discountAmount = 0
-    if (promo.discount_type === 'percentage') {
-      discountAmount = subtotal * (promo.discount_value / 100)
-    } else {
-      discountAmount = Math.min(promo.discount_value, subtotal)
-    }
-
-    if (discountAmount > 0) {
-      appliedPromotions.push({
-        promotion_id: promo.id,
-        name: promo.name,
-        discount_amount: Math.round(discountAmount * 100) / 100,
-        badge_text: promo.badge_text,
-        discount_type: promo.discount_type,
-        discount_value: promo.discount_value,
-      })
-      totalDiscount += discountAmount
-    }
+  if (c.req.query('debug') === '1') {
+    return c.json({
+      data: {
+        applied_promotions: appliedPromotions,
+        total_discount: totalDiscount,
+      },
+      debug: {
+        now: now.toISOString(),
+        subtotal,
+        totalQuantity,
+        evaluated: (promos || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          starts_at: p.starts_at,
+          ends_at: p.ends_at,
+          inDateWindow: isPromotionInDateWindow(p, now),
+          eligible: isCartPromotionEligible(p, subtotal, totalQuantity, now),
+        })),
+      },
+    })
   }
 
   return c.json({
     data: {
       applied_promotions: appliedPromotions,
-      total_discount: Math.round(totalDiscount * 100) / 100,
+      total_discount: totalDiscount,
     },
   })
 })
@@ -155,9 +157,12 @@ promotionsRouter.put('/:id', requireRole('admin'), zValidator('json', promotionS
   const storeId = c.get('storeId')
   const input = c.req.valid('json')
 
+  // Strip server-managed fields — current_uses is managed by order creation
+  const { current_uses: _, ...updateData } = input as Record<string, unknown>
+
   const { data, error } = await supabase
     .from('promotions')
-    .update(input)
+    .update(updateData)
     .eq('id', id)
     .eq('store_id', storeId)
     .select()

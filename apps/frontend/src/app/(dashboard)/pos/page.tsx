@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
+import { clearAutoPromotions } from '@/store/slices/cartSlice'
 import { PosLayout } from '@/components/pos/PosLayout'
 import { PosDesktopLayout } from '@/components/pos/PosDesktopLayout'
 import { PosMenu } from '@/components/pos/PosMenu'
@@ -19,17 +20,16 @@ import type { Product } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 import { useCartPromotions } from '@/hooks/useCartPromotions'
 import { usePromotions } from '@/hooks/usePromotions'
-
-function getSalePrice(product: Product, promo: { discount_type: string; discount_value: number }): number {
-  if (promo.discount_type === 'percentage') {
-    return Math.round(product.price * (1 - promo.discount_value / 100) * 100) / 100
-  }
-  return Math.max(0, Math.round((product.price - promo.discount_value) * 100) / 100)
-}
+import { getSalePrice } from '@/lib/utils'
 
 export default function PosPage() {
   useCartPromotions()
   const dispatch = useAppDispatch()
+
+  useEffect(() => {
+    dispatch(clearAutoPromotions())
+  }, [dispatch])
+
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const { data: products = [], isLoading } = useGetProductsQuery()
@@ -56,7 +56,7 @@ export default function PosPage() {
       return
     }
     const promo = getPromotionForProduct(product)
-    const price = promo ? getSalePrice(product, promo) : product.price
+    const price = promo ? getSalePrice(product.price, promo.discount_type, promo.discount_value) : product.price
     dispatch(addItem({
       product_id: product.id,
       name: product.name,

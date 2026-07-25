@@ -70,7 +70,6 @@ export function PosMenu() {
       <PosSearchBar
         value={searchQuery}
         onChange={(v: string) => dispatch(setSearchQuery(v))}
-        onScanClick={() => {}}
       />
 
       <CategoryChips

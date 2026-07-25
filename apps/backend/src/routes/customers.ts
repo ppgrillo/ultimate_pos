@@ -24,25 +24,35 @@ customersRouter.get('/', async (c) => {
   const search = c.req.query('search')
   const tag = c.req.query('tag')
   const source = c.req.query('source')
-  const sort = c.req.query('sort') || 'name'
+  const sort = c.req.query('sort') || 'created_at'
+  const page = Math.max(1, parseInt(c.req.query('page') || '1', 10))
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '20', 10)))
+  const offset = (page - 1) * limit
+
+  let countQuery = supabase
+    .from('customers')
+    .select('id', { count: 'exact', head: true })
+    .eq('store_id', storeId)
 
   let query = supabase
     .from('customers')
-    .select('*, loyalty:loyalty_cards(*)')
+    .select('*, loyalty:loyalty_cards(*)', { count: 'exact' })
     .eq('store_id', storeId)
 
   if (search) {
-    query = query.or(
-      `name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`,
-    )
+    const filter = `name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+    query = query.or(filter)
+    countQuery = countQuery.or(filter)
   }
 
   if (tag) {
     query = query.contains('tags', [tag])
+    countQuery = countQuery.contains('tags', [tag])
   }
 
   if (source) {
     query = query.eq('source', source)
+    countQuery = countQuery.eq('source', source)
   }
 
   const orderMap: Record<string, { column: string; ascending: boolean }> = {
@@ -52,14 +62,26 @@ customersRouter.get('/', async (c) => {
     total_visits: { column: 'total_visits', ascending: false },
   }
 
-  const order = orderMap[sort] || orderMap.name
+  const order = orderMap[sort] || orderMap.created_at
   query = query.order(order.column, { ascending: order.ascending })
 
-  const { data, error } = await query
+  query = query.range(offset, offset + limit - 1)
+
+  const [{ data, error }, { count, error: countError }] = await Promise.all([
+    query,
+    countQuery,
+  ])
 
   if (error) throw badRequest(error.message)
+  if (countError) throw badRequest(countError.message)
 
-  return c.json({ data: (data || []).map(normalizeLoyalty) })
+  return c.json({
+    data: (data || []).map(normalizeLoyalty),
+    total: count || 0,
+    page,
+    limit,
+    totalPages: Math.ceil((count || 0) / limit),
+  })
 })
 
 customersRouter.get('/stats', async (c) => {

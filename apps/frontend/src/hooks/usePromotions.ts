@@ -14,8 +14,10 @@ interface UsePromotionsResult {
 
 export function usePromotions(): UsePromotionsResult {
   const store = useAppSelector((s) => s.storeConfig.currentStore)
+  const authStoreId = useAppSelector((s) => s.auth.user?.store_id)
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [loading, setLoading] = useState(true)
+  const [now, setNow] = useState(() => new Date())
 
   const fetchPromotions = useCallback(async () => {
     if (!store?.id) {
@@ -33,10 +35,20 @@ export function usePromotions(): UsePromotionsResult {
   }, [store?.id])
 
   useEffect(() => {
-    fetchPromotions()
-  }, [fetchPromotions])
+    if (!store?.id || !authStoreId || store.id !== authStoreId) {
+      setPromotions([])
+      setLoading(false)
+      return
+    }
 
-  const now = useMemo(() => new Date(), [])
+    fetchPromotions()
+  }, [fetchPromotions, store?.id, authStoreId])
+
+  // Refresh `now` every 60s so expired promos drop off and new ones appear
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
   const activePromotions = useMemo(() => {
     return promotions.filter((p) => {

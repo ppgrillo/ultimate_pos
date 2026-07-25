@@ -18,7 +18,8 @@ export function CustomerSelectScreen({ onStartOrder, onSkip }: CustomerSelectScr
   const dispatch = useAppDispatch()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
-  const { data: customers = [] } = useGetCustomersQuery({ sort: 'name' })
+  const { data: result } = useGetCustomersQuery({ sort: 'name', limit: 500 })
+  const customers = result?.data || []
   const { data: customerSummary, isFetching: isLoadingSummary } = useGetCustomerSummaryQuery(selectedCustomerId || '', {
     skip: !selectedCustomerId,
   })

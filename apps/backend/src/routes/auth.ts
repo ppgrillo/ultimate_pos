@@ -6,6 +6,7 @@ import { loginSchema, registerSchema } from '@ultimate-pos/shared'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { badRequest, unauthorized } from '../middleware/error'
 import type { RegisterInput } from '@ultimate-pos/shared'
+import { getPrimaryMembership } from '../lib/membership'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const anonKey = process.env.SUPABASE_ANON_KEY!
@@ -41,11 +42,7 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
     .eq('email', email)
     .single()
 
-  const { data: membership } = await supabaseAdmin
-    .from('store_members')
-    .select('store_id, role')
-    .eq('profile_id', data.user.id)
-    .maybeSingle()
+  const membership = await getPrimaryMembership(data.user.id)
 
   const access_token = await mintToken(
     data.user.id,
@@ -131,11 +128,7 @@ authRouter.get('/me', async (c) => {
     return c.json({ profile_id: null, store_id: null, role: null, access_token: null })
   }
 
-  const { data: membership } = await supabaseAdmin
-    .from('store_members')
-    .select('store_id, role')
-    .eq('profile_id', profile.id)
-    .maybeSingle()
+  const membership = await getPrimaryMembership(profile.id)
 
   const store_id = membership?.store_id || null
   const role = membership?.role || null
@@ -159,11 +152,7 @@ authRouter.post('/check-google', async (c) => {
     .maybeSingle()
 
   if (existingProfile) {
-    const { data: membership } = await supabaseAdmin
-      .from('store_members')
-      .select('store_id, role')
-      .eq('profile_id', existingProfile.id)
-      .maybeSingle()
+    const membership = await getPrimaryMembership(existingProfile.id)
 
     return c.json({
       exists: true,

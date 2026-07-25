@@ -3,6 +3,7 @@ import { SidebarProvider } from '@/components/layout/Sidebar/SidebarContext'
 import { MobileDrawer } from '@/components/layout/MobileDrawer'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { DashboardContent } from '@/components/layout/DashboardContent'
+import { DashboardMobileNav } from '@/components/layout/DashboardMobileNav'
 
 export default function DashboardLayout({
   children,
@@ -16,7 +17,7 @@ export default function DashboardLayout({
         <MobileDrawer />
         <DashboardContent>
           <DashboardShell />
-          <main id="main-content" className="flex-1 p-6 overflow-y-auto">
+          <main id="main-content" className="flex-1 p-6 pb-24 lg:pb-6 overflow-y-auto">
             {children}
             <footer className="mt-auto pt-8 pb-2 text-center">
               <p className="text-[11px] text-on-surface-variant/40">
@@ -26,6 +27,7 @@ export default function DashboardLayout({
           </main>
         </DashboardContent>
       </div>
+      <DashboardMobileNav />
       <div className="grain" />
     </SidebarProvider>
   )
