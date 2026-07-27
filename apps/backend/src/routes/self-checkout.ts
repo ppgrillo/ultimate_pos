@@ -12,6 +12,7 @@ import {
   calculatePromotionDiscount,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import { orderBus } from '../events'
 
 export const selfCheckoutRouter = new Hono()
 
@@ -546,14 +547,18 @@ selfCheckoutRouter.post('/orders', async (c) => {
     .eq('id', order.id)
     .single()
 
-  return c.json({
-    data: fullOrder ? {
-      ...fullOrder,
-      customer_name: (fullOrder as Record<string, unknown>).customer ? ((fullOrder as Record<string, unknown>).customer as Record<string, unknown>).name : null,
-      customer: undefined,
-      metadata: { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId, mpOrderStatus },
-    } : null,
-  }, 201)
+  const enriched = fullOrder ? {
+    ...fullOrder,
+    customer_name: (fullOrder as Record<string, unknown>).customer ? ((fullOrder as Record<string, unknown>).customer as Record<string, unknown>).name : null,
+    customer: undefined,
+    metadata: { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId, mpOrderStatus },
+  } : null
+
+  if (enriched) {
+    orderBus.emit('order:created', enriched)
+  }
+
+  return c.json({ data: enriched }, 201)
 })
 
 selfCheckoutRouter.get('/orders/:id', async (c) => {

@@ -1,5 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import type {
+  Check,
+  CheckWithOrders,
   Customer,
   CustomerInput,
   CommunicationLog,
@@ -99,7 +101,10 @@ export interface ProductUpsertInput {
 }
 
 export interface OrderCreateInput {
+  check_id?: string
+  round_number?: number
   customer_id?: string
+  table_number?: number
   type: string
   items: Array<{
     product_id: string
@@ -161,7 +166,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -409,6 +414,68 @@ export const api = createApi({
         { type: 'Order', id: 'LIST' },
       ],
     }),
+    getChecks: builder.query<Array<Check & { total?: number; has_active_kitchen?: boolean }>, { status?: 'open' | 'closed' | 'void' } | void>({
+      query: (params) => ({
+        url: '/checks',
+        params: params?.status ? { status: params.status } : {},
+      }),
+      transformResponse: (response: { data: Array<Check & { total?: number; has_active_kitchen?: boolean }> }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              { type: 'Check' as const, id: 'LIST' },
+              ...result.map((item) => ({ type: 'Check' as const, id: item.id })),
+            ]
+          : [{ type: 'Check' as const, id: 'LIST' }],
+    }),
+    getActiveCheckByTable: builder.query<Check | null, { tableNumber: number }>({
+      query: ({ tableNumber }) => ({
+        url: '/checks/active',
+        params: { tableNumber },
+      }),
+      transformResponse: (response: { data: Check | null }) => response.data,
+      providesTags: (_result, _error, { tableNumber }) => [{ type: 'Check', id: `table-${tableNumber}` }],
+    }),
+    openCheck: builder.mutation<Check, { table_number: number; customer_id?: string | null; notes?: string | null }>({
+      query: (body) => ({
+        url: '/checks/open',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Check }) => response.data,
+      invalidatesTags: [{ type: 'Order', id: 'LIST' }, { type: 'Check', id: 'LIST' }],
+    }),
+    getCheckById: builder.query<CheckWithOrders, string>({
+      query: (id) => `/checks/${id}`,
+      transformResponse: (response: { data: CheckWithOrders }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Check', id }, { type: 'Check', id: `detail-${id}` }],
+    }),
+    addOrderToCheck: builder.mutation<Order, { checkId: string; body: Omit<OrderCreateInput, 'check_id' | 'round_number'> }>({
+      query: ({ checkId, body }) => ({
+        url: `/checks/${checkId}/orders`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Order }) => response.data,
+      invalidatesTags: (_result, _error, { checkId }) => [
+        { type: 'Order', id: 'LIST' },
+        { type: 'Check', id: 'LIST' },
+        { type: 'Check', id: checkId },
+      ],
+    }),
+    closeCheck: builder.mutation<{ id: string; total: number }, { checkId: string; payment_method?: PaymentMethod; cash_amount_given?: number }>({
+      query: ({ checkId, ...body }) => ({
+        url: `/checks/${checkId}/close`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: { id: string; total: number } }) => response.data,
+      invalidatesTags: (_result, _error, { checkId }) => [
+        { type: 'Order', id: 'LIST' },
+        { type: 'Check', id: 'LIST' },
+        { type: 'Check', id: checkId },
+      ],
+    }),
 
     // ── Loyalty endpoints ──
     enrollCustomer: builder.mutation<EnrollResult, { customer_id: string }>({
@@ -595,6 +662,12 @@ export const {
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,
   useCancelMpOrderMutation,
+  useGetChecksQuery,
+  useGetActiveCheckByTableQuery,
+  useOpenCheckMutation,
+  useGetCheckByIdQuery,
+  useAddOrderToCheckMutation,
+  useCloseCheckMutation,
   useEnrollCustomerMutation,
   useGetLoyaltyCardQuery,
   useLazyGetLoyaltyCardQuery,

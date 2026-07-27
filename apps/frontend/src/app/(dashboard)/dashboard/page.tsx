@@ -1,7 +1,7 @@
 'use client'
 
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useGetProductsQuery, useGetOrdersQuery, useGetCustomerStatsQuery, useGetDashboardStatsQuery } from '@/store/api'
+import { api, useGetProductsQuery, useGetOrdersQuery, useGetCustomerStatsQuery } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { DollarSign, ShoppingCart, Package, Users, TrendingUp, ListPlus, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const storeName = useAppSelector((s) => s.storeConfig.currentStore?.name)
   const timezone = useAppSelector((s) => s.storeConfig.currentStore?.settings?.timezone) || 'UTC'
   const { isLoading: productsLoading } = useGetProductsQuery()
-  const { data: dashboardStats, isLoading: statsLoading } = useGetDashboardStatsQuery({ tz: timezone })
+  const { data: dashboardStats, isLoading: statsLoading } = api.useGetDashboardStatsQuery({ tz: timezone })
   const { data: ordersResult, isLoading: ordersLoading } = useGetOrdersQuery({ limit: 10 })
   const { data: customerStats, isLoading: customerStatsLoading } = useGetCustomerStatsQuery()
   const loading = productsLoading || statsLoading || ordersLoading || customerStatsLoading

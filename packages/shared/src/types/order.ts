@@ -10,6 +10,8 @@ export type PaymentStatus = 'unpaid' | 'paid' | 'refunded'
 export interface Order {
   id: string
   store_id: string
+  check_id?: string | null
+  round_number?: number | null
   customer_id: string | null
   created_by: string
   table_number: number | null
@@ -54,7 +56,6 @@ export const KITCHEN_FLOW: OrderStatusTransition[] = [
   { from: 'pending',   to: 'preparing', label: 'Preparing' },
   { from: 'preparing', to: 'ready',     label: 'Ready to Serve' },
   { from: 'ready',     to: 'served',    label: 'Mark Served' },
-  { from: 'served',    to: 'paid',      label: 'Complete Payment' },
 ]
 
 export function getNextKitchenTransitions(current: OrderStatus): OrderStatusTransition[] {

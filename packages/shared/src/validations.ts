@@ -46,6 +46,8 @@ export const productSchema = z.object({
 })
 
 export const orderSchema = z.object({
+  check_id: z.string().uuid().optional(),
+  round_number: z.number().int().positive().optional(),
   customer_id: z.string().uuid().nullable().optional(),
   table_number: z.number().int().nullable().optional(),
   type: z.enum(['dine-in', 'takeaway', 'delivery']).default('dine-in'),
@@ -69,6 +71,43 @@ export const orderSchema = z.object({
   })).optional().default([]),
   redeemed_points: z.number().int().min(0).optional().default(0),
   notes: z.string().nullable().optional(),
+  payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
+  cash_amount_given: z.number().min(0).optional(),
+})
+
+export const createCheckSchema = z.object({
+  table_number: z.number().int().positive(),
+  customer_id: z.string().uuid().nullable().optional(),
+  notes: z.string().nullable().optional(),
+})
+
+export const addCheckOrderSchema = z.object({
+  type: z.enum(['dine-in', 'takeaway', 'delivery']).default('dine-in'),
+  items: z.array(z.object({
+    product_id: z.string().uuid(),
+    quantity: z.number().int().positive(),
+    unit_price: z.number().min(0).optional(),
+    modifiers: z.array(z.string()).optional().default([]),
+    notes: z.string().nullable().optional(),
+  })).min(1),
+  notes: z.string().nullable().optional(),
+  discount: z.number().min(0).optional().default(0),
+  discount_label: z.string().nullable().optional(),
+  promo_discount: z.number().min(0).optional().default(0),
+  applied_promotions: z.array(z.object({
+    promotion_id: z.string().uuid(),
+    name: z.string(),
+    discount_amount: z.number().min(0),
+    badge_text: z.string().nullable().optional(),
+    discount_type: z.enum(['percentage', 'fixed']).optional(),
+    discount_value: z.number().min(0).optional(),
+  })).optional().default([]),
+  redeemed_points: z.number().int().min(0).optional().default(0),
+  payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
+  cash_amount_given: z.number().min(0).optional(),
+})
+
+export const closeCheckSchema = z.object({
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
 })
@@ -119,3 +158,6 @@ export type CustomerInput = z.infer<typeof customerSchema>
 export type ModifierGroupInput = z.infer<typeof modifierGroupSchema>
 export type ModifierOptionInput = z.infer<typeof modifierOptionSchema>
 export type PromotionInput = z.infer<typeof promotionSchema>
+export type CreateCheckInput = z.infer<typeof createCheckSchema>
+export type AddCheckOrderInput = z.infer<typeof addCheckOrderSchema>
+export type CloseCheckInput = z.infer<typeof closeCheckSchema>

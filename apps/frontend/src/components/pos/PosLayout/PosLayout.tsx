@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { PosHeader } from '@/components/pos/PosHeader'
 import { CustomerQuickBar } from '@/components/pos/CustomerQuickBar'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
+import { PosBottomNav } from '@/components/pos/PosBottomNav'
 import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { openDrawer } from '@/store/slices/uiSlice'
@@ -12,15 +13,25 @@ import { setScannerOpen } from '@/store/slices/posSlice'
 
 interface PosLayoutProps {
   menu: ReactNode
+  tables?: ReactNode
   cart: ReactNode
   checkout: ReactNode
   customerDrawer: ReactNode
+  enableTablesView?: boolean
 }
 
-export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutProps) {
+export function PosLayout({
+  menu,
+  tables,
+  cart,
+  checkout,
+  customerDrawer,
+  enableTablesView = false,
+}: PosLayoutProps) {
   const dispatch = useAppDispatch()
   const cartOpen = useAppSelector((s) => s.pos.cartOpen)
   const checkoutView = useAppSelector((s) => s.pos.checkoutView)
+  const activeView = useAppSelector((s) => s.pos.activeView)
   const scannerOpen = useAppSelector((s) => s.pos.scannerOpen)
 
   return (
@@ -37,11 +48,17 @@ export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutPro
           'flex-1 min-h-0 transition-all overflow-y-auto pb-16 lg:pb-0',
           cartOpen && 'hidden lg:block lg:w-3/5 xl:w-2/3',
         )}>
-          {/* Mobile: show CustomerQuickBar at top, then menu */}
-          <div className="lg:hidden">
-            <CustomerQuickBar />
-          </div>
-          {menu}
+          {enableTablesView && activeView === 'tables' && tables ? (
+            tables
+          ) : (
+            <>
+              {/* Mobile: show CustomerQuickBar at top, then menu */}
+              <div className="lg:hidden">
+                <CustomerQuickBar />
+              </div>
+              {menu}
+            </>
+          )}
         </div>
 
         {(cartOpen || checkoutView) && (
@@ -57,6 +74,7 @@ export function PosLayout({ menu, cart, checkout, customerDrawer }: PosLayoutPro
 
       {/* Mobile: FloatingCartBar above bottom nav */}
       <FloatingCartBar />
+      <PosBottomNav enableTablesTab={enableTablesView} />
 
       {customerDrawer}
 

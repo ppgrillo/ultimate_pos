@@ -32,10 +32,14 @@ export function Sidebar() {
       ? { href: '/orders/kitchen', label: 'Kitchen Orders', icon: ClipboardList }
       : { href: '/orders/sales', label: 'Sales Orders', icon: ClipboardList }
 
+  const posNavItem = hasKitchen
+    ? { href: '/pos-kitchen', label: 'Point of Sale', icon: ShoppingCart }
+    : { href: '/pos', label: 'Point of Sale', icon: ShoppingCart }
+
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { href: '/pos', label: 'Point of Sale', icon: ShoppingCart },
+    posNavItem,
     orderNavItem,
     { href: '/products', label: 'Products', icon: Package },
     { href: '/promotions', label: 'Promotions', icon: Tag },

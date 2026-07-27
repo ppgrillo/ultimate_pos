@@ -91,7 +91,9 @@ describe('webhooks POST /mp-point', () => {
     })
 
     it('rejects when signature is wrong', async () => {
-      process.env.MP_CLIENT_SECRET = 'secret123'
+      qb.single
+        .mockResolvedValueOnce({ data: validOrder, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
       const res = await postWebhook(VALID_PAYLOAD, 'ts=9999999999,v1=invalid')
       expect(res.status).toBe(401)
     })

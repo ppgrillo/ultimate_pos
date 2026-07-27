@@ -2,7 +2,7 @@
 
 import { Menu, ShoppingBag, Scan, Users } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCartOpen, setScannerOpen, setCustomerDrawerOpen } from '@/store/slices/posSlice'
+import { setActiveView, setCartOpen, setScannerOpen, setCustomerDrawerOpen } from '@/store/slices/posSlice'
 import { cn } from '@/lib/utils'
 
 interface PosHeaderProps {
@@ -78,6 +78,7 @@ export function PosHeader({ onMenuClick }: PosHeaderProps) {
 
         <button
           onClick={() => {
+            dispatch(setActiveView('cart'))
             dispatch(setCartOpen(!cartOpen))
             dispatch(setScannerOpen(false))
             dispatch(setCustomerDrawerOpen(false))

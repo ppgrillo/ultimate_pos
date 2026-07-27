@@ -17,7 +17,11 @@ export function useOrderStream() {
     es.onmessage = (event) => {
       try {
         JSON.parse(event.data)
-        dispatch(api.util.invalidateTags([{ type: 'Order', id: 'LIST' }]))
+        dispatch(api.util.invalidateTags([
+          { type: 'Order', id: 'LIST' },
+          { type: 'Check', id: 'LIST' },
+          'Check',
+        ]))
       } catch {
         // ignore malformed events
       }

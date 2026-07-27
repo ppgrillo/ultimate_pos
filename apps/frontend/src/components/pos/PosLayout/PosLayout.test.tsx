@@ -16,6 +16,7 @@ describe('PosLayout', () => {
     render(
       <PosLayout
         menu={<div>Menu Content</div>}
+        tables={<div>Tables Content</div>}
         cart={<div>Cart Content</div>}
         checkout={<div>Checkout Content</div>}
         customerDrawer={<div>Customer Drawer</div>}
@@ -29,6 +30,7 @@ describe('PosLayout', () => {
     render(
       <PosLayout
         menu={<div>Menu Content</div>}
+        tables={<div>Tables Content</div>}
         cart={<div>Cart Panel</div>}
         checkout={<div>Checkout Content</div>}
         customerDrawer={<div>Customer Drawer</div>}
@@ -54,6 +56,7 @@ describe('PosLayout', () => {
     render(
       <PosLayout
         menu={<div>Menu Content</div>}
+        tables={<div>Tables Content</div>}
         cart={<div>Cart Content</div>}
         checkout={<div>Checkout Panel</div>}
         customerDrawer={<div>Customer Drawer</div>}
@@ -79,6 +82,7 @@ describe('PosLayout', () => {
     render(
       <PosLayout
         menu={<div>Menu Content</div>}
+        tables={<div>Tables Content</div>}
         cart={<div>Cart Content</div>}
         checkout={<div>Checkout Content</div>}
         customerDrawer={<div>Drawer Open</div>}

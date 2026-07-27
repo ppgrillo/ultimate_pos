@@ -2,6 +2,15 @@ import { render, screen } from '@/test/test-utils'
 import { PosDesktopLayout } from './PosDesktopLayout'
 import type { ProductCategory } from '@ultimate-pos/shared'
 
+vi.mock('@/store/api', async () => {
+  const actual = await vi.importActual<any>('@/store/api')
+  return {
+    ...actual,
+    useGetChecksQuery: () => ({ data: [], isFetching: false, refetch: vi.fn() }),
+    useCloseCheckMutation: () => [vi.fn(), { isLoading: false }],
+  }
+})
+
 const mockPush = vi.fn()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -46,5 +55,38 @@ describe('PosDesktopLayout', () => {
     expect(screen.getByText('Search for a customer')).toBeInTheDocument()
     expect(screen.getByText('Cart is empty')).toBeInTheDocument()
     expect(screen.getByText('Add products to get started')).toBeInTheDocument()
+  })
+
+  it('shows open tables panel when kitchen mode is enabled', () => {
+    render(
+      <PosDesktopLayout
+        categories={categories}
+        products={<div>Products Grid</div>}
+        enableTablesView
+      />,
+      {
+        preloadedState: {
+          storeConfig: {
+            currentStore: {
+              id: 's1',
+              name: 'Store',
+              slug: 'store',
+              address: null,
+              phone: null,
+              tax_rate: 0,
+              currency: 'USD',
+              owner_id: 'o1',
+              is_active: true,
+              settings: { hasKitchen: true },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          },
+        },
+      },
+    )
+
+    expect(screen.getByText('Open Tables')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Workspace' })).toBeInTheDocument()
   })
 })

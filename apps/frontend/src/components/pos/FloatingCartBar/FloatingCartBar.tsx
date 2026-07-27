@@ -2,7 +2,7 @@
 
 import { ShoppingBag, ArrowRight } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCartOpen, setCheckoutView } from '@/store/slices/posSlice'
+import { setActiveView, setCartOpen, setCheckoutView } from '@/store/slices/posSlice'
 import { formatCurrency } from '@/lib/utils'
 
 export function FloatingCartBar() {
@@ -45,6 +45,7 @@ export function FloatingCartBar() {
         </div>
         <button
           onClick={() => {
+            dispatch(setActiveView('cart'))
             dispatch(setCartOpen(true))
             dispatch(setCheckoutView(true))
           }}

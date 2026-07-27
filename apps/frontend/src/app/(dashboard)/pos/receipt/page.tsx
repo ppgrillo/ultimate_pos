@@ -28,6 +28,8 @@ function ReceiptPageContent() {
   const pointsBefore = searchParams.get('pointsBefore')
   const pointsAfter = searchParams.get('pointsAfter')
   const pointsChanged = pointsBefore && pointsAfter && pointsBefore !== pointsAfter
+  const checkOpen = searchParams.get('checkOpen') === '1'
+  const table = searchParams.get('table')
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const hasKitchen = store?.settings?.hasKitchen ?? true
   const hasLoyalty = store?.settings?.hasLoyalty ?? false
@@ -39,10 +41,14 @@ function ReceiptPageContent() {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/20 mb-6">
           <CheckCircle2 className="h-10 w-10 text-primary" />
         </div>
-        <h1 className="font-headline font-bold text-2xl text-on-surface mb-2">Thank you for your order!</h1>
-        <h3 className="font-headline font-bold">Order Placed</h3>
+        <h1 className="font-headline font-bold text-2xl text-on-surface mb-2">
+          {checkOpen ? 'Sent to Kitchen' : 'Thank you for your order!'}
+        </h1>
+        <h3 className="font-headline font-bold">{checkOpen ? 'Ticket Sent' : 'Order Placed'}</h3>
         <p className="text-on-surface-variant mb-8">
-          {hasKitchen
+          {checkOpen
+            ? `Table ${table || ''} is still open. You can keep adding items and charge at the end.`.trim()
+            : hasKitchen
             ? 'Your order has been sent to the kitchen.'
             : 'Payment confirmed.'}
         </p>
@@ -52,7 +58,7 @@ function ReceiptPageContent() {
             <Receipt className="h-5 w-5 text-primary" />
             <span className="font-headline font-bold text-sm text-on-surface">Receipt</span>
           </div>
-          {paymentMethod && total && (
+          {!checkOpen && paymentMethod && total && (
             <div className="flex items-center gap-3 mb-4 rounded-lg bg-surface-container/80 p-3">
               {Icon && <Icon className="h-5 w-5 text-primary" />}
               <div className="text-left">
@@ -63,7 +69,7 @@ function ReceiptPageContent() {
               </div>
             </div>
           )}
-          {changeDue && (
+          {!checkOpen && changeDue && (
             <div className="flex items-center gap-3 rounded-lg bg-primary/10 p-3">
               <ArrowLeftRight className="h-5 w-5 text-primary" />
               <div className="text-left">
@@ -101,7 +107,9 @@ function ReceiptPageContent() {
             </div>
           )}
           <p className="text-xs text-on-surface-variant mt-4">
-            {hasKitchen
+            {checkOpen
+              ? 'Kitchen has been notified. Keep using this table and close the account when the customer is ready.'
+              : hasKitchen
               ? 'A receipt has been sent to the POS system. The kitchen has been notified of your order.'
               : 'A receipt has been sent to the POS system.'}
           </p>

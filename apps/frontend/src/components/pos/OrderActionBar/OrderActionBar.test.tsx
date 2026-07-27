@@ -8,7 +8,9 @@ describe('OrderActionBar', () => {
       preloadedState: {
         cart: {
           items: [], customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
       },
     })
@@ -26,7 +28,9 @@ describe('OrderActionBar', () => {
             { product_id: 'p2', name: 'Muffin', price: 3.5, quantity: 1, variant_label: '', modifiers: [], notes: null },
           ],
           customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
       },
     })
@@ -41,11 +45,65 @@ describe('OrderActionBar', () => {
             { product_id: 'p1', name: 'Latte', price: 5, quantity: 1, variant_label: '', modifiers: [], notes: null },
           ],
           customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
       },
     })
     expect(screen.getByText('Complete Checkout')).toBeEnabled()
+  })
+
+  it('shows Select Table for dine-in with kitchen enabled and no table', () => {
+    render(<OrderActionBar onCheckout={vi.fn()} />, {
+      preloadedState: {
+        cart: {
+          items: [
+            { product_id: 'p1', name: 'Latte', price: 5, quantity: 1, variant_label: '', modifiers: [], notes: null },
+          ],
+          customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
+          table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
+        },
+        storeConfig: {
+          currentStore: {
+            id: 's1', name: 'Store', slug: 'store', address: null, phone: null,
+            tax_rate: 0, currency: 'USD', owner_id: 'o1', is_active: true,
+            settings: { hasKitchen: true, checkoutMode: 'order-only' },
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          },
+        },
+      },
+    })
+    const btn = screen.getByText('Select Table')
+    expect(btn).toBeInTheDocument()
+    expect(btn).toBeDisabled()
+  })
+
+  it('shows Add to Table for dine-in with table assigned', () => {
+    render(<OrderActionBar onCheckout={vi.fn()} />, {
+      preloadedState: {
+        cart: {
+          items: [
+            { product_id: 'p1', name: 'Latte', price: 5, quantity: 1, variant_label: '', modifiers: [], notes: null },
+          ],
+          customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
+          table_number: 12, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
+        },
+        storeConfig: {
+          currentStore: {
+            id: 's1', name: 'Store', slug: 'store', address: null, phone: null,
+            tax_rate: 0, currency: 'USD', owner_id: 'o1', is_active: true,
+            settings: { hasKitchen: true, checkoutMode: 'order-only' },
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          },
+        },
+      },
+    })
+    expect(screen.getByText('Add to Table')).toBeInTheDocument()
   })
 
   it('calls onCheckout when clicked', async () => {
@@ -57,7 +115,9 @@ describe('OrderActionBar', () => {
             { product_id: 'p1', name: 'Latte', price: 5, quantity: 1, variant_label: '', modifiers: [], notes: null },
           ],
           customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
       },
     })
@@ -73,7 +133,9 @@ describe('OrderActionBar', () => {
             { product_id: 'p1', name: 'Latte', price: 5, quantity: 1, variant_label: '', modifiers: [], notes: null },
           ],
           customer_id: null, customer_name: null, customer_tier: null,
+          customer_points: 0, customer_loyalty_card_id: null,
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
+          redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
       },
     })

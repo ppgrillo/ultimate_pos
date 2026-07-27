@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView } from '@/store/slices/posSlice'
-import { clearCart, setOrderType } from '@/store/slices/cartSlice'
+import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -23,7 +23,7 @@ import type { PaymentMethod } from '@ultimate-pos/shared'
 export function CheckoutPanel() {
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { items, customer_id, customer_name, order_type, discount, discount_label, notes, redeemed_points, appliedPromotions, promoDiscount } = useAppSelector((s) => s.cart)
+  const { items, customer_id, customer_name, order_type, table_number, discount, discount_label, notes, redeemed_points, appliedPromotions, promoDiscount } = useAppSelector((s) => s.cart)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -108,8 +108,61 @@ export function CheckoutPanel() {
         notes: item.notes,
       }))
 
+      if (settings?.hasKitchen && order_type === 'dine-in') {
+        if (!table_number || table_number <= 0) {
+          throw new Error('Table number is required for dine-in orders')
+        }
+
+        const existing = await api.get<{ data: { id: string } | null }>('/checks/active', {
+          params: { tableNumber: String(table_number) },
+        })
+
+        const checkId = existing.data?.id || (
+          await api.post<{ data: { id: string } }>('/checks/open', {
+            table_number,
+            customer_id: customer_id || null,
+          })
+        ).data.id
+
+        const addon = await api.post<{ data: { id: string; earned_points?: number } }>(`/checks/${checkId}/orders`, {
+          type: order_type,
+          items: orderItems,
+          notes,
+          discount,
+          discount_label,
+          promo_discount: promoDiscount > 0 ? promoDiscount : undefined,
+          applied_promotions: appliedPromotions.length > 0
+            ? appliedPromotions.map((p) => ({
+                promotion_id: p.promotion_id,
+                name: p.name,
+                discount_amount: p.discount_amount,
+                discount_type: p.discount_type,
+                discount_value: p.discount_value,
+              }))
+            : undefined,
+          redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
+        })
+
+        const earnedPoints = addon.data?.earned_points ?? 0
+
+        dispatch(clearCart())
+        dispatch(setSelectedCustomer(null))
+        dispatch(setCheckoutView(false))
+        dispatch(setCartOpen(false))
+
+        const params = new URLSearchParams()
+        params.set('table', String(table_number))
+        params.set('checkOpen', '1')
+        if (earnedPoints > 0 || redeemed_points > 0) {
+          params.set('pointsEarned', String(earnedPoints))
+        }
+        router.push(`/pos/receipt?${params.toString()}`)
+        return
+      }
+
       const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string }; earned_points?: number } }>('/orders', {
         customer_id: customer_id || undefined,
+        table_number: table_number || undefined,
         type: order_type,
         items: orderItems,
         notes,
@@ -216,6 +269,19 @@ export function CheckoutPanel() {
               value={order_type}
               onChange={(v) => dispatch(setOrderType(v))}
             />
+            {order_type === 'dine-in' && (
+              <div className="mt-3 rounded-xl bg-surface-container/40 border border-outline-variant/60 p-3">
+                <label className="block text-xs font-label font-bold text-on-surface-variant mb-2">Table Number</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={table_number ?? ''}
+                  onChange={(e) => dispatch(setTable(e.target.value ? Number(e.target.value) : null))}
+                  placeholder="e.g. 12"
+                  className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container-high px-3 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                />
+              </div>
+            )}
           </div>
         )}
 

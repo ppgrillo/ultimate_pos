@@ -81,11 +81,14 @@ ordersRouter.get('/', async (c) => {
 })
 
 ordersRouter.get('/realtime', async (c) => {
+  const storeId = c.get('storeId')
   const { readable, writable } = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
 
   const encoderFn = (data: unknown) => {
+    const payload = data as { store_id?: string }
+    if (payload?.store_id && payload.store_id !== storeId) return
     writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)).catch(() => {})
   }
 
@@ -110,11 +113,13 @@ ordersRouter.get('/realtime', async (c) => {
 ordersRouter.get('/:id', async (c) => {
   const supabase = supabaseAdmin
   const id = c.req.param('id')
+  const storeId = c.get('storeId')
 
   const { data, error } = await supabase
     .from('orders')
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .eq('id', id)
+    .eq('store_id', storeId)
     .single()
 
   if (error || !data) throw notFound('Order not found')
@@ -736,7 +741,12 @@ ordersRouter.patch('/:id/status', async (c) => {
   const supabase = supabaseAdmin
   const id = c.req.param('id')
   const storeId = c.get('storeId')
+  const role = c.get('role')
   const { status: newStatus } = await c.req.json()
+
+  if ((newStatus === 'cancelled' || newStatus === 'refunded') && role !== 'admin') {
+    throw badRequest('Only admin can cancel or refund orders')
+  }
 
   const { data: store } = await supabase
     .from('stores')
@@ -750,6 +760,7 @@ ordersRouter.patch('/:id/status', async (c) => {
     .from('orders')
     .select('status')
     .eq('id', id)
+    .eq('store_id', storeId)
     .single()
 
   if (!order) throw notFound('Order not found')
@@ -767,6 +778,7 @@ ordersRouter.patch('/:id/status', async (c) => {
     .from('orders')
     .update(updatePayload)
     .eq('id', id)
+    .eq('store_id', storeId)
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .single()
 

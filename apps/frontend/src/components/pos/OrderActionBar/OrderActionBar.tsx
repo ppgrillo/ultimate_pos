@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Percent, Trash2, CreditCard } from 'lucide-react'
+import { Percent, Trash2, CreditCard, CookingPot, PlusCircle, Send, Wallet } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { clearCart } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
@@ -19,6 +19,10 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
+  const hasKitchen = settings?.hasKitchen ?? false
+  const checkoutMode = settings?.checkoutMode ?? 'order-only'
+  const orderType = useAppSelector((s) => s.cart.order_type)
+  const tableNumber = useAppSelector((s) => s.cart.table_number)
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
   const taxInclusive = settings?.taxInclusive ?? false
   const taxEnabled = settings?.taxEnabled ?? false
@@ -36,6 +40,25 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
 
   const itemsExist = items.length > 0
   const [showPromo, setShowPromo] = useState(false)
+
+  const isDineInKitchenFlow = hasKitchen && orderType === 'dine-in'
+  const isTakeoutLike = orderType === 'takeaway' || orderType === 'delivery'
+  const needsTable = isDineInKitchenFlow && !tableNumber
+  const canCheckout = itemsExist && !isSubmitting && !needsTable
+
+  let actionLabel = 'Complete Checkout'
+  let ActionIcon = CreditCard
+
+  if (isDineInKitchenFlow) {
+    actionLabel = tableNumber ? 'Add to Table' : 'Select Table'
+    ActionIcon = tableNumber ? PlusCircle : CookingPot
+  } else if (isTakeoutLike && checkoutMode === 'payment-required') {
+    actionLabel = 'Complete Payment'
+    ActionIcon = Wallet
+  } else if (isTakeoutLike) {
+    actionLabel = 'Send Order'
+    ActionIcon = Send
+  }
 
   return (
     <div className="border-t border-outline-variant p-3 space-y-2">
@@ -69,7 +92,7 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
       </div>
       <button
         onClick={onCheckout}
-        disabled={!itemsExist || isSubmitting}
+        disabled={!canCheckout}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
         {isSubmitting ? (
@@ -79,8 +102,8 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
           </>
         ) : (
           <>
-            <CreditCard className="h-5 w-5" />
-            Complete Checkout
+            <ActionIcon className="h-5 w-5" />
+            {actionLabel}
           </>
         )}
       </button>

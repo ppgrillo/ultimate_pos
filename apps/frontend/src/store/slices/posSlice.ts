@@ -2,7 +2,7 @@
 
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
-type PosView = 'menu' | 'cart' | 'payment' | 'receipt'
+type PosView = 'menu' | 'tables' | 'cart' | 'payment' | 'receipt'
 
 export interface PosState {
   activeView: PosView

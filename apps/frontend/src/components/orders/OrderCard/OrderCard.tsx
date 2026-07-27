@@ -61,6 +61,11 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
                 {typeStyle.label}
               </span>
               <span className="font-label font-bold text-sm text-on-surface">{orderLabel}</span>
+              {order.round_number && order.round_number > 1 && (
+                <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10px] font-label font-bold tracking-wider text-primary">
+                  ADD-ON R{order.round_number}
+                </span>
+              )}
             </div>
             <OrderStatusBadge status={order.status} size="sm" />
           </div>
