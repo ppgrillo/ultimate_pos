@@ -36,6 +36,7 @@ ordersRouter.get('/', async (c) => {
   const storeId = c.get('storeId')
   const status = c.req.query('status')
   const tab = c.req.query('tab')
+  const paymentStatus = c.req.query('paymentStatus')
   const startDate = c.req.query('startDate')
   const endDate = c.req.query('endDate')
   const sortBy = c.req.query('sortBy') || 'created'
@@ -54,6 +55,10 @@ ordersRouter.get('/', async (c) => {
     query = query.in('status', ['pending', 'preparing', 'ready'])
   } else if (tab === 'completed') {
     query = query.in('status', ['served', 'paid'])
+  }
+
+  if (paymentStatus) {
+    query = query.eq('payment_status', paymentStatus)
   }
 
   if (startDate) {
@@ -599,7 +604,11 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   }
 
-  if (input.customer_id && !isMpPoint) {
+  // When checkout mode is order-first-pay-later, defer customer stats
+  // and loyalty earning to POST /orders/:id/pay to avoid double counting
+  const isDeferredPayment = checkoutMode === 'order-first-pay-later' && !paymentMethod
+
+  if (input.customer_id && !isMpPoint && !isDeferredPayment) {
     const { data: cust } = await supabase
       .from('customers')
       .select('total_visits, total_spent')
@@ -644,18 +653,21 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
         }
       }
 
-      const itemsForPoints = input.items.map(i => ({
-        product_id: i.product_id,
-        quantity: i.quantity,
-        price: i.unit_price ?? 0,
-      }))
-      earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
-      if (earnedPoints > 0 && !isMpPoint) {
-        try {
-          await doEarn(effectiveCard.id, earnedPoints, `Compra en orden #${nextOrderNumber}`, order.id)
-          syncWallets(effectiveCard.id).catch(() => {})
-        } catch (err: unknown) {
-          console.error('Failed to earn points:', err)
+      // Defer earning points to POST /orders/:id/pay for order-first-pay-later mode
+      if (!isDeferredPayment) {
+        const itemsForPoints = input.items.map(i => ({
+          product_id: i.product_id,
+          quantity: i.quantity,
+          price: i.unit_price ?? 0,
+        }))
+        earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
+        if (earnedPoints > 0 && !isMpPoint) {
+          try {
+            await doEarn(effectiveCard.id, earnedPoints, `Compra en orden #${nextOrderNumber}`, order.id)
+            syncWallets(effectiveCard.id).catch(() => {})
+          } catch (err: unknown) {
+            console.error('Failed to earn points:', err)
+          }
         }
       }
     }
@@ -672,6 +684,170 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   orderBus.emit('order:created', enrichedWithLoyalty)
 
   return c.json({ data: enrichedWithLoyalty }, 201)
+})
+
+ordersRouter.post('/:id/pay', async (c) => {
+  const supabase = supabaseAdmin
+  const storeId = c.get('storeId')
+  const orderId = c.req.param('id')
+  const userId = c.get('userId')
+  const body = await c.req.json()
+  const paymentMethod = body.payment_method as string | undefined
+  const cashAmountGiven = body.cash_amount_given as number | undefined
+
+  if (!paymentMethod || !['cash', 'card', 'transfer'].includes(paymentMethod)) {
+    throw badRequest('Valid payment method is required (cash, card, or transfer)')
+  }
+
+  const { data: store } = await supabase
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const acceptedMethods = (decrypted?.acceptedPaymentMethods as string[]) ?? ['cash', 'card']
+
+  if (!acceptedMethods.includes(paymentMethod)) {
+    throw badRequest(`Payment method "${paymentMethod}" is not accepted`)
+  }
+
+  const { data: order } = await supabase
+    .from('orders')
+    .select('id, order_number, status, payment_status, total, subtotal, discount, items:order_items(*), applied_promotions, customer_id, metadata, type')
+    .eq('id', orderId)
+    .eq('store_id', storeId)
+    .single()
+
+  if (!order) throw notFound('Order not found')
+  if (order.payment_status === 'paid') throw badRequest('Order is already paid')
+  if (order.status === 'cancelled' || order.status === 'refunded') throw badRequest('Cannot pay a cancelled or refunded order')
+
+  if (paymentMethod === 'cash' && cashAmountGiven !== undefined && cashAmountGiven < Number(order.total)) {
+    throw badRequest('Amount given must be at least the total')
+  }
+
+  const isMpPoint = paymentMethod === 'card' && ((decrypted?.mpPointEnabled as boolean) ?? false)
+  const mpPointAccessToken = decrypted?.mpPointAccessToken as string | undefined
+  const mpPointTerminalId = decrypted?.mpPointTerminalId as string | undefined
+
+  let paidStatus = 'paid'
+  let paidPaymentStatus = 'paid'
+  let isMpFlow = false
+
+  if (isMpPoint && mpPointAccessToken && mpPointTerminalId) {
+    isMpFlow = true
+    paidStatus = 'pending'
+    paidPaymentStatus = 'unpaid'
+  }
+
+  const paymentData: Record<string, unknown> = {
+    order_id: orderId,
+    amount: Number(order.total),
+    method: paymentMethod,
+    status: isMpFlow ? 'pending' : 'completed',
+  }
+
+  if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
+    paymentData.amount_given = cashAmountGiven
+    paymentData.change_due = Math.round((cashAmountGiven - Number(order.total)) * 100) / 100
+  }
+
+  const { error: paymentError } = await supabaseAdmin
+    .from('payments')
+    .insert(paymentData)
+
+  if (paymentError) throw badRequest(paymentError.message)
+
+  await supabase
+    .from('orders')
+    .update({
+      status: paidStatus,
+      payment_status: paidPaymentStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId)
+
+  // MP Point flow
+  let mpOrderId: string | null = null
+  if (isMpFlow && mpPointAccessToken && mpPointTerminalId) {
+    let mpAttempt = 0
+    while (mpAttempt < 2) {
+      mpAttempt++
+      try {
+        const mpOrder = await mpService.createOrder(mpPointAccessToken, {
+          totalAmount: Number(order.total),
+          externalReference: orderId,
+          description: `Ultimate POS - Pay later #${order.order_number}`,
+          terminalId: mpPointTerminalId,
+        })
+        mpOrderId = mpOrder.id
+        await supabase
+          .from('orders')
+          .update({ metadata: { ...(order.metadata as Record<string, unknown> || {}), mpOrderId: mpOrder.id, mpOrderStatus: 'created' } })
+          .eq('id', orderId)
+        break
+      } catch (err: unknown) {
+        if (mpAttempt < 2) {
+          await new Promise(r => setTimeout(r, 1000))
+          continue
+        }
+        throw badRequest(`MP Point payment failed: ${(err as { message?: string })?.message || 'Unknown error'}`)
+      }
+    }
+  }
+
+  // Customer stats
+  if (order.customer_id) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('total_visits, total_spent')
+      .eq('id', order.customer_id)
+      .single()
+
+    if (cust) {
+      await supabase
+        .from('customers')
+        .update({
+          total_visits: (cust.total_visits || 0) + 1,
+          total_spent: (Number(cust.total_spent) || 0) + Number(order.total),
+        })
+        .eq('id', order.customer_id)
+    }
+  }
+
+  // Loyalty
+  const hasLoyalty = (decrypted?.hasLoyalty as boolean) ?? false
+  if (hasLoyalty && order.customer_id && !mpOrderId) {
+    const { getLoyaltyCard, earnPoints: doEarn, calculateEarnPoints, syncWallets } = await import('../services/loyalty.service')
+    const card = await getLoyaltyCard(order.customer_id, storeId)
+    if (card) {
+      const itemsForPoints = (order.items || []).map((i: any) => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+        price: Number(i.unit_price ?? 0),
+      }))
+      const earnedPoints = await calculateEarnPoints(itemsForPoints, Number(order.subtotal), Number(order.discount), decrypted as any)
+      if (earnedPoints > 0) {
+        await doEarn(card.id, earnedPoints, `Pago orden #${order.order_number}`, orderId).catch(() => {})
+        syncWallets(card.id).catch(() => {})
+      }
+    }
+  }
+
+  const { data: fullOrder } = await supabase
+    .from('orders')
+    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
+    .eq('id', orderId)
+    .single()
+
+  const enriched = enrichOrder(fullOrder!)
+  if (mpOrderId) {
+    enriched.metadata = { ...(enriched.metadata || {}), mpOrderId }
+  }
+  orderBus.emit('order:status-changed', enriched)
+
+  return c.json({ data: enriched })
 })
 
 ordersRouter.post('/:id/cancel-mp', async (c) => {
@@ -772,7 +948,9 @@ ordersRouter.patch('/:id/status', async (c) => {
   }
 
   const updatePayload: Record<string, unknown> = { status: newStatus, updated_at: new Date().toISOString() }
-  if (newStatus === 'refunded') {
+  if (newStatus === 'paid') {
+    updatePayload.payment_status = 'paid'
+  } else if (newStatus === 'refunded') {
     updatePayload.payment_status = 'refunded'
   }
 

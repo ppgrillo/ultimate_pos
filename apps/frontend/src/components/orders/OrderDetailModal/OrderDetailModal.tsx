@@ -11,11 +11,13 @@ import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import { Clock, Table2, User, Receipt } from 'lucide-react'
-import type { KitchenWorkflowStepStatus, Order, OrderStatus } from '@ultimate-pos/shared'
-import { useGetOrderByIdQuery } from '@/store/api'
+import { useState } from 'react'
+import { Clock, Table2, User, Receipt, DollarSign } from 'lucide-react'
+import type { KitchenWorkflowStepStatus, Order, OrderStatus, PaymentMethod } from '@ultimate-pos/shared'
+import { useGetOrderByIdQuery, usePayOrderMutation } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { getKitchenStatusLabel, getKitchenTimeline } from '@ultimate-pos/shared'
+import { CollectPaymentModal } from '@/components/orders/CollectPaymentModal'
 
 interface OrderDetailModalProps {
   order: Order | null
@@ -30,7 +32,12 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
   const { data: fullOrder } = useGetOrderByIdQuery(order?.id ?? '', { skip: !open || !order })
   const displayOrder = fullOrder ?? order
   const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
+  const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
+  const mpPointEnabled = (settings?.mpPointEnabled as boolean) ?? false
+  const acceptedMethods = (settings?.acceptedPaymentMethods as PaymentMethod[]) ?? ['cash', 'card', 'transfer']
   const statusTimeline = getKitchenTimeline(workflow)
+  const [showPayModal, setShowPayModal] = useState(false)
+  const [payOrder] = usePayOrderMutation()
 
   if (!displayOrder) return null
 
@@ -192,6 +199,16 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
             </div>
           )}
 
+          {displayOrder.payment_status === 'unpaid' && !hasKitchen && (
+            <button
+              onClick={() => setShowPayModal(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
+            >
+              <DollarSign className="h-5 w-5" />
+              Collect Payment — {formatCurrency(displayOrder.total)}
+            </button>
+          )}
+
           <div onClick={(e) => e.stopPropagation()} className="pt-0">
             <KitchenOrderActions
               status={displayOrder.status}
@@ -202,6 +219,26 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
             />
           </div>
         </div>
+
+        <CollectPaymentModal
+          open={showPayModal}
+          onOpenChange={setShowPayModal}
+          total={displayOrder.total}
+          mpPointEnabled={mpPointEnabled}
+          acceptedMethods={acceptedMethods}
+          onPay={async (paymentMethod, cashGiven) => {
+            const result = await payOrder({
+              id: displayOrder.id,
+              payment_method: paymentMethod,
+              cash_amount_given: cashGiven,
+            }).unwrap()
+            return result
+          }}
+          onPaid={() => {
+            setShowPayModal(false)
+            onOpenChange(false)
+          }}
+        />
       </ModalContent>
     </Modal>
   )

@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const [taxExemptEnabled, setTaxExemptEnabled] = useState(false)
   const [specialInstructionsEnabled, setSpecialInstructionsEnabled] = useState(false)
   const [hasKitchen, setHasKitchen] = useState(true)
-  const [checkoutMode, setCheckoutMode] = useState<'order-only' | 'payment-required'>('order-only')
+  const [checkoutMode, setCheckoutMode] = useState<'order-only' | 'payment-required' | 'order-first-pay-later'>('order-only')
   const [kitchenWorkflow, setKitchenWorkflow] = useState<KitchenWorkflowConfig>(resolveKitchenWorkflow())
   const [cashEnabled, setCashEnabled] = useState(true)
   const [cardEnabled, setCardEnabled] = useState(true)
@@ -786,89 +786,105 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="checkout">
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Checkout Mode</CardTitle>
-                <CardDescription>Control whether payment is required when completing an order</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setCheckoutMode('order-only')}
-                    className={cn(
-                      'flex-1 rounded-xl border p-5 text-left transition-all',
-                      checkoutMode === 'order-only'
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
-                    )}
-                  >
-                    <span className="block text-sm font-bold">Order Only</span>
-                    <span className="block text-xs mt-1 opacity-70">Create orders without payment — for tracking or kitchen tickets</span>
-                  </button>
-                  <button
-                    onClick={() => setCheckoutMode('payment-required')}
-                    className={cn(
-                      'flex-1 rounded-xl border p-5 text-left transition-all',
-                      checkoutMode === 'payment-required'
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
-                    )}
-                  >
-                    <span className="block text-sm font-bold">Payment Required</span>
-                    <span className="block text-xs mt-1 opacity-70">Require a payment method before completing each order</span>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
+            {!hasKitchen && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Checkout Mode</CardTitle>
+                    <CardDescription>Control whether payment is required when completing an order</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setCheckoutMode('order-only')}
+                        className={cn(
+                          'flex-1 rounded-xl border p-5 text-left transition-all',
+                          checkoutMode === 'order-only'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
+                        )}
+                      >
+                        <span className="block text-sm font-bold">Order Only</span>
+                        <span className="block text-xs mt-1 opacity-70">Create orders without payment — for tracking or kitchen tickets</span>
+                      </button>
+                      <button
+                        onClick={() => setCheckoutMode('order-first-pay-later')}
+                        className={cn(
+                          'flex-1 rounded-xl border p-5 text-left transition-all',
+                          checkoutMode === 'order-first-pay-later'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
+                        )}
+                      >
+                        <span className="block text-sm font-bold">Order First, Pay Later</span>
+                        <span className="block text-xs mt-1 opacity-70">Create orders now, collect payment later from the sales list</span>
+                      </button>
+                      <button
+                        onClick={() => setCheckoutMode('payment-required')}
+                        className={cn(
+                          'flex-1 rounded-xl border p-5 text-left transition-all',
+                          checkoutMode === 'payment-required'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
+                        )}
+                      >
+                        <span className="block text-sm font-bold">Payment Required</span>
+                        <span className="block text-xs mt-1 opacity-70">Require a payment method before completing each order</span>
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
 
-            {checkoutMode === 'payment-required' && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Accepted Payment Methods</CardTitle>
-                  <CardDescription>Choose which payment methods are available at checkout</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={cashEnabled}
-                      onChange={(e) => setCashEnabled(e.target.checked)}
-                      className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                    />
-                    <Banknote className="h-5 w-5 text-on-surface-variant" />
-                    <div>
-                      <span className="block text-sm font-bold text-on-surface">Cash</span>
-                      <span className="block text-xs text-on-surface-variant mt-0.5">Accept cash payments</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={cardEnabled}
-                      onChange={(e) => setCardEnabled(e.target.checked)}
-                      className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                    />
-                    <CreditCard className="h-5 w-5 text-on-surface-variant" />
-                    <div>
-                      <span className="block text-sm font-bold text-on-surface">Card</span>
-                      <span className="block text-xs text-on-surface-variant mt-0.5">Accept credit and debit card payments</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={transferEnabled}
-                      onChange={(e) => setTransferEnabled(e.target.checked)}
-                      className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                    />
-                    <Building className="h-5 w-5 text-on-surface-variant" />
-                    <div>
-                      <span className="block text-sm font-bold text-on-surface">Transfer</span>
-                      <span className="block text-xs text-on-surface-variant mt-0.5">Accept bank transfers and deposits</span>
-                    </div>
-                  </label>
-                </CardContent>
-              </Card>
+                {checkoutMode === 'payment-required' && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Accepted Payment Methods</CardTitle>
+                      <CardDescription>Choose which payment methods are available at checkout</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={cashEnabled}
+                          onChange={(e) => setCashEnabled(e.target.checked)}
+                          className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                        />
+                        <Banknote className="h-5 w-5 text-on-surface-variant" />
+                        <div>
+                          <span className="block text-sm font-bold text-on-surface">Cash</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept cash payments</span>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={cardEnabled}
+                          onChange={(e) => setCardEnabled(e.target.checked)}
+                          className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                        />
+                        <CreditCard className="h-5 w-5 text-on-surface-variant" />
+                        <div>
+                          <span className="block text-sm font-bold text-on-surface">Card</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept credit and debit card payments</span>
+                        </div>
+                      </label>
+                      <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={transferEnabled}
+                          onChange={(e) => setTransferEnabled(e.target.checked)}
+                          className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                        />
+                        <Building className="h-5 w-5 text-on-surface-variant" />
+                        <div>
+                          <span className="block text-sm font-bold text-on-surface">Transfer</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept bank transfers and deposits</span>
+                        </div>
+                      </label>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
 
             <Card>

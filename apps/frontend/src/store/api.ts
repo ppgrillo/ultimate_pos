@@ -359,10 +359,11 @@ export const api = createApi({
         { type: 'Customer', id: `contact-${customerId}` },
       ],
     }),
-    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; limit?: number; offset?: number; startDate?: string; endDate?: string; sortBy?: 'created' | 'status' | 'number' | 'total'; sortDir?: 'asc' | 'desc' } | undefined>({
+    getOrders: builder.query<{ items: Order[]; total: number }, { tab?: OrderTab; paymentStatus?: string; limit?: number; offset?: number; startDate?: string; endDate?: string; sortBy?: 'created' | 'status' | 'number' | 'total'; sortDir?: 'asc' | 'desc' } | undefined>({
       query: (params) => {
         const p: Record<string, string | number> = { limit: params?.limit ?? 50, offset: params?.offset ?? 0 }
         if (params?.tab) p.tab = params.tab
+        if (params?.paymentStatus) p.paymentStatus = params.paymentStatus
         if (params?.startDate) p.startDate = params.startDate
         if (params?.endDate) p.endDate = params.endDate
         if (params?.sortBy) p.sortBy = params.sortBy
@@ -397,6 +398,18 @@ export const api = createApi({
         url: `/orders/${id}/status`,
         method: 'PATCH',
         body: { status },
+      }),
+      transformResponse: (response: { data: Order }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+    payOrder: builder.mutation<Order, { id: string; payment_method: PaymentMethod; cash_amount_given?: number }>({
+      query: ({ id, ...body }) => ({
+        url: `/orders/${id}/pay`,
+        method: 'POST',
+        body,
       }),
       transformResponse: (response: { data: Order }) => response.data,
       invalidatesTags: (_result, _error, { id }) => [
@@ -675,6 +688,7 @@ export const {
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,
   useCancelMpOrderMutation,
+  usePayOrderMutation,
   useGetChecksQuery,
   useGetActiveCheckByTableQuery,
   useOpenCheckMutation,

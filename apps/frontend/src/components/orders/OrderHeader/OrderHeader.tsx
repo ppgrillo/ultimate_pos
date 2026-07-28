@@ -16,6 +16,7 @@ interface OrderHeaderProps {
 function getTabs(hasKitchen?: boolean) {
   const tabs: { value: OrderTab; label: string }[] = []
   if (hasKitchen) tabs.push({ value: 'active', label: 'Active' })
+  if (!hasKitchen) tabs.push({ value: 'unpaid', label: 'Unpaid' })
   tabs.push({ value: 'completed', label: 'Completed' })
   tabs.push({ value: 'all', label: 'All' })
   return tabs

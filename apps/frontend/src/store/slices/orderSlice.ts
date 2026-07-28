@@ -3,7 +3,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { Order } from '@ultimate-pos/shared'
 
-export type OrderTab = 'active' | 'completed' | 'all'
+export type OrderTab = 'active' | 'completed' | 'all' | 'unpaid'
 
 interface OrderState {
   items: Order[]

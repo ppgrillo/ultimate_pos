@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars } from 'lucide-react'
+import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars, Receipt } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView, setKitchenNotice } from '@/store/slices/posSlice'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
@@ -63,6 +63,7 @@ export function CheckoutPanel() {
     : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
 
   const paymentRequired = checkoutMode === 'payment-required'
+  const payLaterMode = checkoutMode === 'order-first-pay-later'
   const isCash = selectedMethod === 'cash'
   const parsedCashGiven = parseFloat(cashGiven) || 0
   const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - totalAmount) * 100) / 100) : 0
@@ -229,7 +230,9 @@ export function CheckoutPanel() {
     ? isCash
       ? `Charge ${formatCurrency(totalAmount)}`
       : `Charge ${formatCurrency(totalAmount)} with ${selectedMethod === 'card' ? 'Card' : 'Transfer'}`
-    : `Charge ${formatCurrency(totalAmount)}`
+    : payLaterMode
+      ? `Create Order for ${formatCurrency(totalAmount)}`
+      : `Charge ${formatCurrency(totalAmount)}`
 
   return (
     <div className="flex flex-col h-full">
@@ -441,7 +444,7 @@ export function CheckoutPanel() {
             </>
           ) : (
             <>
-              {isCash ? <Banknote className="h-5 w-5" /> : <Bolt className="h-5 w-5" />}
+              {payLaterMode ? <Receipt className="h-5 w-5" /> : isCash ? <Banknote className="h-5 w-5" /> : <Bolt className="h-5 w-5" />}
               {buttonLabel}
             </>
           )}

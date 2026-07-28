@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Percent, Trash2, CreditCard, CookingPot, PlusCircle, Send, Wallet } from 'lucide-react'
+import { Percent, Trash2, CreditCard, CookingPot, PlusCircle, Send, Wallet, FileText } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { clearCart } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
@@ -52,9 +52,12 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   if (isDineInKitchenFlow) {
     actionLabel = tableNumber ? 'Add to Table' : 'Select Table'
     ActionIcon = tableNumber ? PlusCircle : CookingPot
-  } else if (isTakeoutLike && checkoutMode === 'payment-required') {
+  } else if (checkoutMode === 'payment-required') {
     actionLabel = 'Complete Payment'
     ActionIcon = Wallet
+  } else if (checkoutMode === 'order-first-pay-later') {
+    actionLabel = 'Create Order'
+    ActionIcon = FileText
   } else if (isTakeoutLike) {
     actionLabel = 'Send Order'
     ActionIcon = Send

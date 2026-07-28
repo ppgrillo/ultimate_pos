@@ -15,15 +15,12 @@ interface OrdersModePageProps {
   mode: 'kitchen' | 'sales'
 }
 
-const defaultTabByMode: Record<OrdersModePageProps['mode'], OrderTab> = {
-  kitchen: 'active',
-  sales: 'completed',
-}
-
 export function OrdersModePage({ mode }: OrdersModePageProps) {
   const dispatch = useAppDispatch()
   const { activeTab } = useAppSelector((s) => s.order)
+  const checkoutMode = useAppSelector((s) => s.storeConfig.currentStore?.settings?.checkoutMode ?? 'order-only')
   const hasKitchen = mode === 'kitchen'
+  const defaultSalesTab: OrderTab = checkoutMode === 'order-first-pay-later' ? 'unpaid' : 'completed'
   const title = hasKitchen ? 'Kitchen Orders' : 'Sales Orders'
   const lastModeRef = useRef<OrdersModePageProps['mode'] | null>(null)
 
@@ -38,26 +35,30 @@ export function OrdersModePage({ mode }: OrdersModePageProps) {
   useEffect(() => {
     if (lastModeRef.current === mode) return
     lastModeRef.current = mode
-    dispatch(setActiveTab(defaultTabByMode[mode]))
+    dispatch(setActiveTab(mode === 'kitchen' ? 'active' : defaultSalesTab))
     setPage(0)
     if (mode === 'sales') {
       setSortKey('created')
       setSortDirection('desc')
     }
-  }, [dispatch, mode])
+  }, [dispatch, mode, defaultSalesTab])
 
   const effectiveTab = useMemo<OrderTab>(() => {
     if (!hasKitchen && activeTab === 'active') return 'completed'
     return activeTab
   }, [hasKitchen, activeTab])
 
-  const queryParams = useMemo(() => ({
-    tab: effectiveTab,
-    limit: pageSize,
-    offset: page * pageSize,
-    sortBy: hasKitchen ? undefined : sortKey,
-    sortDir: hasKitchen ? undefined : sortDirection,
-  }), [effectiveTab, page, pageSize, hasKitchen, sortKey, sortDirection])
+  const queryParams = useMemo(() => {
+    const isUnpaid = effectiveTab === 'unpaid'
+    return {
+      tab: isUnpaid ? undefined : effectiveTab,
+      paymentStatus: isUnpaid ? 'unpaid' : undefined,
+      limit: pageSize,
+      offset: page * pageSize,
+      sortBy: hasKitchen ? undefined : sortKey,
+      sortDir: hasKitchen ? undefined : sortDirection,
+    }
+  }, [effectiveTab, page, pageSize, hasKitchen, sortKey, sortDirection])
 
   const handleSalesSortChange = useCallback((key: 'status' | 'created' | 'number' | 'total') => {
     if (hasKitchen) return

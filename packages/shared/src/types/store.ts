@@ -21,7 +21,7 @@ export interface StoreSettings {
   taxInclusive: boolean
   taxExemptEnabled: boolean
   specialInstructionsEnabled: boolean
-  checkoutMode: 'order-only' | 'payment-required'
+  checkoutMode: 'order-only' | 'payment-required' | 'order-first-pay-later'
   acceptedPaymentMethods: PaymentMethod[]
   mpPointEnabled: boolean
   mpPointTerminalId: string
