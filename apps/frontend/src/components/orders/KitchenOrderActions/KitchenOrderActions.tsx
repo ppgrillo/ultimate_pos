@@ -1,7 +1,7 @@
 'use client'
 
 import { getNextKitchenTransitions, getNextRetailTransitions } from '@ultimate-pos/shared'
-import type { OrderStatus, OrderStatusTransition } from '@ultimate-pos/shared'
+import type { KitchenWorkflowConfig, OrderStatus, OrderStatusTransition } from '@ultimate-pos/shared'
 import { cn } from '@/lib/utils'
 import { CookingPot, Bell, Hand, DollarSign, XCircle } from 'lucide-react'
 
@@ -18,12 +18,13 @@ interface KitchenOrderActionsProps {
   hasKitchen: boolean
   loading?: boolean
   variant?: 'inline' | 'block'
+  workflow?: KitchenWorkflowConfig | null
   onTransition: (to: OrderStatus) => void
 }
 
-export function KitchenOrderActions({ status, hasKitchen, loading, onTransition, variant = 'inline' }: KitchenOrderActionsProps) {
+export function KitchenOrderActions({ status, hasKitchen, loading, workflow, onTransition, variant = 'inline' }: KitchenOrderActionsProps) {
   const transitions = hasKitchen
-    ? getNextKitchenTransitions(status)
+    ? getNextKitchenTransitions(status, workflow)
     : getNextRetailTransitions(status)
 
   if (transitions.length === 0) return null

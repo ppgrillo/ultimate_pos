@@ -12,8 +12,10 @@ import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Clock, Table2, User, Receipt } from 'lucide-react'
-import type { Order, OrderStatus } from '@ultimate-pos/shared'
+import type { KitchenWorkflowStepStatus, Order, OrderStatus } from '@ultimate-pos/shared'
 import { useGetOrderByIdQuery } from '@/store/api'
+import { useAppSelector } from '@/store/hooks'
+import { getKitchenStatusLabel, getKitchenTimeline } from '@ultimate-pos/shared'
 
 interface OrderDetailModalProps {
   order: Order | null
@@ -24,15 +26,15 @@ interface OrderDetailModalProps {
   statusLoading?: Record<string, boolean>
 }
 
-const statusTimeline: OrderStatus[] = ['pending', 'preparing', 'ready', 'served', 'paid']
-
 export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStatusChange, statusLoading }: OrderDetailModalProps) {
   const { data: fullOrder } = useGetOrderByIdQuery(order?.id ?? '', { skip: !open || !order })
   const displayOrder = fullOrder ?? order
+  const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
+  const statusTimeline = getKitchenTimeline(workflow)
 
   if (!displayOrder) return null
 
-  const currentIdx = statusTimeline.indexOf(displayOrder.status)
+  const currentIdx = statusTimeline.indexOf(displayOrder.status as KitchenWorkflowStepStatus)
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
@@ -75,14 +77,14 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
                         'h-2.5 w-2.5 rounded-full shrink-0',
                         isCurrent ? 'bg-primary ring-2 ring-primary/30' : isPast ? 'bg-primary/60' : 'bg-outline-variant/40',
                       )} />
-                      <span className={cn(
-                        'text-xs font-label font-bold capitalize',
-                        isCurrent ? 'text-primary' : isPast ? 'text-on-surface' : 'text-on-surface-variant/50',
-                      )}>
-                        {s}
-                      </span>
-                    </div>
-                  )
+                        <span className={cn(
+                          'text-xs font-label font-bold capitalize',
+                          isCurrent ? 'text-primary' : isPast ? 'text-on-surface' : 'text-on-surface-variant/50',
+                        )}>
+                          {getKitchenStatusLabel(s, workflow)}
+                        </span>
+                      </div>
+                    )
                 })}
               </div>
             </div>
@@ -195,6 +197,7 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
               status={displayOrder.status}
               hasKitchen={hasKitchen}
               loading={!!statusLoading?.[displayOrder.id]}
+              workflow={workflow}
               onTransition={(to) => onStatusChange(displayOrder.id, to)}
             />
           </div>

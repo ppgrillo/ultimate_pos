@@ -1,17 +1,20 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChefHat, ChevronDown, Clock3, ReceiptText, Table2, UtensilsCrossed, Wallet } from 'lucide-react'
+import { ChefHat, ChevronDown, Clock3, ReceiptText, Table2, UtensilsCrossed, Wallet, X } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView } from '@/store/slices/posSlice'
 import { setOrderType, setTable } from '@/store/slices/cartSlice'
-import { useCloseCheckMutation, useGetCheckByIdQuery, useGetChecksQuery } from '@/store/api'
+import { useCloseCheckMutation, useGetCheckByIdQuery, useGetChecksQuery, useVoidCheckMutation } from '@/store/api'
 import { PaymentModal } from '@/components/pos/PaymentModal'
-import type { Check, PaymentMethod } from '@ultimate-pos/shared'
+import { SecureActionDialog } from '@/components/ui/SecureActionDialog'
+import type { Check, KitchenWorkflowConfig, PaymentMethod } from '@ultimate-pos/shared'
+import { getKitchenStatusLabel } from '@ultimate-pos/shared'
 
 interface TablesWorkspaceProps {
   onCloseAndPay?: (check: Check & { total?: number; has_active_kitchen?: boolean }) => void
+  isAdmin?: boolean
 }
 
 type OpenCheck = Check & { total?: number; has_active_kitchen?: boolean }
@@ -19,8 +22,8 @@ type OpenCheck = Check & { total?: number; has_active_kitchen?: boolean }
 const statusLabel: Record<string, string> = {
   pending: 'Pending',
   preparing: 'Preparing',
-  ready: 'Ready',
-  served: 'Served',
+  ready: 'Ready to Serve',
+  served: 'Mark Served',
   paid: 'Paid',
   cancelled: 'Cancelled',
   refunded: 'Refunded',
@@ -42,12 +45,18 @@ function TableCheckRow({
   onToggle,
   onUseTable,
   onCloseAndPay,
+  onVoid,
+  workflow,
+  isAdmin,
 }: {
   check: OpenCheck
   expanded: boolean
   onToggle: () => void
   onUseTable: () => void
   onCloseAndPay: () => void
+  onVoid: () => void
+  workflow: KitchenWorkflowConfig | null
+  isAdmin?: boolean
 }) {
   const { data: detail, isFetching } = useGetCheckByIdQuery(check.id, { skip: !expanded })
 
@@ -119,7 +128,9 @@ function TableCheckRow({
                           'rounded-full border px-2 py-0.5 text-[10px] font-label font-bold uppercase tracking-wider',
                           statusTone[order.status] || 'border-outline-variant/50 bg-surface-container text-on-surface-variant',
                         )}>
-                          {statusLabel[order.status] || order.status}
+                          {['pending', 'preparing', 'ready', 'served', 'paid'].includes(order.status)
+                            ? getKitchenStatusLabel(order.status as 'pending' | 'preparing' | 'ready' | 'served' | 'paid', workflow)
+                            : (statusLabel[order.status] || order.status)}
                         </span>
                         <span className="text-[11px] font-label font-bold text-on-surface-variant">
                           {formatCurrency(Number(order.total || 0))}
@@ -154,6 +165,14 @@ function TableCheckRow({
         >
           Use Table
         </button>
+        {isAdmin && (
+          <button
+            onClick={onVoid}
+            className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-label font-bold text-rose-300 hover:bg-rose-500/20"
+          >
+            Cancel Check
+          </button>
+        )}
         <button
           onClick={onToggle}
           className="rounded-lg border border-outline-variant/60 bg-surface-container px-3 py-2 text-xs font-label font-bold text-on-surface hover:bg-surface-container-high"
@@ -173,15 +192,25 @@ function TableCheckRow({
   )
 }
 
-export function TablesWorkspace({ onCloseAndPay }: TablesWorkspaceProps) {
+export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps) {
   const dispatch = useAppDispatch()
+  const userRole = useAppSelector((s) => s.auth.user?.role)
+  const effectiveAdmin = isAdmin ?? (userRole === 'admin')
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
+  const promoPin = (settings?.promoPin as string | undefined) || null
+  const workflow = settings?.kitchenWorkflow ?? null
   const { data: checks = [], isFetching, refetch } = useGetChecksQuery({ status: 'open' })
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [closeCheckError, setCloseCheckError] = useState<string | null>(null)
   const [localCheckToClose, setLocalCheckToClose] = useState<OpenCheck | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [closeCheck, { isLoading: closingCheck }] = useCloseCheckMutation()
+  const [checkToVoid, setCheckToVoid] = useState<OpenCheck | null>(null)
+  const [voidReason, setVoidReason] = useState('')
+  const [showVoidReason, setShowVoidReason] = useState(false)
+  const [showVoidPin, setShowVoidPin] = useState(false)
+  const [voidCheck, { isLoading: voiding }] = useVoidCheckMutation()
+  const [voidError, setVoidError] = useState<string | null>(null)
 
   const ordered = useMemo(
     () => [...checks].sort((a, b) => Number(a.table_number) - Number(b.table_number)),
@@ -198,6 +227,29 @@ export function TablesWorkspace({ onCloseAndPay }: TablesWorkspaceProps) {
     dispatch(setOrderType('dine-in'))
     dispatch(setTable(tableNumber))
     dispatch(setActiveView('menu'))
+  }
+
+  const handleStartVoid = (check: OpenCheck) => {
+    setCheckToVoid(check)
+    setVoidReason('')
+    setShowVoidReason(true)
+  }
+
+  const handleVoidConfirm = async () => {
+    if (!checkToVoid) return
+    try {
+      setVoidError(null)
+      await voidCheck({ checkId: checkToVoid.id, reason: voidReason }).unwrap()
+      setCheckToVoid(null)
+      setVoidReason('')
+      setShowVoidReason(false)
+      setShowVoidPin(false)
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'data' in err
+        ? ((err as { data?: { error?: string } }).data?.error || 'Could not void check')
+        : 'Could not void check'
+      setVoidError(message)
+    }
   }
 
   const handleLocalCloseConfirm = async (method: PaymentMethod, cashGiven?: number) => {
@@ -286,6 +338,9 @@ export function TablesWorkspace({ onCloseAndPay }: TablesWorkspaceProps) {
                   setLocalCheckToClose(check)
                   setShowPaymentModal(true)
                 }}
+                onVoid={() => handleStartVoid(check)}
+                workflow={workflow}
+                isAdmin={effectiveAdmin}
               />
             ))}
           </div>
@@ -306,6 +361,74 @@ export function TablesWorkspace({ onCloseAndPay }: TablesWorkspaceProps) {
           isLoading={closingCheck}
         />
       )}
+
+      {showVoidReason && checkToVoid && !showVoidPin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-outline-variant bg-surface-container p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-headline font-bold text-base text-on-surface">
+                Cancel Table {checkToVoid.table_number}
+              </h3>
+              <button
+                onClick={() => { setShowVoidReason(false); setCheckToVoid(null) }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              This will void all orders for this table. Enter a reason for the cancellation:
+            </p>
+            <textarea
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="Reason for cancellation…"
+              rows={3}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowVoidReason(false); setCheckToVoid(null) }}
+                className="flex-1 rounded-xl border border-outline-variant/60 py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container-high transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => {
+                  if (!voidReason.trim()) return
+                  setShowVoidPin(true)
+                }}
+                disabled={!voidReason.trim()}
+                className="flex-1 rounded-xl bg-rose-500 py-2.5 text-sm font-label font-bold text-white hover:bg-rose-600 disabled:opacity-40 transition-colors"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {voidError && (
+        <p className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error mb-2">
+          {voidError}
+        </p>
+      )}
+
+      <SecureActionDialog
+        open={showVoidPin}
+        onOpenChange={(open) => {
+          setShowVoidPin(open)
+          if (!open) { setVoidError(null); setCheckToVoid(null); setVoidReason(''); setShowVoidReason(false) }
+        }}
+        onConfirm={handleVoidConfirm}
+        title={`Cancel Table ${checkToVoid?.table_number ?? ''}`}
+        description={`This will permanently void all orders for Table ${checkToVoid?.table_number ?? ''}. Reason: ${voidReason}`}
+        confirmLabel="Cancel Check"
+        isLoading={voiding}
+        requiredPin={promoPin}
+        pinLabel="Admin PIN"
+      />
     </section>
   )
 }

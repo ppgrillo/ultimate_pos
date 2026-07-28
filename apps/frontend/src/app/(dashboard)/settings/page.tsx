@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
-import { useAppSelector } from '@/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
 import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy } from 'lucide-react'
 
@@ -13,8 +13,16 @@ import { cn } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { api } from '@/lib/api/client'
 import { SelfCheckoutSettings } from './SelfCheckoutSettings'
+import type { KitchenWorkflowConfig, KitchenWorkflowStepStatus } from '@ultimate-pos/shared'
+import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
+import { setStore } from '@/store/slices/storeSlice'
+
+const isStepRequired = (status: KitchenWorkflowStepStatus) => status === 'pending' || status === 'served' || status === 'paid'
+
+const isOptionalKitchenStep = (status: KitchenWorkflowStepStatus) => status === 'preparing' || status === 'ready'
 
 export default function SettingsPage() {
+  const dispatch = useAppDispatch()
   const currentStore = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = currentStore?.settings
   const taxRate = currentStore?.tax_rate
@@ -30,6 +38,7 @@ export default function SettingsPage() {
   const [specialInstructionsEnabled, setSpecialInstructionsEnabled] = useState(false)
   const [hasKitchen, setHasKitchen] = useState(true)
   const [checkoutMode, setCheckoutMode] = useState<'order-only' | 'payment-required'>('order-only')
+  const [kitchenWorkflow, setKitchenWorkflow] = useState<KitchenWorkflowConfig>(resolveKitchenWorkflow())
   const [cashEnabled, setCashEnabled] = useState(true)
   const [cardEnabled, setCardEnabled] = useState(true)
   const [transferEnabled, setTransferEnabled] = useState(true)
@@ -111,6 +120,7 @@ export default function SettingsPage() {
     setSpecialInstructionsEnabled(settings?.specialInstructionsEnabled ?? true)
     setHasKitchen(settings?.hasKitchen ?? true)
     setCheckoutMode(settings?.checkoutMode ?? 'order-only')
+    setKitchenWorkflow(resolveKitchenWorkflow(settings?.kitchenWorkflow))
     const methods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
     setCashEnabled(methods.includes('cash'))
     setCardEnabled(methods.includes('card'))
@@ -175,6 +185,7 @@ export default function SettingsPage() {
     specialInstructionsEnabled !== (settings?.specialInstructionsEnabled ?? true) ||
     hasKitchen !== (settings?.hasKitchen ?? true) ||
     checkoutMode !== (settings?.checkoutMode ?? 'order-only') ||
+    JSON.stringify(kitchenWorkflow) !== JSON.stringify(resolveKitchenWorkflow(settings?.kitchenWorkflow)) ||
     JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods) ||
     mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
@@ -216,6 +227,20 @@ export default function SettingsPage() {
     designHeroImageUrl !== (((settings?.walletPassDesign as Record<string, unknown>)?.heroImageUrl as string) ?? '') ||
     businessAddress !== ((settings?.address as string) ?? '')
 
+  const updateWorkflowStep = (
+    status: KitchenWorkflowStepStatus,
+    patch: Partial<KitchenWorkflowConfig[number]>,
+  ) => {
+    setKitchenWorkflow((prev) => prev.map((step) => {
+      if (step.status !== status) return step
+      const next = { ...step, ...patch }
+      if (isStepRequired(status)) {
+        next.enabled = true
+      }
+      return next
+    }))
+  }
+
   const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
     try {
       await updateStoreSettings({
@@ -231,6 +256,7 @@ export default function SettingsPage() {
         specialInstructionsEnabled,
         hasKitchen,
         checkoutMode,
+        kitchenWorkflow,
         acceptedPaymentMethods: enabledMethods,
         mpPointEnabled,
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
@@ -276,7 +302,13 @@ export default function SettingsPage() {
           contactWebsite: designContactWebsite,
         },
       }).unwrap()
-      await refetchStore()
+
+      const normalizedWorkflow = resolveKitchenWorkflow(kitchenWorkflow)
+      setKitchenWorkflow(normalizedWorkflow)
+      const refreshed = await refetchStore()
+      if (refreshed.data) {
+        dispatch(setStore(refreshed.data))
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch {
@@ -502,6 +534,55 @@ export default function SettingsPage() {
                     <span className="block text-xs text-on-surface-variant mt-0.5">Show kitchen-related messaging — disable for retail or service-based businesses</span>
                   </div>
                 </label>
+
+                {hasKitchen && (
+                  <div className="rounded-xl border border-outline-variant/50 bg-surface-container/20 p-4">
+                    <div className="mb-3">
+                      <h4 className="text-sm font-bold text-on-surface">Kitchen Workflow</h4>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        Rename each step and enable/disable optional steps. Enabled steps appear in timeline and flow actions.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {kitchenWorkflow.map((step) => {
+                        const required = isStepRequired(step.status)
+
+                        return (
+                          <div key={step.status} className="rounded-lg border border-outline-variant/40 bg-surface-container/40 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">{step.status}</p>
+                              <input
+                                value={step.label}
+                                onChange={(e) => updateWorkflowStep(step.status, { label: e.target.value })}
+                                className="mt-1 h-9 w-full rounded-md border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50"
+                                placeholder="Step label"
+                              />
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-1 gap-2">
+                              <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+                                <input
+                                  type="checkbox"
+                                  checked={step.enabled}
+                                  disabled={required}
+                                  onChange={(e) => updateWorkflowStep(step.status, { enabled: e.target.checked })}
+                                  className="h-4 w-4 rounded border-outline-variant bg-surface-container text-primary"
+                                />
+                                Enabled
+                              </label>
+                              {!required && isOptionalKitchenStep(step.status) && (
+                                <p className="text-[10px] text-on-surface-variant/80">
+                                  Optional step in kitchen flow. Disable to skip this stage.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

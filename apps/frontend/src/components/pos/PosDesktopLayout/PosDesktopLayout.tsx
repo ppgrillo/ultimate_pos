@@ -14,7 +14,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
-import { setActiveView, setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
+import { setActiveView, setKitchenNotice, setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
 import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
@@ -59,6 +59,7 @@ export function PosDesktopLayout({
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const activeView = useAppSelector((s) => s.pos.activeView)
+  const kitchenNotice = useAppSelector((s) => s.pos.kitchenNotice)
   const subtotal = items.reduce((sum, i) => sum + (i.original_price || i.price) * i.quantity, 0)
   const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
   const actualSubtotal = subtotal - productSavings
@@ -115,7 +116,7 @@ export function PosDesktopLayout({
           })
         ).data.id
 
-        const addon = await api.post<{ data: { id: string; earned_points?: number } }>(`/checks/${checkId}/orders`, {
+        await api.post<{ data: { id: string; earned_points?: number } }>(`/checks/${checkId}/orders`, {
           type: order_type,
           items: orderItems,
           notes,
@@ -132,16 +133,17 @@ export function PosDesktopLayout({
           redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         })
 
-        const earnedPoints = addon.data?.earned_points ?? 0
+        dispatch(rtkApi.util.invalidateTags([
+          { type: 'Order', id: 'LIST' },
+          { type: 'Check', id: 'LIST' },
+          { type: 'Check', id: checkId },
+        ]))
         dispatch(setSelectedCustomer(null))
         dispatch(clearCart())
-        const params = new URLSearchParams()
-        params.set('table', String(table_number))
-        params.set('checkOpen', '1')
-        if (earnedPoints > 0 || redeemed_points > 0) {
-          params.set('pointsEarned', String(earnedPoints))
-        }
-        router.push(`/pos/receipt?${params.toString()}`)
+        dispatch(setKitchenNotice(`Sent to Kitchen - Table ${table_number}`))
+        window.setTimeout(() => {
+          dispatch(setKitchenNotice(null))
+        }, 2200)
         return
       }
 
@@ -477,6 +479,14 @@ export function PosDesktopLayout({
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}
       />
+
+      {kitchenNotice && (
+        <div className="pointer-events-none fixed bottom-5 right-5 z-50 hidden lg:block">
+          <div className="rounded-lg border border-primary/35 bg-surface-container-high/95 px-3 py-2 text-xs font-label font-bold text-on-surface shadow-lg backdrop-blur">
+            {kitchenNotice}
+          </div>
+        </div>
+      )}
 
       {customizeModal}
     </div>

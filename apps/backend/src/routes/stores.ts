@@ -6,6 +6,7 @@ import { mpService } from '../services/mp-point'
 import { SignJWT } from 'jose'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 import { encryptSettings, decryptSettings } from '../lib/settings'
+import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
 const MAX_LOGO_SIZE = 3 * 1024 * 1024
@@ -110,6 +111,11 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
     .single()
 
   const incoming = { ...settings }
+  if ((incoming as Record<string, unknown>).kitchenWorkflow) {
+    (incoming as Record<string, unknown>).kitchenWorkflow = resolveKitchenWorkflow(
+      (incoming as Record<string, unknown>).kitchenWorkflow as any,
+    )
+  }
   delete (incoming as any).taxRate
   const storeName = (incoming as any).name
   delete (incoming as any).name

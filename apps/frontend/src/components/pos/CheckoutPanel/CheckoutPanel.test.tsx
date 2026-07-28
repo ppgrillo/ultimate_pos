@@ -100,6 +100,6 @@ describe('CheckoutPanel', () => {
 
     expect(mockApiGet).toHaveBeenCalledWith('/checks/active', { params: { tableNumber: '12' } })
     expect(mockApiPost).toHaveBeenCalledWith('/checks/check-1/orders', expect.any(Object))
-    expect(mockPush).toHaveBeenCalledWith('/pos/receipt?table=12&checkOpen=1')
+    expect(mockPush).not.toHaveBeenCalled()
   })
 })

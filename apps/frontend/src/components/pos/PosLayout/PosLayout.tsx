@@ -33,6 +33,7 @@ export function PosLayout({
   const checkoutView = useAppSelector((s) => s.pos.checkoutView)
   const activeView = useAppSelector((s) => s.pos.activeView)
   const scannerOpen = useAppSelector((s) => s.pos.scannerOpen)
+  const kitchenNotice = useAppSelector((s) => s.pos.kitchenNotice)
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
@@ -75,6 +76,14 @@ export function PosLayout({
       {/* Mobile: FloatingCartBar above bottom nav */}
       <FloatingCartBar />
       <PosBottomNav enableTablesTab={enableTablesView} />
+
+      {kitchenNotice && (
+        <div className="pointer-events-none fixed bottom-20 left-1/2 z-50 -translate-x-1/2 px-3 lg:hidden">
+          <div className="rounded-lg border border-primary/35 bg-surface-container-high/95 px-3 py-2 text-xs font-label font-bold text-on-surface shadow-lg backdrop-blur">
+            {kitchenNotice}
+          </div>
+        </div>
+      )}
 
       {customerDrawer}
 

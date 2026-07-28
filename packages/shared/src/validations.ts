@@ -112,6 +112,10 @@ export const closeCheckSchema = z.object({
   cash_amount_given: z.number().min(0).optional(),
 })
 
+export const voidCheckSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(500),
+})
+
 export const promotionSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().nullable().optional(),
@@ -161,3 +165,4 @@ export type PromotionInput = z.infer<typeof promotionSchema>
 export type CreateCheckInput = z.infer<typeof createCheckSchema>
 export type AddCheckOrderInput = z.infer<typeof addCheckOrderSchema>
 export type CloseCheckInput = z.infer<typeof closeCheckSchema>
+export type VoidCheckInput = z.infer<typeof voidCheckSchema>

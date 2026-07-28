@@ -476,6 +476,19 @@ export const api = createApi({
         { type: 'Check', id: checkId },
       ],
     }),
+    voidCheck: builder.mutation<{ id: string }, { checkId: string; reason: string }>({
+      query: ({ checkId, ...body }) => ({
+        url: `/checks/${checkId}/void`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: { id: string } }) => response.data,
+      invalidatesTags: (_result, _error, { checkId }) => [
+        { type: 'Order', id: 'LIST' },
+        { type: 'Check', id: 'LIST' },
+        { type: 'Check', id: checkId },
+      ],
+    }),
 
     // ── Loyalty endpoints ──
     enrollCustomer: builder.mutation<EnrollResult, { customer_id: string }>({
@@ -668,6 +681,7 @@ export const {
   useGetCheckByIdQuery,
   useAddOrderToCheckMutation,
   useCloseCheckMutation,
+  useVoidCheckMutation,
   useEnrollCustomerMutation,
   useGetLoyaltyCardQuery,
   useLazyGetLoyaltyCardQuery,

@@ -91,7 +91,7 @@ describe('MPPointPayment', () => {
     act(() => {
       store.dispatch(orderUpdated(mockOrder({ metadata: { mpOrderId: 'MP_ORD_001', mpOrderStatus: 'paid' } })))
     })
-    expect(screen.getByText('Pago exitoso!')).toBeInTheDocument()
+    expect(screen.getByText('Pago exitoso')).toBeInTheDocument()
     act(() => {
       vi.advanceTimersByTime(2000)
     })

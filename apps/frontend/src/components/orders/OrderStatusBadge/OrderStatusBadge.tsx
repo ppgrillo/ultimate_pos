@@ -1,7 +1,9 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import type { OrderStatus } from '@ultimate-pos/shared'
+import type { KitchenWorkflowStepStatus, OrderStatus } from '@ultimate-pos/shared'
+import { useAppSelector } from '@/store/hooks'
+import { getKitchenStatusLabel } from '@ultimate-pos/shared'
 
 const statusConfig: Record<OrderStatus, { label: string; classes: string }> = {
   pending:   { label: 'Pending',   classes: 'bg-amber-500/15 text-amber-400 border-amber-500/25' },
@@ -19,8 +21,14 @@ interface OrderStatusBadgeProps {
 }
 
 export function OrderStatusBadge({ status, size = 'md' }: OrderStatusBadgeProps) {
+  const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen ?? false)
+  const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
   const config = statusConfig[status]
   if (!config) return null
+
+  const label = hasKitchen && ['pending', 'preparing', 'ready', 'served', 'paid'].includes(status)
+    ? getKitchenStatusLabel(status as KitchenWorkflowStepStatus, workflow)
+    : config.label
 
   return (
     <span
@@ -31,7 +39,7 @@ export function OrderStatusBadge({ status, size = 'md' }: OrderStatusBadgeProps)
       )}
     >
       <span className={cn('rounded-full bg-current', size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2')} />
-      {config.label}
+      {label}
     </span>
   )
 }

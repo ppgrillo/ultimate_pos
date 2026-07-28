@@ -1,5 +1,6 @@
 import type { PaymentMethod, PreferenceField } from './customer'
 import type { LoyaltyProgram } from './loyalty'
+import type { KitchenWorkflowConfig } from './order'
 
 export interface RegistrationInterestsConfig {
   enabled: boolean
@@ -43,6 +44,7 @@ export interface StoreSettings {
   selfCheckoutStations?: SelfCheckoutStation[]
   // Wallet
   walletPassDesign?: WalletPassDesign
+  kitchenWorkflow?: KitchenWorkflowConfig
 }
 
 export interface SelfCheckoutStation {

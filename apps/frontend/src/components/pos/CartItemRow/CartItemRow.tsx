@@ -67,9 +67,9 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
             value={item.quantity}
             onChange={(qty: number) => {
               if (qty === 0) {
-                dispatch(removeItem({ product_id: item.product_id, modifiers: item.modifiers }))
+                dispatch(removeItem({ product_id: item.product_id, modifiers: item.modifiers, notes: item.notes }))
               } else {
-                dispatch(updateQuantity({ product_id: item.product_id, modifiers: item.modifiers, quantity: qty }))
+                dispatch(updateQuantity({ product_id: item.product_id, modifiers: item.modifiers, notes: item.notes, quantity: qty }))
               }
             }}
           />

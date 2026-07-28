@@ -15,6 +15,20 @@ export interface CartItem {
   category_id?: string | null
 }
 
+function normalizeNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null
+  const value = notes.trim()
+  return value.length > 0 ? value : null
+}
+
+function isSameCartLine(a: CartItem, b: Pick<CartItem, 'product_id' | 'modifiers' | 'notes'>): boolean {
+  return (
+    a.product_id === b.product_id
+    && JSON.stringify(a.modifiers) === JSON.stringify(b.modifiers)
+    && normalizeNotes(a.notes) === normalizeNotes(b.notes)
+  )
+}
+
 export interface CartState {
   items: CartItem[]
   customer_id: string | null
@@ -58,34 +72,27 @@ const cartSlice = createSlice({
       state.promoDiscount = 0
     },
     addItem(state, action: PayloadAction<CartItem>) {
-      const existing = state.items.find(
-        (item) =>
-          item.product_id === action.payload.product_id &&
-          JSON.stringify(item.modifiers) === JSON.stringify(action.payload.modifiers),
-      )
+      const existing = state.items.find((item) => isSameCartLine(item, action.payload))
       if (existing) {
         existing.quantity += action.payload.quantity
       } else {
-        state.items.push(action.payload)
+        state.items.push({
+          ...action.payload,
+          notes: normalizeNotes(action.payload.notes),
+        })
       }
       state.appliedPromotions = []
       state.promoDiscount = 0
     },
-    removeItem(state, action: PayloadAction<{ product_id: string; modifiers: string[] }>) {
+    removeItem(state, action: PayloadAction<{ product_id: string; modifiers: string[]; notes: string | null }>) {
       state.items = state.items.filter(
-        (item) =>
-          !(item.product_id === action.payload.product_id &&
-            JSON.stringify(item.modifiers) === JSON.stringify(action.payload.modifiers)),
+        (item) => !isSameCartLine(item, action.payload),
       )
       state.appliedPromotions = []
       state.promoDiscount = 0
     },
-    updateQuantity(state, action: PayloadAction<{ product_id: string; modifiers: string[]; quantity: number }>) {
-      const item = state.items.find(
-        (item) =>
-          item.product_id === action.payload.product_id &&
-          JSON.stringify(item.modifiers) === JSON.stringify(action.payload.modifiers),
-      )
+    updateQuantity(state, action: PayloadAction<{ product_id: string; modifiers: string[]; notes: string | null; quantity: number }>) {
+      const item = state.items.find((entry) => isSameCartLine(entry, action.payload))
       if (item) {
         item.quantity = Math.max(0, action.payload.quantity)
         state.appliedPromotions = []

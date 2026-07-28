@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCheckoutView, setCartOpen, setActiveView } from '@/store/slices/posSlice'
+import { setCheckoutView, setCartOpen, setActiveView, setKitchenNotice } from '@/store/slices/posSlice'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { api } from '@/lib/api/client'
@@ -124,7 +124,7 @@ export function CheckoutPanel() {
           })
         ).data.id
 
-        const addon = await api.post<{ data: { id: string; earned_points?: number } }>(`/checks/${checkId}/orders`, {
+        await api.post<{ data: { id: string; earned_points?: number } }>(`/checks/${checkId}/orders`, {
           type: order_type,
           items: orderItems,
           notes,
@@ -143,20 +143,20 @@ export function CheckoutPanel() {
           redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
         })
 
-        const earnedPoints = addon.data?.earned_points ?? 0
+        dispatch(rtkApi.util.invalidateTags([
+          { type: 'Order', id: 'LIST' },
+          { type: 'Check', id: 'LIST' },
+          { type: 'Check', id: checkId },
+        ]))
 
         dispatch(clearCart())
         dispatch(setSelectedCustomer(null))
         dispatch(setCheckoutView(false))
         dispatch(setCartOpen(false))
-
-        const params = new URLSearchParams()
-        params.set('table', String(table_number))
-        params.set('checkOpen', '1')
-        if (earnedPoints > 0 || redeemed_points > 0) {
-          params.set('pointsEarned', String(earnedPoints))
-        }
-        router.push(`/pos/receipt?${params.toString()}`)
+        dispatch(setKitchenNotice(`Sent to Kitchen - Table ${table_number}`))
+        window.setTimeout(() => {
+          dispatch(setKitchenNotice(null))
+        }, 2200)
         return
       }
 

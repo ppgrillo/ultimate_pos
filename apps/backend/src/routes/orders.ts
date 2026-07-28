@@ -7,6 +7,7 @@ import { notFound, badRequest } from '../middleware/error'
 import { orderBus } from '../events'
 import { mpService } from '../services/mp-point'
 import type { OrderMetadata } from '@ultimate-pos/shared'
+import type { KitchenWorkflowConfig } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
 import {
   isPromotionActive,
@@ -755,6 +756,7 @@ ordersRouter.patch('/:id/status', async (c) => {
     .single()
 
   const hasKitchen = (store?.settings as Record<string, unknown> | null)?.hasKitchen === true
+  const kitchenWorkflow = ((store?.settings as Record<string, unknown> | null)?.kitchenWorkflow || null) as KitchenWorkflowConfig | null
 
   const { data: order } = await supabase
     .from('orders')
@@ -765,7 +767,7 @@ ordersRouter.patch('/:id/status', async (c) => {
 
   if (!order) throw notFound('Order not found')
 
-  if (!canTransition(order.status, newStatus, hasKitchen)) {
+  if (!canTransition(order.status, newStatus, hasKitchen, kitchenWorkflow)) {
     throw badRequest(`Cannot transition from ${order.status} to ${newStatus}`)
   }
 

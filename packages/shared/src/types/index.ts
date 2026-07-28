@@ -1,6 +1,26 @@
 export type { Product, ProductCategory, ModifierGroup, ModifierOption } from './product'
-export type { Order, OrderItem, OrderStatus, OrderType, PaymentStatus, OrderMetadata, OrderStatusTransition } from './order'
-export { KITCHEN_FLOW, getNextKitchenTransitions, getNextRetailTransitions, canTransition } from './order'
+export type {
+  Order,
+  OrderItem,
+  OrderStatus,
+  OrderType,
+  PaymentStatus,
+  OrderMetadata,
+  OrderStatusTransition,
+  KitchenWorkflowStepStatus,
+  KitchenWorkflowStepConfig,
+  KitchenWorkflowConfig,
+} from './order'
+export {
+  KITCHEN_FLOW,
+  DEFAULT_KITCHEN_WORKFLOW,
+  getNextKitchenTransitions,
+  getNextRetailTransitions,
+  getKitchenTimeline,
+  getKitchenStatusLabel,
+  resolveKitchenWorkflow,
+  canTransition,
+} from './order'
 export type { User, UserRole } from './user'
 export type { Store, StoreMember, StoreSettings, SelfCheckoutStation, RegistrationInterestsConfig } from './store'
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField, LoyaltyCardData, ScanLoyaltyResult } from './customer'

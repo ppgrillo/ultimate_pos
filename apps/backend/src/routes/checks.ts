@@ -4,6 +4,7 @@ import {
   addCheckOrderSchema,
   closeCheckSchema,
   createCheckSchema,
+  voidCheckSchema,
 } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { badRequest, notFound } from '../middleware/error'
@@ -380,4 +381,59 @@ checksRouter.post('/:id/close', requireRole('admin', 'employee'), zValidator('js
   orderBus.emit('order:status-changed', { store_id: storeId, type: 'check:closed', check_id: id })
 
   return c.json({ data: { ...closed, total } })
+})
+
+checksRouter.post('/:id/void', requireRole('admin'), zValidator('json', voidCheckSchema), async (c) => {
+  const storeId = c.get('storeId')
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const { reason } = c.req.valid('json')
+
+  const { data: check } = await supabaseAdmin
+    .from('checks')
+    .select('*')
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .single()
+
+  if (!check) throw notFound('Check not found')
+  if (check.status !== 'open') throw badRequest('Check is not open')
+
+  const { data: orders } = await supabaseAdmin
+    .from('orders')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('check_id', id)
+
+  for (const order of orders || []) {
+    await supabaseAdmin
+      .from('orders')
+      .update({
+        status: 'cancelled',
+        payment_status: 'refunded',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', order.id)
+      .eq('store_id', storeId)
+  }
+
+  const { data: voided, error: voidError } = await supabaseAdmin
+    .from('checks')
+    .update({
+      status: 'void',
+      void_reason: reason,
+      closed_by: userId,
+      closed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .select('*')
+    .single()
+
+  if (voidError) throw badRequest(voidError.message)
+
+  orderBus.emit('order:status-changed', { store_id: storeId, type: 'check:void', check_id: id })
+
+  return c.json({ data: { id: voided.id } })
 })

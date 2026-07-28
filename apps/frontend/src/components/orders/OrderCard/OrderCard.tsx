@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
+import { useAppSelector } from '@/store/hooks'
 import type { Order, OrderStatus } from '@ultimate-pos/shared'
 
 const typeConfig: Record<string, { label: string; classes: string }> = {
@@ -42,6 +43,7 @@ interface OrderCardProps {
 }
 
 export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoading }: OrderCardProps) {
+  const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
   const itemCount = order.items?.reduce((s, i) => s + i.quantity, 0) || 0
 
   if (hasKitchen) {
@@ -134,6 +136,7 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
             hasKitchen
             loading={statusLoading}
             variant="block"
+            workflow={workflow}
             onTransition={(to) => onStatusChange(order.id, to)}
           />
         </div>

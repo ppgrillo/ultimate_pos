@@ -10,6 +10,7 @@ export interface Check {
   status: CheckStatus
   opened_by: string
   closed_by: string | null
+  void_reason: string | null
   notes: string | null
   opened_at: string
   closed_at: string | null
