@@ -102,11 +102,13 @@ export function CheckoutPanel() {
 
     try {
       const orderItems = items.map((item) => ({
-        product_id: item.product_id,
+        product_id: item.is_custom ? null : item.product_id,
         quantity: item.quantity,
         unit_price: item.price,
         modifiers: item.modifiers,
-        notes: item.notes,
+        notes: item.is_custom ? item.name : item.notes,
+        custom_name: item.is_custom ? item.name : undefined,
+        points: item.points,
       }))
 
       if (settings?.hasKitchen && order_type === 'dine-in') {

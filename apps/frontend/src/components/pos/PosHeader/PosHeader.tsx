@@ -1,8 +1,8 @@
 'use client'
 
-import { Menu, ShoppingBag, Scan, Users } from 'lucide-react'
+import { Menu, ShoppingBag, Scan, Users, Calculator } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setActiveView, setCartOpen, setScannerOpen, setCustomerDrawerOpen } from '@/store/slices/posSlice'
+import { setActiveView, setCartOpen, setScannerOpen, setCustomerDrawerOpen, setQuickSaleOpen } from '@/store/slices/posSlice'
 import { cn } from '@/lib/utils'
 
 interface PosHeaderProps {
@@ -59,6 +59,21 @@ export function PosHeader({ onMenuClick }: PosHeaderProps) {
           )}
         >
           <Users className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={() => {
+            dispatch(setQuickSaleOpen(true))
+            dispatch(setScannerOpen(false))
+            dispatch(setCustomerDrawerOpen(false))
+          }}
+          className={cn(
+            'relative flex h-10 w-10 items-center justify-center rounded-full transition-colors',
+            'bg-primary/10 text-primary hover:bg-primary/20',
+          )}
+          title="Quick Sale"
+        >
+          <Calculator className="h-5 w-5" />
         </button>
 
         <button

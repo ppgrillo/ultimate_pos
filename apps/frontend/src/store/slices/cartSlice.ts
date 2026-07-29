@@ -4,7 +4,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { AppliedPromotion } from '@ultimate-pos/shared'
 
 export interface CartItem {
-  product_id: string
+  product_id: string | null
   name: string
   price: number
   original_price: number
@@ -13,6 +13,8 @@ export interface CartItem {
   modifiers: string[]
   notes: string | null
   category_id?: string | null
+  is_custom?: boolean
+  points?: number
 }
 
 function normalizeNotes(notes: string | null | undefined): string | null {
@@ -21,7 +23,10 @@ function normalizeNotes(notes: string | null | undefined): string | null {
   return value.length > 0 ? value : null
 }
 
-function isSameCartLine(a: CartItem, b: Pick<CartItem, 'product_id' | 'modifiers' | 'notes'>): boolean {
+function isSameCartLine(a: CartItem, b: Pick<CartItem, 'product_id' | 'modifiers' | 'notes'> & { is_custom?: boolean; name?: string }): boolean {
+  if (a.is_custom && b.is_custom) {
+    return a.name === (b.name ?? a.name)
+  }
   return (
     a.product_id === b.product_id
     && JSON.stringify(a.modifiers) === JSON.stringify(b.modifiers)
@@ -84,14 +89,14 @@ const cartSlice = createSlice({
       state.appliedPromotions = []
       state.promoDiscount = 0
     },
-    removeItem(state, action: PayloadAction<{ product_id: string; modifiers: string[]; notes: string | null }>) {
+    removeItem(state, action: PayloadAction<{ product_id: string | null; modifiers: string[]; notes: string | null; is_custom?: boolean; name?: string }>) {
       state.items = state.items.filter(
         (item) => !isSameCartLine(item, action.payload),
       )
       state.appliedPromotions = []
       state.promoDiscount = 0
     },
-    updateQuantity(state, action: PayloadAction<{ product_id: string; modifiers: string[]; notes: string | null; quantity: number }>) {
+    updateQuantity(state, action: PayloadAction<{ product_id: string | null; modifiers: string[]; notes: string | null; quantity: number; is_custom?: boolean; name?: string }>) {
       const item = state.items.find((entry) => isSameCartLine(entry, action.payload))
       if (item) {
         item.quantity = Math.max(0, action.payload.quantity)

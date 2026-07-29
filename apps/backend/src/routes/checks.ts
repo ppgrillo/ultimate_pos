@@ -187,31 +187,33 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
   const taxInclusive = (settings?.taxInclusive as boolean) ?? false
   const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
 
-  const productIds = input.items.map((i) => i.product_id)
+  const productIds = input.items.map((i) => i.product_id).filter(Boolean) as string[]
   const { data: products } = await supabaseAdmin
     .from('products')
     .select('id, name, price, tax_exempt')
-    .in('id', productIds)
+    .in('id', productIds.length > 0 ? productIds : [null])
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
   let subtotal = 0
   let taxableSubtotal = 0
   const orderItems = input.items.map((item) => {
-    const product = productMap.get(item.product_id)
+    const isCustom = item.product_id === null
+    const product = isCustom ? null : productMap.get(item.product_id)
     const unitPrice = item.unit_price != null ? item.unit_price : Number(product?.price || 0)
     const itemTotal = unitPrice * item.quantity
     subtotal += itemTotal
-    const isExempt = taxExemptEnabled && product?.tax_exempt === true
+    const isExempt = isCustom ? false : (taxExemptEnabled && product?.tax_exempt === true)
     if (!isExempt) taxableSubtotal += itemTotal
     return {
       order_id: '',
       product_id: item.product_id,
-      product_name: product?.name || '',
+      product_name: isCustom ? (item.custom_name || '') : (product?.name || ''),
       quantity: item.quantity,
       unit_price: unitPrice,
       modifiers: item.modifiers,
-      notes: item.notes,
+      notes: isCustom ? (item.custom_name || item.notes || '') : item.notes,
+      points: item.points,
     }
   })
 

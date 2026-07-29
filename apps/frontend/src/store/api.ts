@@ -112,6 +112,7 @@ export interface OrderCreateInput {
     unit_price: number
     modifiers: string[]
     notes: string | null
+    points?: number
   }>
   notes?: string | null
   discount?: number

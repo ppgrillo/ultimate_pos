@@ -16,9 +16,10 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
 import { setActiveView, setKitchenNotice, setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
+import { setQuickSaleOpen } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
-import { LayoutPanelTop, ShoppingBag, Search } from 'lucide-react'
+import { LayoutPanelTop, ShoppingBag, Search, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Check, PaymentMethod, ProductCategory } from '@ultimate-pos/shared'
 
@@ -43,6 +44,7 @@ export function PosDesktopLayout({
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
   const [checkToClose, setCheckToClose] = useState<(Check & { total?: number }) | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [closeCheckError, setCloseCheckError] = useState<string | null>(null)
   const [closeCheck, { isLoading: closingCheck }] = useCloseCheckMutation()
 
@@ -91,14 +93,17 @@ export function PosDesktopLayout({
     const isMpPoint = paymentMethod === 'card' && mpPointEnabled
 
     setSubmitting(true)
+    setSubmitError(null)
 
     try {
       const orderItems = items.map((item) => ({
-        product_id: item.product_id,
+        product_id: item.is_custom ? null : item.product_id,
         quantity: item.quantity,
         unit_price: item.price,
         modifiers: item.modifiers,
-        notes: item.notes,
+        notes: item.is_custom ? item.name : item.notes,
+        custom_name: item.is_custom ? item.name : undefined,
+        points: item.points,
       }))
       if (settings?.hasKitchen && order_type === 'dine-in') {
         if (!table_number || table_number <= 0) {
@@ -197,8 +202,9 @@ export function PosDesktopLayout({
         }
       }
       router.push(`/pos/receipt?${params.toString()}`)
-    } catch {
+    } catch (err) {
       setMpPaymentOrderId(null)
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create order')
     } finally {
       setSubmitting(false)
     }
@@ -319,6 +325,13 @@ export function PosDesktopLayout({
                 className="h-7 w-full rounded-md border border-outline-variant bg-surface-container pl-7 pr-2 text-[11px] text-on-body placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               />
             </div>
+            <button
+              onClick={() => dispatch(setQuickSaleOpen(true))}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              title="Quick Sale"
+            >
+              <Calculator className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Category Pills */}
@@ -455,8 +468,16 @@ export function PosDesktopLayout({
            </div>
          )}
 
-         <OrderActionBar onCheckout={handleSubmit} isSubmitting={submitting} />
-       </aside>
+          {submitError && (
+            <div className="px-4 py-2">
+              <div className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error">
+                {submitError}
+              </div>
+            </div>
+          )}
+
+          <OrderActionBar onCheckout={handleSubmit} isSubmitting={submitting} />
+        </aside>
 
       <PaymentModal
         open={showPaymentModal}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCustomizeProductId } from '@/store/slices/posSlice'
+import { setCustomizeProductId, setQuickSaleOpen } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
 import { clearAutoPromotions } from '@/store/slices/cartSlice'
 import { PosLayout } from '@/components/pos/PosLayout'
@@ -12,6 +12,7 @@ import { PosCart } from '@/components/pos/PosCart'
 import { CheckoutPanel } from '@/components/pos/CheckoutPanel'
 import { CustomerDrawer } from '@/components/pos/CustomerDrawer'
 import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
+import { QuickSaleModal } from '@/components/pos/QuickSaleModal'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -32,6 +33,7 @@ export default function PosPage() {
 
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
+  const quickSaleOpen = useAppSelector((s) => s.pos.quickSaleOpen)
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
   const { getPromotionForProduct } = usePromotions()
@@ -75,6 +77,10 @@ export default function PosPage() {
   return (
     <>
       {customizeModal}
+      <QuickSaleModal
+        open={quickSaleOpen}
+        onOpenChange={(v) => dispatch(setQuickSaleOpen(v))}
+      />
 
       {/* Mobile layout */}
       <div className="lg:hidden">

@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import type { StoreSettings } from '@ultimate-pos/shared'
 
 export async function calculateEarnPoints(
-  items: Array<{ product_id: string; quantity: number; price: number }>,
+  items: Array<{ product_id: string; quantity: number; price: number; points?: number | null }>,
   subtotal: number,
   discount: number,
   settings: StoreSettings,
@@ -10,7 +10,7 @@ export async function calculateEarnPoints(
   if (!settings.hasLoyalty) return 0
   const rate = settings.pointsPerCurrency || 10
 
-  const productIds = [...new Set(items.map(i => i.product_id))]
+  const productIds = [...new Set(items.map(i => i.product_id).filter(Boolean))]
   const { data: products } = await supabaseAdmin
     .from('products')
     .select('id, points')
@@ -22,6 +22,12 @@ export async function calculateEarnPoints(
 
   let totalPoints = 0
   for (const item of items) {
+    if (!item.product_id) {
+      if (item.points != null && item.points > 0) {
+        totalPoints += item.points * item.quantity
+      }
+      continue
+    }
     const pp = perProductPoints.get(item.product_id)
     if (pp != null && pp > 0) {
       totalPoints += pp * item.quantity

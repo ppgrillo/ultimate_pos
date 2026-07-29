@@ -306,11 +306,11 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const isMpPoint = paymentMethod === 'card' && mpPointEnabled && mpPointAccessToken && mpPointTerminalId
 
-  const productIds = input.items.map((i) => i.product_id)
+  const productIds = input.items.map((i) => i.product_id).filter(Boolean) as string[]
   const { data: products } = await supabase
     .from('products')
     .select('id, name, price, tax_exempt, category_id')
-    .in('id', productIds)
+    .in('id', productIds.length > 0 ? productIds : [null])
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
@@ -326,8 +326,9 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   let subtotal = 0
   let taxableSubtotal = 0
-  const orderItems = input.items.map((item) => {
-    const product = productMap.get(item.product_id)
+    const orderItems = input.items.map((item) => {
+    const isCustom = item.product_id === null
+    const product = isCustom ? null : productMap.get(item.product_id)
     const productPrice = product ? Number(product.price) : 0
     const productPromotion = product
       ? getBestProductPromotion(
@@ -347,21 +348,22 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
     const incomingUnitPrice = item.unit_price
     const unitPrice = incomingUnitPrice != null
-      ? Math.min(incomingUnitPrice, expectedPromotionalPrice)
+      ? isCustom ? incomingUnitPrice : Math.min(incomingUnitPrice, expectedPromotionalPrice)
       : expectedPromotionalPrice
 
     const itemTotal = unitPrice * item.quantity
     subtotal += itemTotal
-    const isExempt = taxExemptEnabled && product?.tax_exempt === true
+    const isExempt = isCustom ? false : (taxExemptEnabled && product?.tax_exempt === true)
     if (!isExempt) taxableSubtotal += itemTotal
     return {
       order_id: '',
       product_id: item.product_id,
-      product_name: product?.name || '',
+      product_name: isCustom ? (item.custom_name || '') : (product?.name || ''),
       quantity: item.quantity,
       unit_price: unitPrice,
       modifiers: item.modifiers,
-      notes: item.notes,
+      notes: isCustom ? (item.custom_name || item.notes || '') : item.notes,
+      points: item.points,
     }
   })
 
@@ -656,9 +658,10 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       // Defer earning points to POST /orders/:id/pay for order-first-pay-later mode
       if (!isDeferredPayment) {
         const itemsForPoints = input.items.map(i => ({
-          product_id: i.product_id,
+          product_id: i.product_id || '',
           quantity: i.quantity,
           price: i.unit_price ?? 0,
+          points: i.points,
         }))
         earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
         if (earnedPoints > 0 && !isMpPoint) {
@@ -826,6 +829,7 @@ ordersRouter.post('/:id/pay', async (c) => {
         product_id: i.product_id,
         quantity: i.quantity,
         price: Number(i.unit_price ?? 0),
+        points: i.points,
       }))
       const earnedPoints = await calculateEarnPoints(itemsForPoints, Number(order.subtotal), Number(order.discount), decrypted as any)
       if (earnedPoints > 0) {
@@ -1066,6 +1070,7 @@ export async function processMpLoyalty(
     product_id: i.product_id,
     quantity: i.quantity,
     price: Number(i.unit_price ?? 0),
+    points: i.points,
   }))
 
   const earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
