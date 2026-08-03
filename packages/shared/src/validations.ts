@@ -72,6 +72,7 @@ export const orderSchema = z.object({
     discount_value: z.number().min(0).optional(),
   })).optional().default([]),
   redeemed_points: z.number().int().min(0).optional().default(0),
+  redeemed_reward_id: z.string().uuid().nullable().optional(),
   notes: z.string().nullable().optional(),
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
@@ -107,6 +108,7 @@ export const addCheckOrderSchema = z.object({
     discount_value: z.number().min(0).optional(),
   })).optional().default([]),
   redeemed_points: z.number().int().min(0).optional().default(0),
+  redeemed_reward_id: z.string().uuid().nullable().optional(),
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
 })
@@ -165,7 +167,23 @@ export type CustomerInput = z.infer<typeof customerSchema>
 
 export type ModifierGroupInput = z.infer<typeof modifierGroupSchema>
 export type ModifierOptionInput = z.infer<typeof modifierOptionSchema>
+export const rewardSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().nullable().optional(),
+  reward_type: z.enum(['free_product', 'percentage_discount', 'fixed_discount', 'custom']),
+  points_required: z.number().int().positive(),
+  product_id: z.string().uuid().nullable().optional(),
+  discount_value: z.number().positive().nullable().optional(),
+  discount_type: z.enum(['percentage', 'fixed']).nullable().optional(),
+  is_active: z.boolean().default(true),
+  max_uses: z.number().int().positive().nullable().optional(),
+  starts_at: z.string().nullable().optional(),
+  ends_at: z.string().nullable().optional(),
+  image_url: z.string().nullable().optional(),
+})
+
 export type PromotionInput = z.infer<typeof promotionSchema>
+export type RewardInput = z.infer<typeof rewardSchema>
 export type CreateCheckInput = z.infer<typeof createCheckSchema>
 export type AddCheckOrderInput = z.infer<typeof addCheckOrderSchema>
 export type CloseCheckInput = z.infer<typeof closeCheckSchema>

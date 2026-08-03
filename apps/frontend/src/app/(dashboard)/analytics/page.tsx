@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { MetricGlossary } from '@/components/analytics/MetricGlossary'
 import { useGetAnalyticsSalesQuery, useGetAnalyticsProductsQuery, useGetAnalyticsOverviewQuery } from '@/store/api'
 import type { AnalyticsPeriod } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
@@ -31,7 +32,8 @@ const PERIODS: { value: AnalyticsPeriod; label: string }[] = [
 
 const PIE_COLORS = ['#ccff00', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#dfe6e9', '#a29bfe']
 
-function ChangeIndicator({ value }: { value: number }) {
+function ChangeIndicator({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-xs text-on-surface-variant/60">—</span>
   if (value === 0) return <Minus className="h-3 w-3 text-on-surface-variant/60" />
   const isPositive = value > 0
   return (
@@ -51,7 +53,7 @@ function KPICard({
   label: string
   value: string
   icon: React.ElementType
-  change?: number
+  change?: number | null
 }) {
   return (
     <div className="rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5 transition-all duration-200 hover:bg-surface-container/70 hover:border-outline-variant/60">
@@ -90,6 +92,9 @@ export default function AnalyticsPage() {
   const [customTo, setCustomTo] = useState('')
   const storeName = useAppSelector((s) => s.storeConfig.currentStore?.name)
   const timezone = useAppSelector((s) => s.storeConfig.currentStore?.settings?.timezone) || 'UTC'
+  const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
+  const taxLabel = settings?.taxLabel || 'Tax'
+  const taxInclusive = settings?.taxInclusive ?? false
   const acceptedPaymentMethods = useAppSelector((s) => s.storeConfig.currentStore?.settings?.acceptedPaymentMethods) ?? ['cash', 'card']
 
   const params = useMemo(
@@ -235,6 +240,8 @@ export default function AnalyticsPage() {
           icon={Users}
         />
       </div>
+
+      <MetricGlossary overview={overview} taxLabel={taxLabel} taxInclusive={taxInclusive} />
 
       <div className="rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5">
           <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider mb-4">Revenue Trend</h2>

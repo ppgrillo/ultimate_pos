@@ -14,6 +14,7 @@ import type {
   Promotion,
   PromotionFormData,
   PromotionValidationResponse,
+  LoyaltyReward,
   Store,
   StoreSettings,
   ScanLoyaltyResult,
@@ -60,12 +61,19 @@ export interface ProductAnalytics {
 
 export interface AnalyticsOverview {
   revenue: number
-  revenueChange: number
+  revenueChange: number | null
   orderCount: number
-  orderChange: number
+  orderChange: number | null
   avgOrderValue: number
-  avgChange: number
+  avgChange: number | null
   newCustomers: number
+  grossSales: number
+  discounts: number
+  taxCollected: number
+  itemsSold: number
+  cogs: number
+  grossProfit: number
+  netProfit: number
   ordersByType: Record<string, number>
   ordersByPayment: Record<string, number>
   revenueByPayment: Record<string, number>
@@ -167,7 +175,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -629,6 +637,50 @@ export const api = createApi({
       transformResponse: (response: { data: PromotionValidationResponse }) => response.data,
     }),
 
+    // ── Reward endpoints ──
+    getRewards: builder.query<LoyaltyReward[], void>({
+      query: () => '/rewards/all',
+      transformResponse: (response: { data: LoyaltyReward[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [{ type: 'Reward' as const, id: 'LIST' }, ...result.map((item) => ({ type: 'Reward' as const, id: item.id }))]
+          : [{ type: 'Reward' as const, id: 'LIST' }],
+    }),
+    createReward: builder.mutation<LoyaltyReward, Partial<LoyaltyReward>>({
+      query: (body) => ({
+        url: '/rewards',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: LoyaltyReward }) => response.data,
+      invalidatesTags: [{ type: 'Reward', id: 'LIST' }],
+    }),
+    updateReward: builder.mutation<LoyaltyReward, { id: string; body: Partial<LoyaltyReward> }>({
+      query: ({ id, body }) => ({
+        url: `/rewards/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: { data: LoyaltyReward }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'Reward', id }, { type: 'Reward', id: 'LIST' }],
+    }),
+    deleteReward: builder.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `/rewards/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, id) => [{ type: 'Reward', id }, { type: 'Reward', id: 'LIST' }],
+    }),
+    toggleReward: builder.mutation<LoyaltyReward, { id: string; is_active: boolean }>({
+      query: ({ id, is_active }) => ({
+        url: `/rewards/${id}/toggle`,
+        method: 'PATCH',
+        body: { is_active },
+      }),
+      transformResponse: (response: { data: LoyaltyReward }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'Reward', id }, { type: 'Reward', id: 'LIST' }],
+    }),
+
     // ── Analytics endpoints ──
     getDashboardStats: builder.query<DashboardStats, { tz?: string }>({
       query: (params) => ({
@@ -714,6 +766,11 @@ export const {
   useDeletePromotionMutation,
   useTogglePromotionMutation,
   useValidatePromotionsMutation,
+  useGetRewardsQuery,
+  useCreateRewardMutation,
+  useUpdateRewardMutation,
+  useDeleteRewardMutation,
+  useToggleRewardMutation,
   useGetDashboardStatsQuery,
   useGetAnalyticsSalesQuery,
   useGetAnalyticsProductsQuery,

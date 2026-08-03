@@ -1,41 +1,44 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Minus, Plus, ShoppingCart } from 'lucide-react'
-import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { proxyImageUrl } from '@/lib/image-proxy'
-import { addItem, clearRewardItems, setRedeemedReward } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
 import { formatCurrency, getSalePrice } from '@/lib/utils'
-import { useGetProductsQuery } from '@/store/api'
-import { usePromotions } from '@/hooks/usePromotions'
+import type { Product, Promotion } from '@ultimate-pos/shared'
 
+export interface CustomizeResult {
+  quantity: number
+  modifiers: string[]
+  variant_label: string
+  notes: string | null
+  price: number
+  original_price: number
+}
 
-export function CustomizeProduct() {
-  const dispatch = useAppDispatch()
-  const productId = useAppSelector((s) => s.pos.customizeProductId)
-  const sliceProducts = useAppSelector((s) => s.products.items)
-  const { data: queryProducts = [] } = useGetProductsQuery()
-  const product = queryProducts.find((p) => p.id === productId)
-    ?? sliceProducts.find((p) => p.id === productId)
+interface SelfCheckoutCustomizeProductProps {
+  product: Product
+  promotion: Promotion | null
+  specialInstructionsEnabled: boolean
+  onConfirm: (result: CustomizeResult) => void
+  onClose: () => void
+}
 
+export function CustomizeProduct({
+  product,
+  promotion,
+  specialInstructionsEnabled,
+  onConfirm,
+  onClose,
+}: SelfCheckoutCustomizeProductProps) {
   const [imgError, setImgError] = useState(false)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
-  const specialInstructionsEnabled = useAppSelector((s) => s.storeConfig.currentStore?.settings?.specialInstructionsEnabled ?? true)
-  const { getPromotionForProduct } = usePromotions()
 
-  const redeemedRewardData = useAppSelector((s) => s.cart.redeemed_reward_data)
-  const isRewardProduct = !!(redeemedRewardData?.product_id && redeemedRewardData.product_id === productId)
-
-  const activePromotion = product ? getPromotionForProduct(product) : null
-  const basePrice = isRewardProduct
-    ? 0
-    : activePromotion && product
-      ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value)
-      : product?.price ?? 0
+  const basePrice = promotion
+    ? getSalePrice(product.price, promotion.discount_type, promotion.discount_value)
+    : product.price
 
   useEffect(() => {
     if (product?.modifiers) {
@@ -50,20 +53,6 @@ export function CustomizeProduct() {
       setSelectedOptions(initial)
     }
   }, [product])
-
-  const handleClose = () => {
-    dispatch(setCustomizeProductId(null))
-  }
-
-  const handleDiscard = () => {
-    if (isRewardProduct) {
-      dispatch(clearRewardItems())
-      dispatch(setRedeemedReward(null))
-    }
-    dispatch(setCustomizeProductId(null))
-  }
-
-  if (!product) return null
 
   const toggleOption = (groupName: string, optionName: string, type: 'single' | 'multi') => {
     setSelectedOptions((prev) => {
@@ -95,30 +84,24 @@ export function CustomizeProduct() {
       .filter(([, options]) => options.length > 0)
       .map(([, options]) => options.join(', '))
 
-    const rewardNote = isRewardProduct ? '[Reward]' : null
-    const finalNotes = notes ? `[Reward] ${notes}` : rewardNote
-    dispatch(addItem({
-      product_id: product.id,
-      name: product.name,
+    onConfirm({
+      quantity,
+      modifiers: allSelectedOptions,
+      variant_label: variantParts.length > 0 ? variantParts.join(' · ') : '',
+      notes: notes.trim() ? notes.trim() : null,
       price: basePrice + modifiersPrice,
       original_price: product.price + modifiersPrice,
-      quantity,
-      variant_label: variantParts.length > 0 ? variantParts.join(' · ') : '',
-      modifiers: allSelectedOptions,
-      notes: finalNotes,
-      category_id: product.category_id,
-    }))
-    handleClose()
+    })
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-surface-container p-0 shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between bg-surface-container p-4 border-b border-outline-variant">
           <h2 className="font-headline font-bold text-lg text-on-surface">Customize</h2>
-          <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -147,7 +130,7 @@ export function CustomizeProduct() {
                   </div>
                   <h3 className="font-headline font-bold text-xl text-on-surface">{product.name}</h3>
                   <p className="font-headline font-bold text-lg text-primary mt-1">
-                    {activePromotion && basePrice < product.price && (
+                    {promotion && basePrice < product.price && (
                       <span className="text-on-surface-variant line-through text-sm mr-2">
                         {formatCurrency(product.price)}
                       </span>
@@ -233,6 +216,7 @@ export function CustomizeProduct() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                aria-label="Decrease quantity"
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-high text-on-surface hover:bg-surface-container"
               >
                 <Minus className="h-3 w-3" />
@@ -240,6 +224,7 @@ export function CustomizeProduct() {
               <span className="font-headline font-bold text-lg text-on-surface w-8 text-center">{quantity}</span>
               <button
                 onClick={() => setQuantity(quantity + 1)}
+                aria-label="Increase quantity"
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-high text-on-surface hover:bg-surface-container"
               >
                 <Plus className="h-3 w-3" />
@@ -254,12 +239,12 @@ export function CustomizeProduct() {
             <span className="font-headline font-bold text-lg text-on-surface">{formatCurrency(itemTotal)}</span>
           </div>
           <div className="flex gap-3">
-              <button
-                onClick={handleDiscard}
-                className="flex-1 rounded-lg border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors"
-              >
-                Discard
-              </button>
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Discard
+            </button>
             <button
               onClick={handleAddToCart}
               className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"

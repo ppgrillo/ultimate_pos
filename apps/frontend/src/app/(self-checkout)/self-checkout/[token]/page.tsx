@@ -12,10 +12,13 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
+import { RewardsPanel } from '@/components/pos/RewardsPanel'
+import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/self-checkout/CustomizeProduct'
 // LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
-import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, PromotionValidationResponse } from '@ultimate-pos/shared'
+import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
   X,
@@ -28,6 +31,7 @@ import {
   ShoppingCart,
   ChevronDown,
   ChevronUp,
+  Gift,
   Star,
   Stars,
   Heart,
@@ -39,9 +43,7 @@ import {
   Maximize2,
   RotateCcw,
   User,
-  Package,
   CreditCard,
-  Banknote,
 } from 'lucide-react'
 interface CartItem {
   product_id: string
@@ -52,6 +54,13 @@ interface CartItem {
   image_url?: string | null
   points?: number
   category_id?: string | null
+  variant_label?: string
+  modifiers: string[]
+  notes: string | null
+}
+
+function cartLineKey(item: Pick<CartItem, 'product_id' | 'modifiers' | 'notes'>) {
+  return `${item.product_id}|${(item.modifiers || []).join(',')}|${item.notes || ''}`
 }
 
 type PageState = 'loading' | 'error' | 'browsing' | 'payment' | 'success'
@@ -72,6 +81,7 @@ export default function SelfCheckoutPage() {
   const [taxInclusive, setTaxInclusive] = useState(false)
   const [hasLoyalty, setHasLoyalty] = useState(false)
   const [pointsPerCurrency, setPointsPerCurrency] = useState(10)
+  const [specialInstructionsEnabled, setSpecialInstructionsEnabled] = useState(true)
 
   // ─── Catalogue ───────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([])
@@ -84,6 +94,7 @@ export default function SelfCheckoutPage() {
   const [discount, setDiscount] = useState(0)
   const [discountLabel, setDiscountLabel] = useState('')
   const [dismissedWelcome, setDismissedWelcome] = useState(false)
+  const [customizeProduct, setCustomizeProduct] = useState<Product | null>(null)
 
   // ─── Promotions ───────────────────────────────────────────────────────────
   const [promotions, setPromotions] = useState<Promotion[]>([])
@@ -113,6 +124,17 @@ export default function SelfCheckoutPage() {
   const [customerSearchQuery, setCustomerSearchQuery] = useState('')
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer | null | undefined>(undefined)
   const [searchingCustomer, setSearchingCustomer] = useState(false)
+
+  // ─── Rewards ──────────────────────────────────────────────────────────────
+  const [rewards, setRewards] = useState<LoyaltyReward[]>([])
+  const [rewardsLoading, setRewardsLoading] = useState(false)
+  const [redeemedRewardId, setRedeemedRewardId] = useState<string | null>(null)
+  const [redeemedRewardData, setRedeemedRewardData] = useState<{
+    name: string
+    reward_type: string
+    discount_value?: number
+    discount_type?: 'percentage' | 'fixed' | null
+  } | null>(null)
 
   // ─── Customer detail (rich profile) ────────────────────────────────────────
   interface CustomerProfile {
@@ -144,6 +166,8 @@ export default function SelfCheckoutPage() {
     discount?: number
     discountLabel?: string
     promoDiscount?: number
+    rewardDiscount?: number
+    rewardLabel?: string
     appliedPromotions?: { promotion_id: string; name: string; discount_amount: number }[]
   } | null>(null)
 
@@ -175,6 +199,7 @@ export default function SelfCheckoutPage() {
       setTaxInclusive((settings?.taxInclusive as boolean) ?? false)
       setHasLoyalty((settings?.hasLoyalty as boolean) ?? false)
       setPointsPerCurrency((settings?.pointsPerCurrency as number) ?? 10)
+      setSpecialInstructionsEnabled((settings?.specialInstructionsEnabled as boolean) ?? true)
       setPromoPin((settings?.promoPin as string) ?? '')
       setProducts(productsRes.data)
       setCategories(categoriesRes.data)
@@ -245,6 +270,9 @@ export default function SelfCheckoutPage() {
 
   const handleScanSuccess = useCallback((result: ScanLoyaltyResult) => {
     setDismissedWelcome(true)
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
+    setRewards([])
     setCustomerProfile({
       customer: result.customer,
       loyalty: result.loyaltyCard,
@@ -254,6 +282,27 @@ export default function SelfCheckoutPage() {
     setFormExpanded(false)
     setCameraExpanded(false)
   }, [])
+
+  // ─── Rewards fetching (depends on apiFetch, must be below it) ─────────────
+  useEffect(() => {
+    if (!customerProfile?.loyalty?.id) {
+      setRewards([])
+      setRedeemedRewardId(null)
+      setRedeemedRewardData(null)
+      return
+    }
+    let cancelled = false
+    setRewardsLoading(true)
+    apiFetch<{ data: LoyaltyReward[] }>(`/rewards/available/${customerProfile.loyalty.id}`)
+      .then((res) => {
+        if (!cancelled) setRewards(res.data || [])
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRewardsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [customerProfile?.loyalty?.id, apiFetch])
 
   const handleRegisterCustomer = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -297,6 +346,9 @@ export default function SelfCheckoutPage() {
     setQrExpanded(false)
     setFormExpanded(false)
     setCameraExpanded(false)
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
+    setRewards([])
     try {
       const json = await apiFetch<{ data: { customer: Customer; loyaltyCard: LoyaltyCardData | null; recentOrders: Array<{ id: string; order_number: number; total: number; created_at: string; items: Array<{ product_name: string; quantity: number }> }> } }>(
         `/customers/${customer.id}/detail`,
@@ -370,6 +422,36 @@ export default function SelfCheckoutPage() {
   const actualSubtotal = originalSubtotal - productSavings
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0)
 
+  // Reward discount
+  const rewardDiscount = redeemedRewardData?.discount_value
+    ? redeemedRewardData.reward_type === 'percentage_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'percentage')
+      ? Math.round(actualSubtotal * (redeemedRewardData.discount_value / 100) * 100) / 100
+      : redeemedRewardData.reward_type === 'fixed_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'fixed')
+        ? Math.min(redeemedRewardData.discount_value, actualSubtotal)
+        : 0
+    : 0
+
+  // ─── Floating cart bubble totals (pre-discount so FloatingCartBar applies discounts) ──
+  const cartTax = !taxEnabled ? 0 : taxInclusive
+    ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
+    : Math.round(actualSubtotal * taxRate * 100) / 100
+  const cartTotalDiscount = discount + promoDiscount + rewardDiscount
+  const cartPreDiscountTotal = taxInclusive ? actualSubtotal : actualSubtotal + cartTax
+
+  const handleRewardSelect = (reward: LoyaltyReward) => {
+    setRedeemedRewardId(reward.id)
+    setRedeemedRewardData({
+      name: reward.name,
+      reward_type: reward.reward_type,
+      discount_value: reward.discount_value ?? undefined,
+      discount_type: reward.discount_type ?? undefined,
+    })
+  }
+  const handleRewardDeselect = () => {
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
+  }
+
   // ─── Active promotions (filtered by date) ─────────────────────────────────
   const activePromotions = promotions.filter((p) => {
     if (!p.is_active) return false
@@ -437,6 +519,10 @@ export default function SelfCheckoutPage() {
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
     setDismissedWelcome(true)
+    if (product.modifiers && product.modifiers.length > 0) {
+      setCustomizeProduct(product)
+      return
+    }
     if (cartItems.length === 0) {
       setQrExpanded(false)
       setFormExpanded(false)
@@ -466,17 +552,63 @@ export default function SelfCheckoutPage() {
           image_url: product.image_url,
           points: product.points ?? undefined,
           category_id: product.category_id ?? null,
+          variant_label: '',
+          modifiers: [],
+          notes: null,
         },
       ]
     })
   }
 
-  function handleQuantityChange(productId: string, qty: number) {
+  function handleCustomizeConfirm(result: {
+    quantity: number
+    modifiers: string[]
+    variant_label: string
+    notes: string | null
+    price: number
+    original_price: number
+  }) {
+    const product = customizeProduct
+    if (!product) return
+    setCustomizeProduct(null)
+    setCartItems((prev) => {
+      const existing = prev.find((i) => cartLineKey(i) === cartLineKey({
+        product_id: product.id,
+        modifiers: result.modifiers,
+        notes: result.notes,
+      }))
+      if (existing) {
+        return prev.map((i) =>
+          cartLineKey(i) === cartLineKey({ product_id: product.id, modifiers: result.modifiers, notes: result.notes })
+            ? { ...i, quantity: i.quantity + result.quantity }
+            : i,
+        )
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          name: product.name,
+          price: result.price,
+          original_price: result.original_price,
+          quantity: result.quantity,
+          image_url: product.image_url,
+          points: product.points ?? undefined,
+          category_id: product.category_id ?? null,
+          variant_label: result.variant_label,
+          modifiers: result.modifiers,
+          notes: result.notes,
+        },
+      ]
+    })
+  }
+
+  function handleQuantityChange(lineKey: string, qty: number) {
     if (qty === 0) {
-      setCartItems((prev) => prev.filter((i) => i.product_id !== productId))
+      setCartItems((prev) => prev.filter((i) => cartLineKey(i) !== lineKey))
     } else {
       setCartItems((prev) =>
-        prev.map((i) => (i.product_id === productId ? { ...i, quantity: qty } : i)),
+        prev.map((i) => (cartLineKey(i) === lineKey ? { ...i, quantity: qty } : i)),
       )
     }
   }
@@ -487,6 +619,8 @@ export default function SelfCheckoutPage() {
     setDiscountLabel('')
     setAppliedPromotions([])
     setPromoDiscount(0)
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
   }
 
   function handleResetAll() {
@@ -506,6 +640,10 @@ export default function SelfCheckoutPage() {
     setQrExpanded(true)
     setFormExpanded(false)
     setCameraExpanded(true)
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
+    setRewards([])
+    setCustomizeProduct(null)
   }
 
   // ─── Promo ────────────────────────────────────────────────────────────────
@@ -539,6 +677,8 @@ export default function SelfCheckoutPage() {
             product_id: i.product_id,
             quantity: i.quantity,
             unit_price: i.price,
+            modifiers: i.modifiers,
+            notes: i.notes,
           })),
             customer_id: customerProfile?.customer.id || undefined,
             discount: discount > 0 ? discount : undefined,
@@ -551,6 +691,7 @@ export default function SelfCheckoutPage() {
                   discount_amount: p.discount_amount,
                 }))
               : undefined,
+            redeemed_reward_id: redeemedRewardId || undefined,
           }),
         },
       )
@@ -564,7 +705,7 @@ export default function SelfCheckoutPage() {
   }
 
   function handlePaid(loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }) {
-    const totalDiscount = discount + promoDiscount
+    const totalDiscount = discount + promoDiscount + rewardDiscount
     const tax = !taxEnabled ? 0 : taxInclusive
       ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
       : Math.round(actualSubtotal * taxRate * 100) / 100
@@ -573,11 +714,13 @@ export default function SelfCheckoutPage() {
       : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
     setLastOrder({
       total: finalTotal,
-      items: cartItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      items: cartItems.map((i) => ({ name: i.variant_label ? `${i.name} (${i.variant_label})` : i.name, quantity: i.quantity, price: i.price })),
       productSavings,
       discount,
       discountLabel,
       promoDiscount,
+      rewardDiscount: rewardDiscount > 0 ? rewardDiscount : undefined,
+      rewardLabel: redeemedRewardData?.name || undefined,
       appliedPromotions,
       loyalty,
       customerName: customerProfile?.customer?.name,
@@ -597,9 +740,12 @@ export default function SelfCheckoutPage() {
     setCustomerProfile(null)
     setCustomerSearchQuery('')
     setOrderId(null)
+    setRedeemedRewardId(null)
+    setRedeemedRewardData(null)
     setLastOrder(null)
     setQrExpanded(true)
     setCameraExpanded(true)
+    setCustomizeProduct(null)
     setPageState('browsing')
   }
 
@@ -734,6 +880,16 @@ export default function SelfCheckoutPage() {
                           <span className="font-headline font-bold text-rose-500">-{formatCurrency(lastOrder.discount ?? 0)}</span>
                         </div>
                       )}
+
+                      {lastOrder.rewardDiscount !== undefined && lastOrder.rewardDiscount > 0 && (
+                        <div className="flex items-center justify-between text-sm text-secondary">
+                          <span className="flex items-center gap-1">
+                            <Gift className="h-3.5 w-3.5" />
+                            {lastOrder.rewardLabel || 'Reward'}
+                          </span>
+                          <span className="font-headline font-bold">-{formatCurrency(lastOrder.rewardDiscount)}</span>
+                        </div>
+                      )}
                     </>
                   )
                 })()
@@ -844,7 +1000,7 @@ export default function SelfCheckoutPage() {
         </div>
 
         {/* Products grid or welcome hero */}
-        <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-6">
+        <div className="flex-1 overflow-y-auto px-3 pb-40 lg:pb-6">
           {!customerProfile && cartItems.length === 0 && !dismissedWelcome ? (
             <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
               <div className="relative mb-8">
@@ -900,17 +1056,14 @@ export default function SelfCheckoutPage() {
           )}
         </div>
 
-        {/* Mobile cart FAB */}
-        {cartCount > 0 && mobileView === 'products' && (
-          <button
-            onClick={() => setMobileView('cart')}
-            className="fixed bottom-20 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-on shadow-[0_8px_32px_rgba(204,255,0,0.3)] transition-transform active:scale-95 lg:hidden"
-          >
-            <ShoppingBag className="h-6 w-6" />
-            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white">
-              {cartCount}
-            </span>
-          </button>
+        {/* Mobile cart floating bubble (same as POS FloatingCartBar) */}
+        {mobileView === 'products' && (
+          <FloatingCartBar
+            count={cartCount}
+            total={cartPreDiscountTotal}
+            discount={cartTotalDiscount}
+            onCheckout={() => setMobileView('cart')}
+          />
         )}
 
       </div>
@@ -1177,6 +1330,9 @@ export default function SelfCheckoutPage() {
                       setCustomerSearchResults(undefined)
                       setQrExpanded(true)
                       setCameraExpanded(true)
+                      setRedeemedRewardId(null)
+                      setRedeemedRewardData(null)
+                      setRewards([])
                     }}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
                   >
@@ -1315,6 +1471,34 @@ export default function SelfCheckoutPage() {
           </div>
         </div>
 
+        {/* Rewards — desktop only */}
+        {customerProfile?.loyalty?.id && (rewards.length > 0 || rewardsLoading) && (
+          <div className="hidden lg:block shrink-0 border-b border-outline-variant/50 px-4 py-3">
+            <RewardsPanel
+              rewards={rewards}
+              loading={rewardsLoading}
+              points={customerProfile.loyalty?.points ?? 0}
+              selectedRewardId={redeemedRewardId}
+              onSelect={handleRewardSelect}
+              onDeselect={handleRewardDeselect}
+            />
+          </div>
+        )}
+
+        {/* Rewards — mobile (cart) */}
+        {customerProfile?.loyalty?.id && (rewards.length > 0 || rewardsLoading) && (
+          <div className="hidden max-lg:block shrink-0 border-b border-outline-variant/50 px-4 py-3">
+            <RewardsPanel
+              rewards={rewards}
+              loading={rewardsLoading}
+              points={customerProfile.loyalty?.points ?? 0}
+              selectedRewardId={redeemedRewardId}
+              onSelect={handleRewardSelect}
+              onDeselect={handleRewardDeselect}
+            />
+          </div>
+        )}
+
         {/* Order summary header */}
         <div className="shrink-0 border-b border-outline-variant/50 px-4 py-2.5">
           <h2 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant">
@@ -1336,7 +1520,7 @@ export default function SelfCheckoutPage() {
             <div className="space-y-2 p-3">
               {cartItems.map((item) => (
                 <SelfCheckoutCartRow
-                  key={item.product_id}
+                  key={cartLineKey(item)}
                   item={item}
                   onQuantityChange={handleQuantityChange}
                   hasLoyalty={hasLoyalty}
@@ -1361,6 +1545,15 @@ export default function SelfCheckoutPage() {
             taxInclusive={taxInclusive}
             taxEnabled={taxEnabled}
           />
+          {rewardDiscount > 0 && (
+            <div className="flex justify-between text-sm text-secondary mt-1.5">
+              <span className="flex items-center gap-1">
+                <Gift className="h-3.5 w-3.5" />
+                {redeemedRewardData?.name || 'Reward'}
+              </span>
+              <span>-{formatCurrency(rewardDiscount)}</span>
+            </div>
+          )}
         </div>
 
         {/* Total row (large) */}
@@ -1368,7 +1561,7 @@ export default function SelfCheckoutPage() {
           {(() => {
             // use originalSubtotal (catalog prices) and productSavings to compute actualSubtotal
             const actualSubtotal = cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0) - productSavings
-            const totalDiscount = discount + promoDiscount
+            const totalDiscount = discount + promoDiscount + rewardDiscount
             const tax = !taxEnabled ? 0 : taxInclusive
               ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
               : Math.round(actualSubtotal * taxRate * 100) / 100
@@ -1581,6 +1774,9 @@ export default function SelfCheckoutPage() {
                         setCustomerProfile(null)
                         setCustomerSearchQuery('')
                         setCustomerSearchResults(undefined)
+                        setRedeemedRewardId(null)
+                        setRedeemedRewardData(null)
+                        setRewards([])
                       }}
                       className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container"
                     >
@@ -1604,6 +1800,20 @@ export default function SelfCheckoutPage() {
                       <p className="text-[10px] text-on-surface-variant">Visitas</p>
                     </div>
                   </div>
+
+                  {/* Rewards — mobile */}
+                  {customerProfile.loyalty?.id && (rewards.length > 0 || rewardsLoading) && (
+                    <div className="border-t border-outline-variant/30 pt-4">
+                      <RewardsPanel
+                        rewards={rewards}
+                        loading={rewardsLoading}
+                        points={customerProfile.loyalty?.points ?? 0}
+                        selectedRewardId={redeemedRewardId}
+                        onSelect={handleRewardSelect}
+                        onDeselect={handleRewardDeselect}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1828,13 +2038,24 @@ export default function SelfCheckoutPage() {
         // show total including product savings and cart-level promo discount
         total={
           taxInclusive
-            ? Math.round((actualSubtotal - (discount + promoDiscount)) * 100) / 100
-            : Math.round((actualSubtotal * (1 + (taxEnabled ? taxRate : 0)) - (discount + promoDiscount)) * 100) / 100
+            ? Math.round((actualSubtotal - (discount + promoDiscount + rewardDiscount)) * 100) / 100
+            : Math.round((actualSubtotal * (1 + (taxEnabled ? taxRate : 0)) - (discount + promoDiscount + rewardDiscount)) * 100) / 100
         }
         onPaid={handlePaid}
         onCancel={handlePaymentCancel}
         fetchOrder={(id) => apiFetch<any>(`/orders/${id}`)}
       />
+
+      {/* ── Customize product modal (variants & extras) ─────────────── */}
+      {customizeProduct && (
+        <SelfCheckoutCustomizeProduct
+          product={customizeProduct}
+          promotion={getPromotionForProduct(customizeProduct)}
+          specialInstructionsEnabled={specialInstructionsEnabled}
+          onConfirm={handleCustomizeConfirm}
+          onClose={() => setCustomizeProduct(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1857,7 +2078,7 @@ function maskPhone(v: string) {
 // ─── Inline cart item row (no Redux dependency) ──────────────────────────────
 interface SelfCheckoutCartRowProps {
   item: CartItem
-  onQuantityChange: (productId: string, qty: number) => void
+  onQuantityChange: (lineKey: string, qty: number) => void
   hasLoyalty?: boolean
   pointsPerCurrency?: number
 }
@@ -1892,6 +2113,12 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
       </div>
       <div className="flex-1 min-w-0">
         <p className="truncate font-headline font-bold text-sm text-on-surface">{item.name}</p>
+        {item.variant_label && (
+          <p className="truncate text-xs text-on-surface-variant mt-0.5">{item.variant_label}</p>
+        )}
+        {item.notes && (
+          <p className="truncate text-xs text-on-surface-variant/70 mt-0.5">{item.notes}</p>
+        )}
         <div className="flex items-center gap-2 mt-0.5">
           {item.original_price > item.price ? (
             <>
@@ -1911,7 +2138,7 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
       </div>
       <QuantityStepper
         value={item.quantity}
-        onChange={(qty) => onQuantityChange(item.product_id, qty)}
+        onChange={(qty) => onQuantityChange(cartLineKey(item), qty)}
       />
     </div>
   )

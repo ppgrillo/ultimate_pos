@@ -49,6 +49,15 @@ export interface CartState {
   redeemed_points: number
   appliedPromotions: AppliedPromotion[]
   promoDiscount: number
+  redeemed_reward_id: string | null
+  redeemed_reward_data: {
+    name: string
+    reward_type: string
+    points_required: number
+    discount_value?: number
+    discount_type?: 'percentage' | 'fixed' | null
+    product_id?: string
+  } | null
 }
 
 const initialState: CartState = {
@@ -66,6 +75,8 @@ const initialState: CartState = {
   redeemed_points: 0,
   appliedPromotions: [],
   promoDiscount: 0,
+  redeemed_reward_id: null,
+  redeemed_reward_data: null,
 }
 
 const cartSlice = createSlice({
@@ -112,6 +123,11 @@ const cartSlice = createSlice({
         state.customer_points = action.payload.points ?? 0
         state.customer_loyalty_card_id = action.payload.loyalty_card_id ?? null
         state.redeemed_points = 0
+        state.redeemed_reward_id = null
+        state.redeemed_reward_data = null
+        state.items = state.items.filter(
+          (item) => !item.notes?.includes('[Reward]'),
+        )
       } else {
         state.customer_id = null
         state.customer_name = null
@@ -119,10 +135,39 @@ const cartSlice = createSlice({
         state.customer_points = 0
         state.customer_loyalty_card_id = null
         state.redeemed_points = 0
+        state.redeemed_reward_id = null
+        state.redeemed_reward_data = null
+        state.items = state.items.filter(
+          (item) => !item.notes?.includes('[Reward]'),
+        )
       }
     },
     setRedeemedPoints(state, action: PayloadAction<number>) {
       state.redeemed_points = Math.min(Math.max(0, action.payload), state.customer_points)
+    },
+    setRedeemedReward(state, action: PayloadAction<{
+      id: string
+      name: string
+      reward_type: string
+      points_required: number
+      discount_value?: number
+      discount_type?: 'percentage' | 'fixed' | null
+      product_id?: string
+    } | null>) {
+      if (action.payload) {
+        state.redeemed_reward_id = action.payload.id
+        state.redeemed_reward_data = {
+          name: action.payload.name,
+          reward_type: action.payload.reward_type,
+          points_required: action.payload.points_required,
+          discount_value: action.payload.discount_value,
+          discount_type: action.payload.discount_type,
+          product_id: action.payload.product_id,
+        }
+      } else {
+        state.redeemed_reward_id = null
+        state.redeemed_reward_data = null
+      }
     },
     setOrderType(state, action: PayloadAction<'dine-in' | 'takeaway' | 'delivery'>) {
       state.order_type = action.payload
@@ -144,6 +189,13 @@ const cartSlice = createSlice({
     clearCart() {
       return initialState
     },
+    clearRewardItems(state) {
+      state.items = state.items.filter(
+        (item) => !item.notes?.includes('[Reward]'),
+      )
+      state.appliedPromotions = []
+      state.promoDiscount = 0
+    },
   },
 })
 
@@ -152,5 +204,6 @@ export const {
   setCustomer, setOrderType, setTable,
   setDiscount, setNotes, clearCart,
   setRedeemedPoints, setAppliedPromotions, clearAutoPromotions,
+  setRedeemedReward, clearRewardItems,
 } = cartSlice.actions
 export default cartSlice.reducer

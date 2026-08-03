@@ -8,6 +8,8 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PaymentModal } from '@/components/pos/PaymentModal'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { LoyaltyPanel } from '@/components/pos/LoyaltyPanel'
+import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { OpenChecksPanel } from '@/components/pos/OpenChecksPanel/OpenChecksPanel'
 import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
 import { useState } from 'react'
@@ -58,6 +60,8 @@ export function PosDesktopLayout({
   const redeemed_points = useAppSelector((s) => s.cart.redeemed_points)
   const appliedPromotions = useAppSelector((s) => s.cart.appliedPromotions)
   const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
+  const redeemed_reward_id = useAppSelector((s) => s.cart.redeemed_reward_id)
+  const redeemed_reward_data = useAppSelector((s) => s.cart.redeemed_reward_data)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const activeView = useAppSelector((s) => s.pos.activeView)
@@ -65,6 +69,15 @@ export function PosDesktopLayout({
   const subtotal = items.reduce((sum, i) => sum + (i.original_price || i.price) * i.quantity, 0)
   const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
   const actualSubtotal = subtotal - productSavings
+
+  const rewardDiscount = redeemed_reward_id && redeemed_reward_data
+    ? redeemed_reward_data.reward_type === 'percentage_discount' || (redeemed_reward_data.reward_type === 'custom' && redeemed_reward_data.discount_type === 'percentage')
+      ? Math.round(actualSubtotal * (redeemed_reward_data.discount_value || 0) / 100 * 100) / 100
+      : redeemed_reward_data.reward_type === 'fixed_discount' || (redeemed_reward_data.reward_type === 'custom' && redeemed_reward_data.discount_type === 'fixed')
+        ? Math.min(redeemed_reward_data.discount_value || 0, actualSubtotal)
+        : 0
+    : 0
+
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
 
   const store = useAppSelector((s) => s.storeConfig.currentStore)
@@ -83,7 +96,7 @@ export function PosDesktopLayout({
     ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
     : Math.round(actualSubtotal * taxRate * 100) / 100
 
-  const totalDiscount = discount + promoDiscount
+  const totalDiscount = discount + promoDiscount + rewardDiscount
   const totalAmount = taxInclusive
     ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
     : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
@@ -136,6 +149,7 @@ export function PosDesktopLayout({
               }))
             : undefined,
           redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
+          redeemed_reward_id: redeemed_reward_id || undefined,
         })
 
         dispatch(rtkApi.util.invalidateTags([
@@ -169,6 +183,7 @@ export function PosDesktopLayout({
             }))
           : undefined,
         redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
+        redeemed_reward_id: redeemed_reward_id || undefined,
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
@@ -194,12 +209,21 @@ export function PosDesktopLayout({
           params.set('changeDue', String(Math.round((cashAmountGiven - totalAmount) * 100) / 100))
         }
       }
-      if (earnedPoints > 0 || redeemed_points > 0) {
+      const rewardPoints = redeemed_reward_data?.points_required ?? 0
+      const totalRedeemed = redeemed_points + rewardPoints
+      if (earnedPoints > 0 || totalRedeemed > 0) {
         params.set('pointsEarned', String(earnedPoints))
+        if (totalRedeemed > 0) {
+          params.set('pointsRedeemed', String(totalRedeemed))
+        }
         if (loyaltyCard?.points !== undefined) {
           params.set('pointsBefore', String(loyaltyCard.points))
-          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + (earnedPoints > 0 ? earnedPoints : -redeemed_points))))
+          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + earnedPoints - totalRedeemed)))
         }
+      }
+      if (rewardDiscount > 0) {
+        params.set('rewardDiscount', String(rewardDiscount))
+        params.set('rewardLabel', redeemed_reward_data?.name || 'Reward Discount')
       }
       router.push(`/pos/receipt?${params.toString()}`)
     } catch (err) {
@@ -416,6 +440,12 @@ export function PosDesktopLayout({
           </div>
         )}
 
+        {hasLoyalty && customer_id && loyaltyCard && (
+          <div className="px-3 pt-2">
+            <RewardsPanel cardId={loyaltyCard.id} points={loyaltyCard.points} />
+          </div>
+        )}
+
          <div className="flex-1 overflow-y-auto p-3 space-y-2">
            <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1">
              Order Summary ({count} {count === 1 ? 'item' : 'items'})
@@ -441,6 +471,7 @@ export function PosDesktopLayout({
               appliedPromotions={appliedPromotions}
               promoDiscount={promoDiscount}
               productSavings={productSavings}
+              rewardDiscount={rewardDiscount}
               taxRate={taxRate}
               taxLabel={taxLabel}
               taxInclusive={taxInclusive}

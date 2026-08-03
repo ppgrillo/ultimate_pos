@@ -16,6 +16,7 @@ import {
   computeCartPromotionDiscounts,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import { createRedemption, revertRedemption } from '../services/rewards.service'
 
 export const ordersRouter = new Hono()
 
@@ -210,6 +211,7 @@ ordersRouter.get('/:id', async (c) => {
               (data.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
             ).catch(() => {})
             await reverseMpLoyalty(supabaseAdmin, id).catch(() => {})
+            await revertRedemption(id).catch(() => {})
           }
 
           const { data: updatedOrder } = await supabase
@@ -314,6 +316,29 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
+  // ── Reward handling: fetch reward data if redeemed_reward_id is present ──
+  let redeemedRewardData: {
+    id: string
+    name: string
+    reward_type: string
+    points_required: number
+    product_id: string | null
+    discount_value: number | null
+    discount_type: string | null
+  } | null = null
+
+  if (input.redeemed_reward_id) {
+    const { data: reward } = await supabaseAdmin
+      .from('loyalty_rewards')
+      .select('id, name, reward_type, points_required, product_id, discount_value, discount_type')
+      .eq('id', input.redeemed_reward_id)
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+      .single()
+
+    if (reward) redeemedRewardData = reward
+  }
+
   const { data: activeProductCategoryPromos } = await supabaseAdmin
     .from('promotions')
     .select('id, name, target_type, target_ids, discount_type, discount_value, priority, starts_at, ends_at, is_active, current_uses, max_uses')
@@ -382,7 +407,17 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   const discount = input.discount || 0
   const promoDiscount = validatedPromoDiscount
-  const totalDiscount = discount + promoDiscount
+  let rewardDiscount = 0
+
+  if (redeemedRewardData && (redeemedRewardData.reward_type === 'percentage_discount' || redeemedRewardData.reward_type === 'fixed_discount' || redeemedRewardData.reward_type === 'custom')) {
+    if (redeemedRewardData.reward_type === 'percentage_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'percentage')) {
+      rewardDiscount = Math.round(subtotal * (redeemedRewardData.discount_value || 0) / 100 * 100) / 100
+    } else {
+      rewardDiscount = Math.min(redeemedRewardData.discount_value || 0, subtotal)
+    }
+  }
+
+  const totalDiscount = discount + promoDiscount + rewardDiscount
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -487,6 +522,38 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     await supabase
       .from('orders')
       .update({ metadata: { promotionUsageIds, promotionUsageReverted: false } })
+      .eq('id', order.id)
+  }
+
+  // ── Reward redemption ──
+  let rewardMeta: Record<string, unknown> = {}
+  if (redeemedRewardData && input.customer_id) {
+    const { getLoyaltyCard } = await import('../services/loyalty.service')
+    const card = await getLoyaltyCard(input.customer_id, storeId)
+    if (!card) throw badRequest('Customer must have an enrolled loyalty card to redeem rewards')
+
+    await createRedemption(
+      storeId,
+      redeemedRewardData.id,
+      card.id,
+      input.customer_id,
+      order.id,
+    )
+    rewardMeta = {
+      redeemedRewardId: redeemedRewardData.id,
+      redeemedRewardName: redeemedRewardData.name,
+      redeemedRewardType: redeemedRewardData.reward_type,
+      redeemedRewardPoints: redeemedRewardData.points_required,
+      redeemedRewardDiscount: rewardDiscount,
+    }
+  }
+
+  // Merge reward metadata into order metadata
+  if (Object.keys(rewardMeta).length > 0) {
+    const existingMeta = (order.metadata as Record<string, unknown>) || {}
+    await supabase
+      .from('orders')
+      .update({ metadata: { ...existingMeta, ...rewardMeta } })
       .eq('id', order.id)
   }
 
@@ -915,6 +982,8 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
 
   await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
 
+  await revertRedemption(orderId).catch(() => {})
+
   return c.json({ success: true, meta: { mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled' } })
 })
 
@@ -976,6 +1045,9 @@ ordersRouter.patch('/:id/status', async (c) => {
       (data?.metadata as Record<string, unknown> | null | undefined) || {},
       (data?.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
     )
+
+    // Revert reward redemption if any
+    await revertRedemption(id).catch(() => {})
 
     const { data: cancelTxs } = await supabase
       .from('loyalty_transactions')
@@ -1200,6 +1272,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .update({ status: 'failed' })
           .eq('order_id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
+        await revertRedemption(order.id).catch(() => {})
         continue
       }
 
@@ -1215,6 +1288,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .update({ status: 'cancelled', metadata: { ...meta, promotionUsageReverted: true, mpOrderStatus: 'canceled' } })
           .eq('id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
+        await revertRedemption(order.id).catch(() => {})
       }
     } catch {
     }

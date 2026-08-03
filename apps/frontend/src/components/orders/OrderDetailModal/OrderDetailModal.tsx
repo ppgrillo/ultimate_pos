@@ -12,7 +12,7 @@ import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
-import { Clock, Table2, User, Receipt, DollarSign } from 'lucide-react'
+import { Clock, Table2, User, Receipt, DollarSign, Gift } from 'lucide-react'
 import type { KitchenWorkflowStepStatus, Order, OrderStatus, PaymentMethod } from '@ultimate-pos/shared'
 import { useGetOrderByIdQuery, usePayOrderMutation } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
@@ -150,6 +150,15 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
               </div>
             )}
 
+            {Number(displayOrder.metadata?.redeemedRewardDiscount ?? 0) > 0 ? (
+              <div className="flex justify-between text-sm">
+                <span className="flex items-center gap-1 text-on-surface-variant">
+                  <Gift className="h-3 w-3" />
+                  {String(displayOrder.metadata?.redeemedRewardName ?? 'Reward')}
+                </span>
+                <span className="font-label font-bold text-secondary">-{formatCurrency(Number(displayOrder.metadata?.redeemedRewardDiscount))}</span>
+              </div>
+            ) : null}
             {displayOrder.discount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Discount</span>

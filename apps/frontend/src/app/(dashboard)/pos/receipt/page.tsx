@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars } from 'lucide-react'
+import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars, Gift } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
 
@@ -25,9 +25,12 @@ function ReceiptPageContent() {
   const total = searchParams.get('total')
   const changeDue = searchParams.get('changeDue')
   const pointsEarned = searchParams.get('pointsEarned')
+  const pointsRedeemed = searchParams.get('pointsRedeemed')
   const pointsBefore = searchParams.get('pointsBefore')
   const pointsAfter = searchParams.get('pointsAfter')
   const pointsChanged = pointsBefore && pointsAfter && pointsBefore !== pointsAfter
+  const rewardDiscount = searchParams.get('rewardDiscount')
+  const rewardLabel = searchParams.get('rewardLabel')
   const checkOpen = searchParams.get('checkOpen') === '1'
   const table = searchParams.get('table')
   const store = useAppSelector((s) => s.storeConfig.currentStore)
@@ -78,19 +81,33 @@ function ReceiptPageContent() {
               </div>
             </div>
           )}
+          {rewardDiscount && Number(rewardDiscount) > 0 && (
+            <div className="flex items-center gap-3 rounded-lg bg-secondary/10 p-3 mb-3">
+              <Gift className="h-5 w-5 text-secondary shrink-0" />
+              <div className="text-left flex-1 min-w-0">
+                <p className="text-xs text-on-surface-variant">{rewardLabel || 'Reward'}</p>
+                <p className="text-lg font-headline font-bold text-secondary">-{formatCurrency(parseFloat(rewardDiscount))}</p>
+              </div>
+            </div>
+          )}
           {hasLoyalty && (
-            <div className="flex items-center gap-3 rounded-lg bg-primary/10 p-3 mt-4">
-              <Stars className="h-5 w-5 text-primary shrink-0" />
-              <div className="text-left">
+            <div className="flex items-start gap-3 rounded-lg bg-primary/10 p-3 mt-4">
+              <Stars className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="text-left flex-1 min-w-0">
                 {pointsChanged ? (
                   <>
-                    <p className="text-xs text-on-surface-variant">
-                      Loyalty points
-                      {pointsEarned && Number(pointsEarned) > 0 ? ' earned' : ' redeemed'}
-                    </p>
-                    <p className="text-lg font-headline font-bold text-primary">
-                      {pointsBefore} → {pointsAfter}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-on-surface-variant">Loyalty points</p>
+                      <p className="text-lg font-headline font-bold text-primary">
+                        {pointsBefore} → {pointsAfter}
+                      </p>
+                    </div>
+                    {pointsEarned && Number(pointsEarned) > 0 && (
+                      <p className="text-xs text-success mt-1">+{pointsEarned} earned</p>
+                    )}
+                    {pointsRedeemed && Number(pointsRedeemed) > 0 && (
+                      <p className="text-xs text-error mt-0.5">-{pointsRedeemed} redeemed</p>
+                    )}
                   </>
                 ) : pointsEarned && Number(pointsEarned) > 0 ? (
                   <>

@@ -17,6 +17,8 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const items = useAppSelector((s) => s.cart.items)
   const discount = useAppSelector((s) => s.cart.discount)
   const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
+  const redeemedRewardData = useAppSelector((s) => s.cart.redeemed_reward_data)
+  const redeemedRewardId = useAppSelector((s) => s.cart.redeemed_reward_id)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const hasKitchen = settings?.hasKitchen ?? false
@@ -28,7 +30,16 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const taxEnabled = settings?.taxEnabled ?? false
 
   const actualSubtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
-  const totalDiscount = discount + promoDiscount
+
+  const rewardDiscount = redeemedRewardId && redeemedRewardData
+    ? redeemedRewardData.reward_type === 'percentage_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'percentage')
+      ? Math.round(actualSubtotal * (redeemedRewardData.discount_value || 0) / 100 * 100) / 100
+      : redeemedRewardData.reward_type === 'fixed_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'fixed')
+        ? Math.min(redeemedRewardData.discount_value || 0, actualSubtotal)
+        : 0
+    : 0
+
+  const totalDiscount = discount + promoDiscount + rewardDiscount
 
   const tax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100

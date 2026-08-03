@@ -11,6 +11,7 @@ import { badRequest, notFound } from '../middleware/error'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { decryptSettings } from '../lib/settings'
 import { orderBus } from '../events'
+import { createRedemption, revertRedemption } from '../services/rewards.service'
 
 export const checksRouter = new Hono()
 
@@ -195,6 +196,29 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
 
+  // ── Reward handling ──
+  let redeemedRewardData: {
+    id: string
+    name: string
+    reward_type: string
+    points_required: number
+    product_id?: string | null
+    discount_value?: number | null
+    discount_type?: string | null
+  } | null = null
+
+  if (input.redeemed_reward_id) {
+    const { data: reward } = await supabaseAdmin
+      .from('loyalty_rewards')
+      .select('id, name, reward_type, points_required, product_id, discount_value, discount_type')
+      .eq('id', input.redeemed_reward_id)
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+      .single()
+
+    if (reward) redeemedRewardData = reward
+  }
+
   let subtotal = 0
   let taxableSubtotal = 0
   const orderItems = input.items.map((item) => {
@@ -219,7 +243,17 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
 
   const discount = input.discount || 0
   const promoDiscount = input.promo_discount || 0
-  const totalDiscount = discount + promoDiscount
+  let rewardDiscount = 0
+
+  if (redeemedRewardData && (redeemedRewardData.reward_type === 'percentage_discount' || redeemedRewardData.reward_type === 'fixed_discount' || redeemedRewardData.reward_type === 'custom')) {
+    if (redeemedRewardData.reward_type === 'percentage_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'percentage')) {
+      rewardDiscount = Math.round(subtotal * (redeemedRewardData.discount_value || 0) / 100 * 100) / 100
+    } else {
+      rewardDiscount = Math.min(redeemedRewardData.discount_value || 0, subtotal)
+    }
+  }
+
+  const totalDiscount = discount + promoDiscount + rewardDiscount
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -297,6 +331,37 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
     .insert(itemsToInsert)
 
   if (itemsError) throw badRequest(itemsError.message)
+
+  // ── Reward redemption ──
+  let rewardMeta: Record<string, unknown> = {}
+  if (redeemedRewardData && check.customer_id) {
+    const { getLoyaltyCard } = await import('../services/loyalty.service')
+    const card = await getLoyaltyCard(check.customer_id, storeId)
+    if (!card) throw badRequest('Customer must have an enrolled loyalty card to redeem rewards')
+
+    await createRedemption(
+      storeId,
+      redeemedRewardData.id,
+      card.id,
+      check.customer_id,
+      order.id,
+    )
+    rewardMeta = {
+      redeemedRewardId: redeemedRewardData.id,
+      redeemedRewardName: redeemedRewardData.name,
+      redeemedRewardType: redeemedRewardData.reward_type,
+      redeemedRewardPoints: redeemedRewardData.points_required,
+      redeemedRewardDiscount: rewardDiscount,
+    }
+  }
+
+  if (Object.keys(rewardMeta).length > 0) {
+    const existingMeta = (order.metadata as Record<string, unknown>) || {}
+    await supabaseAdmin
+      .from('orders')
+      .update({ metadata: { ...existingMeta, ...rewardMeta } })
+      .eq('id', order.id)
+  }
 
   const { data: fullOrder } = await supabaseAdmin
     .from('orders')
@@ -417,6 +482,8 @@ checksRouter.post('/:id/void', requireRole('admin'), zValidator('json', voidChec
       })
       .eq('id', order.id)
       .eq('store_id', storeId)
+
+    await revertRedemption(order.id).catch(() => {})
   }
 
   const { data: voided, error: voidError } = await supabaseAdmin

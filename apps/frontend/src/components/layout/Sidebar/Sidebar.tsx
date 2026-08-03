@@ -18,6 +18,7 @@ import {
   PanelLeft,
   Tag,
   BarChart3,
+  Gift,
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
@@ -43,6 +44,7 @@ export function Sidebar() {
     orderNavItem,
     { href: '/products', label: 'Products', icon: Package },
     { href: '/promotions', label: 'Promotions', icon: Tag },
+    { href: '/rewards', label: 'Rewards', icon: Gift },
     { href: '/customers', label: 'Customers', icon: ContactRound },
     { href: '/employees', label: 'Employees', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },

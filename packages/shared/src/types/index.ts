@@ -24,7 +24,7 @@ export {
 export type { User, UserRole } from './user'
 export type { Store, StoreMember, StoreSettings, SelfCheckoutStation, RegistrationInterestsConfig } from './store'
 export type { Customer, LoyaltyCard, LoyaltyTier, Payment, PaymentMethod, CommunicationLog, PreferenceField, LoyaltyCardData, ScanLoyaltyResult } from './customer'
-export type { LoyaltyTierName, RewardTier, RedemptionRule, LoyaltyProgram, LoyaltyTransactionType, LoyaltyTransaction } from './loyalty'
+export type { LoyaltyTierName, RewardTier, RedemptionRule, LoyaltyProgram, LoyaltyTransactionType, LoyaltyTransaction, RewardType, LoyaltyReward, RewardRedemption } from './loyalty'
 export type { PassType, PassStatus, DigitalPass, CreatePassInput, UpdatePassInput } from './digital-pass'
 export type { Check, CheckStatus, CheckWithOrders } from './check'
 export type {

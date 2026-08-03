@@ -1,4 +1,5 @@
 import { render, screen } from '@/test/test-utils'
+import userEvent from '@testing-library/user-event'
 import { FloatingCartBar } from './FloatingCartBar'
 
 describe('FloatingCartBar', () => {
@@ -59,6 +60,36 @@ describe('FloatingCartBar', () => {
         },
       },
     })
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('uses controlled props and calls onCheckout', async () => {
+    const onCheckout = vi.fn()
+    render(
+      <FloatingCartBar
+        count={3}
+        total={25}
+        discount={5}
+        onCheckout={onCheckout}
+      />,
+    )
+
+    expect(screen.getByText('$20.00')).toBeInTheDocument()
+    expect(screen.getByText('-$5.00 saved')).toBeInTheDocument()
+    expect(screen.getByText('3 items')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Checkout'))
+    expect(onCheckout).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders nothing in controlled mode when count is zero', () => {
+    const { container } = render(
+      <FloatingCartBar
+        count={0}
+        total={0}
+        onCheckout={() => {}}
+      />,
+    )
     expect(container.innerHTML).toBe('')
   })
 })

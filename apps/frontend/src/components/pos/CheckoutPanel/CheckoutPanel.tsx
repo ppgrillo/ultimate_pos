@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Stars, Receipt } from 'lucide-react'
+import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Receipt } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView, setKitchenNotice } from '@/store/slices/posSlice'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
@@ -15,7 +15,8 @@ import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PromoModal } from '@/components/pos/PromoModal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
-import { LoyaltyPanel } from '@/components/pos/LoyaltyPanel'
+
+import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { EnrollPrompt } from '@/components/pos/EnrollPrompt'
 import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import type { PaymentMethod } from '@ultimate-pos/shared'
@@ -23,7 +24,7 @@ import type { PaymentMethod } from '@ultimate-pos/shared'
 export function CheckoutPanel() {
   const dispatch = useAppDispatch()
   const router = useRouter()
-  const { items, customer_id, customer_name, order_type, table_number, discount, discount_label, notes, redeemed_points, appliedPromotions, promoDiscount } = useAppSelector((s) => s.cart)
+  const { items, customer_id, customer_name, order_type, table_number, discount, discount_label, notes, redeemed_points, redeemed_reward_id, redeemed_reward_data, appliedPromotions, promoDiscount } = useAppSelector((s) => s.cart)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -38,7 +39,6 @@ export function CheckoutPanel() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState<string>('')
   const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
-  const [showLoyalty, setShowLoyalty] = useState(false)
   const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
   const { data: loyaltyCard } = useGetLoyaltyCardQuery(customer_id ?? '', { skip: !customer_id || !hasLoyalty })
 
@@ -53,11 +53,19 @@ export function CheckoutPanel() {
   const productSavings = items.reduce((sum, i) => sum + Math.max(0, (i.original_price || i.price) - i.price) * i.quantity, 0)
   const actualSubtotal = subtotal - productSavings
 
+  const rewardDiscount = redeemed_reward_id && redeemed_reward_data
+    ? redeemed_reward_data.reward_type === 'percentage_discount' || (redeemed_reward_data.reward_type === 'custom' && redeemed_reward_data.discount_type === 'percentage')
+      ? Math.round(actualSubtotal * (redeemed_reward_data.discount_value || 0) / 100 * 100) / 100
+      : redeemed_reward_data.reward_type === 'fixed_discount' || (redeemed_reward_data.reward_type === 'custom' && redeemed_reward_data.discount_type === 'fixed')
+        ? Math.min(redeemed_reward_data.discount_value || 0, actualSubtotal)
+        : 0
+    : 0
+
   const computedTax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
     : Math.round(actualSubtotal * taxRate * 100) / 100
 
-  const totalDiscount = discount + promoDiscount
+  const totalDiscount = discount + promoDiscount + rewardDiscount
   const totalAmount = taxInclusive
     ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
     : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
@@ -144,6 +152,7 @@ export function CheckoutPanel() {
               }))
             : undefined,
           redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
+          redeemed_reward_id: redeemed_reward_id || undefined,
         })
 
         dispatch(rtkApi.util.invalidateTags([
@@ -182,6 +191,7 @@ export function CheckoutPanel() {
             }))
           : undefined,
         redeemed_points: redeemed_points > 0 ? redeemed_points : undefined,
+        redeemed_reward_id: redeemed_reward_id || undefined,
         payment_method: paymentRequired ? selectedMethod : undefined,
         cash_amount_given: isCash ? parsedCashGiven : undefined,
       })
@@ -212,12 +222,21 @@ export function CheckoutPanel() {
           params.set('changeDue', String(changeDue))
         }
       }
-      if (earnedPoints > 0 || redeemed_points > 0) {
+      const rewardPoints = redeemed_reward_data?.points_required ?? 0
+      const totalRedeemed = redeemed_points + rewardPoints
+      if (earnedPoints > 0 || totalRedeemed > 0) {
         params.set('pointsEarned', String(earnedPoints))
+        if (totalRedeemed > 0) {
+          params.set('pointsRedeemed', String(totalRedeemed))
+        }
         if (loyaltyCard?.points !== undefined) {
           params.set('pointsBefore', String(loyaltyCard.points))
-          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + (earnedPoints > 0 ? earnedPoints : -redeemed_points))))
+          params.set('pointsAfter', String(Math.max(0, loyaltyCard.points + earnedPoints - totalRedeemed)))
         }
+      }
+      if (rewardDiscount > 0) {
+        params.set('rewardDiscount', String(rewardDiscount))
+        params.set('rewardLabel', redeemed_reward_data?.name || 'Reward Discount')
       }
       router.push(`/pos/receipt?${params.toString()}`)
     } catch (err) {
@@ -252,18 +271,38 @@ export function CheckoutPanel() {
         <h2 className="font-headline font-bold text-lg text-on-surface">Review Cart</h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        <div className="space-y-2">
-          <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant">
-            Items ({items.length})
-          </h3>
-          {items.map((item, index) => (
-            <CartItemRow
-              key={`${item.product_id}-${index}`}
-              item={item}
-            />
-          ))}
-        </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-5">
+        {hasLoyalty && customer_id && (
+          <div>
+            {loyaltyCard ? (
+              <div>
+                <RewardsPanel cardId={loyaltyCard.id} points={loyaltyCard.points} />
+              </div>
+            ) : (
+              <EnrollPrompt
+                customerId={customer_id}
+                customerName={customer_name ?? 'this customer'}
+                onEnrolled={() => {
+                }}
+              />
+            )}
+          </div>
+        )}
+
+          <div className="space-y-2">
+            <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant">
+              Items ({items.length})
+            </h3>
+            <div className="space-y-2">
+              {items.map((item, index) => (
+                <CartItemRow
+                  key={`${item.product_id}-${index}`}
+                  item={item}
+                />
+              ))}
+            </div>
+          </div>
 
         {settings?.hasKitchen && (
           <div>
@@ -290,40 +329,6 @@ export function CheckoutPanel() {
           </div>
         )}
 
-        {hasLoyalty && customer_id && (
-          <div>
-            <button
-              onClick={() => setShowLoyalty(!showLoyalty)}
-              className="flex w-full items-center justify-between rounded-xl border border-outline-variant/60 bg-surface-container/40 px-4 py-3 text-sm font-bold text-on-surface hover:bg-surface-container/80 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <Stars className="h-4 w-4 text-primary" />
-                Loyalty Points
-              </span>
-              <span className="text-xs text-on-surface-variant">
-                {loyaltyCard
-                  ? `${loyaltyCard.points.toLocaleString()} pts`
-                  : 'Not enrolled'}
-              </span>
-            </button>
-            {showLoyalty && (
-              <div className="mt-3">
-                {loyaltyCard ? (
-                  <LoyaltyPanel isAdmin />
-                ) : (
-                  <EnrollPrompt
-                    customerId={customer_id}
-                    customerName={customer_name ?? 'this customer'}
-                    onEnrolled={() => {
-                      setShowLoyalty(false)
-                    }}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         <div>
           <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">
             Order Summary
@@ -335,12 +340,14 @@ export function CheckoutPanel() {
             appliedPromotions={appliedPromotions}
             promoDiscount={promoDiscount}
             productSavings={productSavings}
+            rewardDiscount={rewardDiscount}
             taxRate={taxRate}
             taxLabel={taxLabel}
             taxInclusive={taxInclusive}
             taxEnabled={taxEnabled}
             showTotal
           />
+          </div>
         </div>
       </div>
 

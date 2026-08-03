@@ -39,6 +39,7 @@ analyticsRouter.get('/sales', async (c) => {
     .eq('store_id', storeId)
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
+    .not('status', 'eq', 'cancelled')
     .not('status', 'eq', 'refunded')
     .order('created_at', { ascending: true })
 
@@ -56,10 +57,12 @@ analyticsRouter.get('/sales', async (c) => {
     .eq('store_id', storeId)
     .gte('created_at', prevStart.toISOString())
     .lte('created_at', prevEnd.toISOString())
+    .not('status', 'eq', 'cancelled')
+    .not('status', 'eq', 'refunded')
 
   const prevRevenue = (prevOrders || []).reduce((sum, o) => sum + Number(o.total || 0), 0)
   const prevOrderCount = (prevOrders || []).length
-  const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0
+  const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
 
   const isHourly = period === 'today' || (period === 'custom' && from && to && from === to)
 
@@ -107,7 +110,7 @@ analyticsRouter.get('/sales', async (c) => {
       orderCount,
       avgOrderValue: Math.round(avgOrderValue * 100) / 100,
       previousPeriodRevenue: Math.round(prevRevenue * 100) / 100,
-      revenueChange: Math.round(revenueChange * 10) / 10,
+      revenueChange: revenueChange === null ? null : Math.round(revenueChange * 10) / 10,
       revenueByTime,
     },
   })
@@ -126,7 +129,7 @@ analyticsRouter.get('/products', async (c) => {
 
   const { data: orders, error: ordersError } = await supabase
     .from('orders')
-    .select('id')
+    .select('id, subtotal, total')
     .eq('store_id', storeId)
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
@@ -135,14 +138,21 @@ analyticsRouter.get('/products', async (c) => {
 
   if (ordersError) throw badRequest(ordersError.message)
 
-  const orderIds = (orders || []).map((o) => o.id)
+  const orderTotals = new Map<string, { subtotal: number; total: number }>()
+  for (const order of orders || []) {
+    orderTotals.set(order.id, {
+      subtotal: Number(order.subtotal || 0),
+      total: Number(order.total || 0),
+    })
+  }
+  const orderIds = Array.from(orderTotals.keys())
   if (orderIds.length === 0) {
     return c.json({ data: [] })
   }
 
   const { data: items, error: itemsError } = await supabase
     .from('order_items')
-    .select('product_id, product_name, quantity, unit_price')
+    .select('order_id, product_id, product_name, quantity, unit_price')
     .in('order_id', orderIds)
 
   if (itemsError) throw badRequest(itemsError.message)
@@ -150,13 +160,18 @@ analyticsRouter.get('/products', async (c) => {
   const productMap = new Map<string, { name: string; quantity: number; revenue: number }>()
 
   for (const item of items || []) {
+    const order = orderTotals.get(item.order_id)
+    // Allocate net revenue: order.total is net of discounts (+/- tax), while the
+    // line item only knows its gross unit price. Scaling by total/subtotal makes
+    // product revenue sum exactly to the Revenue card.
+    const factor = order && order.subtotal > 0 ? Math.max(0, order.total) / order.subtotal : 0
     const existing = productMap.get(item.product_id) || {
       name: item.product_name || item.product_id,
       quantity: 0,
       revenue: 0,
     }
     existing.quantity += item.quantity
-    existing.revenue += item.quantity * Number(item.unit_price || 0)
+    existing.revenue += item.quantity * Number(item.unit_price || 0) * factor
     productMap.set(item.product_id, existing)
   }
 
@@ -187,10 +202,11 @@ analyticsRouter.get('/overview', async (c) => {
   const [ordersResult, prevOrdersResult, customersResult] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, total, type, payment_status, created_at, payments:payments(method, status, amount)')
+      .select('id, total, subtotal, tax, discount, promo_discount, metadata, type, payment_status, created_at, payments:payments(method, status, amount)')
       .eq('store_id', storeId)
       .gte('created_at', start.toISOString())
       .lte('created_at', end.toISOString())
+      .not('status', 'eq', 'cancelled')
       .not('status', 'eq', 'refunded'),
     supabase
       .from('orders')
@@ -198,6 +214,7 @@ analyticsRouter.get('/overview', async (c) => {
       .eq('store_id', storeId)
       .gte('created_at', prevStart.toISOString())
       .lte('created_at', prevEnd.toISOString())
+      .not('status', 'eq', 'cancelled')
       .not('status', 'eq', 'refunded'),
     supabase
       .from('customers')
@@ -216,6 +233,48 @@ analyticsRouter.get('/overview', async (c) => {
   const prevOrderCount = prevOrders.length
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0
   const prevAvgOrderValue = prevOrderCount > 0 ? prevRevenue / prevOrderCount : 0
+
+  let grossSales = 0
+  let discounts = 0
+  let taxCollected = 0
+  for (const order of orders) {
+    grossSales += Number(order.subtotal || 0)
+    taxCollected += Number(order.tax || 0)
+    const rewardDiscount = Number((order.metadata as Record<string, unknown> | null)?.redeemedRewardDiscount || 0)
+    discounts += Number(order.discount || 0) + Number(order.promo_discount || 0) + rewardDiscount
+  }
+
+  let itemsSold = 0
+  let cogs = 0
+  const orderIds = orders.map((o) => o.id)
+  if (orderIds.length > 0) {
+    const { data: orderItems } = await supabase
+      .from('order_items')
+      .select('product_id, quantity')
+      .in('order_id', orderIds)
+
+    const productIdSet = new Set<string>()
+    for (const item of orderItems || []) {
+      itemsSold += item.quantity
+      if (item.product_id) productIdSet.add(item.product_id)
+    }
+
+    const productIds = Array.from(productIdSet)
+    if (productIds.length > 0) {
+      const { data: products } = await supabase
+        .from('products')
+        .select('id, cost')
+        .in('id', productIds)
+      const costMap = new Map((products || []).map((p) => [p.id, p.cost]))
+      for (const item of orderItems || []) {
+        const cost = item.product_id ? costMap.get(item.product_id) : undefined
+        if (typeof cost === 'number' && cost > 0) cogs += item.quantity * cost
+      }
+    }
+  }
+
+  const grossProfit = revenue - cogs
+  const netProfit = grossProfit
 
   const TYPE_LABELS: Record<string, string> = {
     'dine-in': 'Dine-in',
@@ -239,13 +298,18 @@ analyticsRouter.get('/overview', async (c) => {
 
   const ordersByPayment: Record<string, number> = {}
   const revenueByPayment: Record<string, number> = {}
+  const countedOrderIds = new Set<string>()
   for (const order of orders) {
     const payments = (order as any).payments
     if (Array.isArray(payments) && payments.length > 0) {
       for (const p of payments) {
+        if (p.status !== 'completed') continue
         const method = METHOD_LABELS[p.method] || p.method || 'Other'
-        ordersByPayment[method] = (ordersByPayment[method] || 0) + 1
         revenueByPayment[method] = (revenueByPayment[method] || 0) + Number(p.amount || 0)
+        if (!countedOrderIds.has(order.id)) {
+          ordersByPayment[method] = (ordersByPayment[method] || 0) + 1
+          countedOrderIds.add(order.id)
+        }
       }
     } else if (order.payment_status === 'paid') {
       ordersByPayment['Other'] = (ordersByPayment['Other'] || 0) + 1
@@ -259,19 +323,26 @@ analyticsRouter.get('/overview', async (c) => {
     paymentStatusBreakdown[status] = (paymentStatusBreakdown[status] || 0) + 1
   }
 
-  const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : revenue > 0 ? 100 : 0
-  const orderChange = prevOrderCount > 0 ? ((orderCount - prevOrderCount) / prevOrderCount) * 100 : orderCount > 0 ? 100 : 0
-  const avgChange = prevAvgOrderValue > 0 ? ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100 : avgOrderValue > 0 ? 100 : 0
+  const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
+  const orderChange = prevOrderCount > 0 ? ((orderCount - prevOrderCount) / prevOrderCount) * 100 : null
+  const avgChange = prevAvgOrderValue > 0 ? ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100 : null
 
   return c.json({
     data: {
       revenue: Math.round(revenue * 100) / 100,
-      revenueChange: Math.round(revenueChange * 10) / 10,
+      revenueChange: revenueChange === null ? null : Math.round(revenueChange * 10) / 10,
       orderCount,
-      orderChange: Math.round(orderChange * 10) / 10,
+      orderChange: orderChange === null ? null : Math.round(orderChange * 10) / 10,
       avgOrderValue: Math.round(avgOrderValue * 100) / 100,
-      avgChange: Math.round(avgChange * 10) / 10,
+      avgChange: avgChange === null ? null : Math.round(avgChange * 10) / 10,
       newCustomers: customersResult.count || 0,
+      grossSales: Math.round(grossSales * 100) / 100,
+      discounts: Math.round(discounts * 100) / 100,
+      taxCollected: Math.round(taxCollected * 100) / 100,
+      itemsSold,
+      cogs: Math.round(cogs * 100) / 100,
+      grossProfit: Math.round(grossProfit * 100) / 100,
+      netProfit: Math.round(netProfit * 100) / 100,
       ordersByType,
       ordersByPayment,
       revenueByPayment,
@@ -293,6 +364,7 @@ analyticsRouter.get('/dashboard-stats', async (c) => {
     .select('id, total, status, created_at')
     .eq('store_id', storeId)
     .gte('created_at', todayStart.toISOString())
+    .not('status', 'eq', 'cancelled')
     .not('status', 'eq', 'refunded')
 
   if (error) throw badRequest(error.message)

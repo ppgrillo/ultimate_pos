@@ -10,6 +10,8 @@ interface OrderSummaryProps {
   appliedPromotions?: AppliedPromotion[]
   promoDiscount?: number
   productSavings?: number
+  rewardDiscount?: number
+  rewardDiscountLabel?: string
   tax?: number
   taxRate?: number
   taxLabel?: string
@@ -25,6 +27,8 @@ export function OrderSummary({
   appliedPromotions = [],
   promoDiscount = 0,
   productSavings = 0,
+  rewardDiscount = 0,
+  rewardDiscountLabel = 'Reward Discount',
   tax: taxOverride,
   taxRate = 0.08,
   taxLabel = 'Tax',
@@ -42,7 +46,7 @@ export function OrderSummary({
         : Math.round(actualSubtotal * taxRate * 100) / 100
     )
 
-  const totalDiscount = discount + promoDiscount
+  const totalDiscount = discount + promoDiscount + rewardDiscount
   const total = taxInclusive
       ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
       : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
@@ -82,6 +86,12 @@ export function OrderSummary({
         <div className="flex justify-between text-on-surface-variant text-xs">
           <span>Total savings</span>
           <span className="font-bold text-secondary">-{formatCurrency(productSavings + totalDiscount)}</span>
+        </div>
+      )}
+      {rewardDiscount > 0 && (
+        <div className="flex justify-between text-secondary">
+          <span>{rewardDiscountLabel}</span>
+          <span>-{formatCurrency(rewardDiscount)}</span>
         </div>
       )}
       {tax > 0 && (

@@ -12,6 +12,7 @@ import {
   calculatePromotionDiscount,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import { getAvailableRewards, createRedemption, revertRedemption } from '../services/rewards.service'
 import { orderBus } from '../events'
 
 export const selfCheckoutRouter = new Hono()
@@ -40,6 +41,14 @@ selfCheckoutRouter.get('/verify', async (c) => {
       station,
     },
   })
+})
+
+// GET /self-checkout/rewards/available/:cardId — rewards for a loyalty card
+selfCheckoutRouter.get('/rewards/available/:cardId', async (c) => {
+  const storeId = c.get('storeId')
+  const cardId = c.req.param('cardId')
+  const rewards = await getAvailableRewards(storeId, cardId)
+  return c.json({ data: rewards })
 })
 
 selfCheckoutRouter.get('/products', async (c) => {
@@ -188,7 +197,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
   const station = c.get('station')
 
   const body = await c.req.json()
-  const { items, customer_id, discount, discount_label } = body
+  const { items, customer_id, discount, discount_label, redeemed_reward_id } = body
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw badRequest('At least one item is required')
@@ -225,6 +234,29 @@ selfCheckoutRouter.post('/orders', async (c) => {
     .in('id', productIds)
 
   const productMap = new Map((products || []).map((p) => [p.id, p]))
+
+  // ── Reward fetching ──
+  let redeemedRewardData: {
+    id: string
+    name: string
+    reward_type: string
+    points_required: number
+    product_id?: string | null
+    discount_value?: number | null
+    discount_type?: string | null
+  } | null = null
+
+  if (redeemed_reward_id) {
+    const { data: reward } = await supabaseAdmin
+      .from('loyalty_rewards')
+      .select('id, name, reward_type, points_required, product_id, discount_value, discount_type')
+      .eq('id', redeemed_reward_id)
+      .eq('store_id', storeId)
+      .eq('is_active', true)
+      .single()
+
+    if (reward) redeemedRewardData = reward
+  }
 
   const { data: activeProductCategoryPromos } = await supabaseAdmin
     .from('promotions')
@@ -291,7 +323,17 @@ selfCheckoutRouter.post('/orders', async (c) => {
 
   const disc = discount || 0
   const promoDisc = validatedPromoDiscount
-  const totalDiscount = disc + promoDisc
+  let rewardDiscount = 0
+
+  if (redeemedRewardData && (redeemedRewardData.reward_type === 'percentage_discount' || redeemedRewardData.reward_type === 'fixed_discount' || redeemedRewardData.reward_type === 'custom')) {
+    if (redeemedRewardData.reward_type === 'percentage_discount' || (redeemedRewardData.reward_type === 'custom' && redeemedRewardData.discount_type === 'percentage')) {
+      rewardDiscount = Math.round(subtotal * (redeemedRewardData.discount_value || 0) / 100 * 100) / 100
+    } else {
+      rewardDiscount = Math.min(redeemedRewardData.discount_value || 0, subtotal)
+    }
+  }
+
+  const totalDiscount = disc + promoDisc + rewardDiscount
 
   let tax = 0
   if (taxEnabled && taxRate > 0) {
@@ -410,6 +452,44 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .eq('id', order.id)
   }
 
+  // ── Reward redemption ──
+  let rewardMeta: Record<string, unknown> = {}
+  if (redeemedRewardData && customer_id) {
+    const { getLoyaltyCard } = await import('../services/loyalty.service')
+    const card = await getLoyaltyCard(customer_id, storeId)
+    if (!card) throw badRequest('Customer must have an enrolled loyalty card to redeem rewards')
+
+    await createRedemption(
+      storeId,
+      redeemedRewardData.id,
+      card.id,
+      customer_id,
+      order.id,
+    )
+    rewardMeta = {
+      redeemedRewardId: redeemedRewardData.id,
+      redeemedRewardName: redeemedRewardData.name,
+      redeemedRewardType: redeemedRewardData.reward_type,
+      redeemedRewardPoints: redeemedRewardData.points_required,
+      redeemedRewardDiscount: rewardDiscount,
+    }
+  }
+
+  if (Object.keys(rewardMeta).length > 0) {
+    await supabaseAdmin
+      .from('orders')
+      .update({
+        metadata: {
+          stationId: station.id,
+          stationName: station.name,
+          source: 'self-checkout',
+          ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds, promotionUsageReverted: false } : {}),
+          ...rewardMeta,
+        },
+      })
+      .eq('id', order.id)
+  }
+
   const { error: paymentError } = await supabaseAdmin
     .from('payments')
     .insert({
@@ -478,8 +558,9 @@ selfCheckoutRouter.post('/orders', async (c) => {
           },
           [],
         ).catch(() => {})
+          await revertRedemption(order.id).catch(() => {})
 
-        await supabaseAdmin
+          await supabaseAdmin
           .from('orders')
           .update({
             status: 'cancelled',
@@ -518,8 +599,9 @@ selfCheckoutRouter.post('/orders', async (c) => {
       },
       [],
     ).catch(() => {})
+      await revertRedemption(order.id).catch(() => {})
 
-    await supabaseAdmin
+      await supabaseAdmin
       .from('orders')
       .update({
         status: 'cancelled',
@@ -608,6 +690,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
               meta,
               [],
             ).catch(() => {})
+            await revertRedemption(orderId).catch(() => {})
 
             updates.metadata = {
               ...(updates.metadata as Record<string, unknown>),
