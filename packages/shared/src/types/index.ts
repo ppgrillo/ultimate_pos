@@ -36,3 +36,8 @@ export type {
   PromotionValidationResponse,
   PromotionFormData,
 } from './promotion'
+export {
+  EXPENSE_CATEGORIES,
+  EXPENSE_TYPE_LABELS,
+} from './expense'
+export type { Expense, ExpenseType } from './expense'

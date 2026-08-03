@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, History, Star, Calendar, GripHorizontal, Search, UserPlus } from 'lucide-react'
+import { X, Star, Calendar, GripHorizontal, Search, UserPlus } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCustomerDrawerOpen } from '@/store/slices/posSlice'
 import { setSelectedCustomer, clearSelectedCustomer } from '@/store/slices/customersSlice'

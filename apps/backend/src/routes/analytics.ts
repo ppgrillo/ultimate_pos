@@ -199,7 +199,7 @@ analyticsRouter.get('/overview', async (c) => {
   const { start, end } = getDateRangeInTimezone(period, tz, from, to)
   const { prevStart, prevEnd } = getPreviousPeriodRange(start, end)
 
-  const [ordersResult, prevOrdersResult, customersResult] = await Promise.all([
+  const [ordersResult, prevOrdersResult, customersResult, expensesResult] = await Promise.all([
     supabase
       .from('orders')
       .select('id, total, subtotal, tax, discount, promo_discount, metadata, type, payment_status, created_at, payments:payments(method, status, amount)')
@@ -222,10 +222,24 @@ analyticsRouter.get('/overview', async (c) => {
       .eq('store_id', storeId)
       .gte('created_at', start.toISOString())
       .lte('created_at', end.toISOString()),
+    supabase
+      .from('expenses')
+      .select('amount, type')
+      .eq('store_id', storeId)
+      .gte('expense_date', getDateKeyInTimezone(start, tz))
+      .lte('expense_date', getDateKeyInTimezone(end, tz)),
   ])
 
   const orders = ordersResult.data || []
   const prevOrders = prevOrdersResult.data || []
+
+  let operatingExpenses = 0
+  let inventoryPurchases = 0
+  for (const expense of expensesResult.data || []) {
+    const amount = Number(expense.amount || 0)
+    if (expense.type === 'inventory') inventoryPurchases += amount
+    else operatingExpenses += amount
+  }
 
   const revenue = orders.reduce((sum, o) => sum + Number(o.total || 0), 0)
   const prevRevenue = prevOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
@@ -274,7 +288,7 @@ analyticsRouter.get('/overview', async (c) => {
   }
 
   const grossProfit = revenue - cogs
-  const netProfit = grossProfit
+  const netProfit = grossProfit - operatingExpenses
 
   const TYPE_LABELS: Record<string, string> = {
     'dine-in': 'Dine-in',
@@ -342,6 +356,8 @@ analyticsRouter.get('/overview', async (c) => {
       itemsSold,
       cogs: Math.round(cogs * 100) / 100,
       grossProfit: Math.round(grossProfit * 100) / 100,
+      operatingExpenses: Math.round(operatingExpenses * 100) / 100,
+      inventoryPurchases: Math.round(inventoryPurchases * 100) / 100,
       netProfit: Math.round(netProfit * 100) / 100,
       ordersByType,
       ordersByPayment,

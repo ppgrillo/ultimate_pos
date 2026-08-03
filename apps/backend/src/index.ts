@@ -22,6 +22,7 @@ import { promotionsRouter } from './routes/promotions'
 import { analyticsRouter } from './routes/analytics'
 import { checksRouter } from './routes/checks'
 import { rewardsRouter } from './routes/rewards'
+import { expensesRouter } from './routes/expenses'
 
 const app = new Hono()
 
@@ -49,6 +50,7 @@ app.route('/promotions', promotionsRouter)
 app.route('/analytics', analyticsRouter)
 app.route('/checks', checksRouter)
 app.route('/rewards', rewardsRouter)
+app.route('/expenses', expensesRouter)
 
 const port = Number(process.env.PORT) || 3001
 

@@ -7,7 +7,7 @@ import { useGetAnalyticsSalesQuery, useGetAnalyticsProductsQuery, useGetAnalytic
 import type { AnalyticsPeriod } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
-import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, CreditCard, RefreshCw } from 'lucide-react'
+import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -95,7 +95,6 @@ export default function AnalyticsPage() {
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
-  const acceptedPaymentMethods = useAppSelector((s) => s.storeConfig.currentStore?.settings?.acceptedPaymentMethods) ?? ['cash', 'card']
 
   const params = useMemo(
     () => ({

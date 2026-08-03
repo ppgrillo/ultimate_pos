@@ -1181,7 +1181,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-3">
                       <p className="text-sm font-bold text-on-surface">
-                        Your design changes are saved to the database, but they don't reach your users yet.
+                        Your design changes are saved to the database, but they don&apos;t reach your users yet.
                       </p>
                       <div className="grid gap-2.5 sm:grid-cols-3">
                         <div className="flex items-center gap-2.5 rounded-lg bg-surface-container/60 border border-outline-variant/30 px-3.5 py-2.5">

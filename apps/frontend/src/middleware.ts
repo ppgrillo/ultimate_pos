@@ -11,6 +11,7 @@ const protectedPaths = [
   '/orders',
   '/employees',
   '/customers',
+  '/expenses',
   '/settings',
 ]
 
@@ -76,6 +77,7 @@ export const config = {
     '/orders/:path*',
     '/employees/:path*',
     '/customers/:path*',
+    '/expenses/:path*',
     '/settings/:path*',
     '/apple-wallet/:path*',
   ],

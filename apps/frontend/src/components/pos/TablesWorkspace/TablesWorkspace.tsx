@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChefHat, ChevronDown, Clock3, ReceiptText, Table2, UtensilsCrossed, Wallet, X } from 'lucide-react'
+import { ChefHat, ChevronDown, Clock3, Table2, Wallet, X } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView } from '@/store/slices/posSlice'

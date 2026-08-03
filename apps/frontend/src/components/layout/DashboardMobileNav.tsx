@@ -1,6 +1,6 @@
 'use client'
 
-import { ShoppingCart, ClipboardList, ContactRound, BarChart3 } from 'lucide-react'
+import { ShoppingCart, ClipboardList, ContactRound, BarChart3, Receipt } from 'lucide-react'
 import { MobileBottomNav } from '@/components/ui/MobileBottomNav'
 import type { MobileTab } from '@/components/ui/MobileBottomNav'
 import { useAppSelector } from '@/store/hooks'
@@ -8,6 +8,7 @@ import { useAppSelector } from '@/store/hooks'
 const baseTabs: MobileTab[] = [
   { id: 'pos', label: 'POS', icon: ShoppingCart, href: '/pos' },
   { id: 'customers', label: 'Clientes', icon: ContactRound, href: '/customers' },
+  { id: 'expenses', label: 'Gastos', icon: Receipt, href: '/expenses' },
   { id: 'analytics', label: 'Stats', icon: BarChart3, href: '/analytics' },
 ]
 
@@ -26,7 +27,7 @@ export function DashboardMobileNav() {
       ? { id: 'orders', label: 'Kitchen Orders', icon: ClipboardList, href: '/orders/kitchen' }
       : { id: 'orders', label: 'Sales Orders', icon: ClipboardList, href: '/orders/sales' }
 
-  const tabsWithOrders: MobileTab[] = [posTab, orderTab, baseTabs[1], baseTabs[2]]
+  const tabsWithOrders: MobileTab[] = [posTab, orderTab, baseTabs[1], baseTabs[2], baseTabs[3]]
 
   const tabs = tabsWithOrders.map((tab) =>
     tab.id === 'pos' ? { ...tab, badge: cartCount } : tab,

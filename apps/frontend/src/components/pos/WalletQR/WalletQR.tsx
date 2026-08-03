@@ -1,6 +1,6 @@
 'use client'
 
-import { QrCode, Smartphone, MessageCircle } from 'lucide-react'
+import { Smartphone, MessageCircle } from 'lucide-react'
 import { useState } from 'react'
 
 interface WalletQRProps {

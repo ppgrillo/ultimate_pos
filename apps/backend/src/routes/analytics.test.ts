@@ -123,6 +123,7 @@ describe('analytics routes', () => {
       { table: 'orders', value: currentQuery },
       { table: 'orders', value: prevQuery },
       { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
+      { table: 'expenses', value: listQuery({ data: [], error: null }) },
       { table: 'order_items', value: listQuery({ data: [], error: null }) },
     ])
 
@@ -145,6 +146,8 @@ describe('analytics routes', () => {
     expect(body.data.itemsSold).toBe(0)
     expect(body.data.cogs).toBe(0)
     expect(body.data.grossProfit).toBe(350)
+    expect(body.data.operatingExpenses).toBe(0)
+    expect(body.data.inventoryPurchases).toBe(0)
     expect(body.data.netProfit).toBe(350)
     // No previous period data → changes must be null, not a fake 100%
     expect(body.data.revenueChange).toBeNull()
@@ -176,6 +179,7 @@ describe('analytics routes', () => {
       { table: 'orders', value: listQuery({ data: [discountedOrder], error: null }) },
       { table: 'orders', value: listQuery({ data: [], error: null }) },
       { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
+      { table: 'expenses', value: listQuery({ data: [], error: null }) },
       {
         table: 'order_items',
         value: listQuery({
@@ -212,7 +216,56 @@ describe('analytics routes', () => {
     // p1: 2×100 = 200 ; p2 has no cost ; custom items have no cost
     expect(body.data.cogs).toBe(200)
     expect(body.data.grossProfit).toBe(650)
+    expect(body.data.operatingExpenses).toBe(0)
+    expect(body.data.inventoryPurchases).toBe(0)
     expect(body.data.netProfit).toBe(650)
+  })
+
+  it('GET /overview subtracts operating expenses from net profit but ignores inventory purchases', async () => {
+    const paidOrder = {
+      id: 'o1',
+      status: 'paid',
+      payment_status: 'paid',
+      type: 'takeaway',
+      subtotal: 350,
+      tax: 0,
+      discount: 0,
+      promo_discount: 0,
+      metadata: {},
+      total: 350,
+      created_at: '2026-07-31T19:32:52.161Z',
+      payments: [{ method: 'cash', status: 'completed', amount: '350.00' }],
+    }
+    queueFromCalls([
+      { table: 'orders', value: listQuery({ data: [paidOrder], error: null }) },
+      { table: 'orders', value: listQuery({ data: [], error: null }) },
+      { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
+      {
+        table: 'expenses',
+        value: listQuery({
+          data: [
+            { amount: 100, type: 'operating' },
+            { amount: 25.5, type: 'operating' },
+            { amount: 300, type: 'inventory' },
+          ],
+          error: null,
+        }),
+      },
+      { table: 'order_items', value: listQuery({ data: [], error: null }) },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/analytics/overview?${CUSTOM_PARAMS}`, {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // operating: 100 + 25.5 = 125.5 → net profit = 350 − 125.5 = 224.5
+    expect(body.data.operatingExpenses).toBe(125.5)
+    // inventory purchases are tracked but never reduce net profit (COGS covers it)
+    expect(body.data.inventoryPurchases).toBe(300)
+    expect(body.data.grossProfit).toBe(350)
+    expect(body.data.netProfit).toBe(224.5)
   })
 
   it('GET /products allocates net revenue across line items', async () => {

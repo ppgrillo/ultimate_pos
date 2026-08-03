@@ -18,6 +18,8 @@ import type {
   Store,
   StoreSettings,
   ScanLoyaltyResult,
+  Expense,
+  ExpenseType,
 } from '@ultimate-pos/shared'
 
 export interface CustomerWithLoyalty extends Customer {
@@ -73,6 +75,8 @@ export interface AnalyticsOverview {
   itemsSold: number
   cogs: number
   grossProfit: number
+  operatingExpenses: number
+  inventoryPurchases: number
   netProfit: number
   ordersByType: Record<string, number>
   ordersByPayment: Record<string, number>
@@ -90,6 +94,15 @@ export interface CustomerSummary {
 }
 
 export type OrderTab = 'active' | 'completed' | 'all'
+
+export interface ExpenseInput {
+  type: ExpenseType
+  category: string
+  description: string
+  amount: number
+  expense_date?: string
+  receipt_url?: string | null
+}
 
 export interface ProductUpsertInput {
   name: string
@@ -175,7 +188,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Analytics'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -681,6 +694,87 @@ export const api = createApi({
       invalidatesTags: (_result, _error, { id }) => [{ type: 'Reward', id }, { type: 'Reward', id: 'LIST' }],
     }),
 
+    // ── Expense endpoints ──
+    getExpenses: builder.query<Expense[], { from?: string; to?: string; type?: ExpenseType | ''; category?: string }>({
+      query: (params) => ({
+        url: '/expenses',
+        params: {
+          ...(params.from ? { from: params.from } : {}),
+          ...(params.to ? { to: params.to } : {}),
+          ...(params.type ? { type: params.type } : {}),
+          ...(params.category ? { category: params.category } : {}),
+        },
+      }),
+      transformResponse: (response: { data: Expense[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [{ type: 'Expense' as const, id: 'LIST' }, ...result.map((item) => ({ type: 'Expense' as const, id: item.id }))]
+          : [{ type: 'Expense' as const, id: 'LIST' }],
+    }),
+    getExpenseSummary: builder.query<{ operatingTotal: number; inventoryTotal: number; count: number }, { from?: string; to?: string }>({
+      query: (params) => ({
+        url: '/expenses/summary',
+        params: {
+          ...(params.from ? { from: params.from } : {}),
+          ...(params.to ? { to: params.to } : {}),
+        },
+      }),
+      transformResponse: (response: { data: { operatingTotal: number; inventoryTotal: number; count: number } }) => response.data,
+      providesTags: ['Analytics'],
+    }),
+    createExpense: builder.mutation<Expense, ExpenseInput>({
+      query: (body) => ({
+        url: '/expenses',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: Expense }) => response.data,
+      invalidatesTags: [{ type: 'Expense', id: 'LIST' }, { type: 'Analytics' }],
+    }),
+    updateExpense: builder.mutation<Expense, { id: string; body: ExpenseInput }>({
+      query: ({ id, body }) => ({
+        url: `/expenses/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: { data: Expense }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: 'Expense', id },
+        { type: 'Expense', id: 'LIST' },
+        { type: 'Analytics' },
+      ],
+    }),
+    deleteExpense: builder.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `/expenses/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: 'Expense', id },
+        { type: 'Expense', id: 'LIST' },
+        { type: 'Analytics' },
+      ],
+    }),
+    uploadReceipt: builder.mutation<{ url: string }, File>({
+      query: (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        return {
+          url: '/expenses/upload-receipt',
+          method: 'POST',
+          body: formData,
+        }
+      },
+      transformResponse: (response: { data: { url: string } }) => response.data,
+    }),
+    deleteReceipt: builder.mutation<{ success: boolean }, { url: string }>({
+      query: ({ url }) => ({
+        url: '/expenses/upload-receipt',
+        method: 'DELETE',
+        body: { url },
+      }),
+    }),
+
     // ── Analytics endpoints ──
     getDashboardStats: builder.query<DashboardStats, { tz?: string }>({
       query: (params) => ({
@@ -709,6 +803,7 @@ export const api = createApi({
         params: { period: params.period, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}), ...(params.tz ? { tz: params.tz } : {}) },
       }),
       transformResponse: (response: { data: AnalyticsOverview }) => response.data,
+      providesTags: ['Analytics'],
     }),
   }),
 })
@@ -775,4 +870,11 @@ export const {
   useGetAnalyticsSalesQuery,
   useGetAnalyticsProductsQuery,
   useGetAnalyticsOverviewQuery,
+  useGetExpensesQuery,
+  useGetExpenseSummaryQuery,
+  useCreateExpenseMutation,
+  useUpdateExpenseMutation,
+  useDeleteExpenseMutation,
+  useUploadReceiptMutation,
+  useDeleteReceiptMutation,
 } = api
