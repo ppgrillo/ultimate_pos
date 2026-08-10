@@ -18,6 +18,7 @@ import { useGetOrderByIdQuery, usePayOrderMutation } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { getKitchenStatusLabel, getKitchenTimeline } from '@ultimate-pos/shared'
 import { CollectPaymentModal } from '@/components/orders/CollectPaymentModal'
+import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
 
 interface OrderDetailModalProps {
   order: Order | null
@@ -34,6 +35,7 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
   const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
   const mpPointEnabled = (settings?.mpPointEnabled as boolean) ?? false
+  const activeCardProvider = getActiveCardProvider(settings)
   const acceptedMethods = (settings?.acceptedPaymentMethods as PaymentMethod[]) ?? ['cash', 'card', 'transfer']
   const statusTimeline = getKitchenTimeline(workflow)
   const [showPayModal, setShowPayModal] = useState(false)
@@ -234,6 +236,8 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
           onOpenChange={setShowPayModal}
           total={displayOrder.total}
           mpPointEnabled={mpPointEnabled}
+          cardProviderLabel={cardProviderShortName(activeCardProvider)}
+          providerName={activeCardProvider}
           acceptedMethods={acceptedMethods}
           onPay={async (paymentMethod, cashGiven) => {
             const result = await payOrder({

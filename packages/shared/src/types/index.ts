@@ -1,5 +1,10 @@
 export type { Product, ProductCategory, ModifierGroup, ModifierOption } from './product'
 export type {
+  CardPaymentProviderName,
+  CardOrderStatus,
+  OrderPaymentMetadata,
+} from './payments'
+export type {
   Order,
   OrderItem,
   OrderStatus,

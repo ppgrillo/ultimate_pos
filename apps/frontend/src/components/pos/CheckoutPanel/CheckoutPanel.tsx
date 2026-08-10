@@ -15,6 +15,7 @@ import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PromoModal } from '@/components/pos/PromoModal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { getActiveCardProvider, cardProviderShortName, readOrderPayment } from '@/lib/card-payments'
 
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { EnrollPrompt } from '@/components/pos/EnrollPrompt'
@@ -78,6 +79,7 @@ export function CheckoutPanel() {
   const cashValid = parsedCashGiven >= totalAmount
   const canSubmit = !paymentRequired || (selectedMethod !== null && (!isCash || cashValid))
   const mpPointEnabled = settings?.mpPointEnabled ?? false
+  const activeCardProvider = getActiveCardProvider(settings)
 
   const handleMethodChange = useCallback((method: PaymentMethod) => {
     setSelectedMethod(method)
@@ -172,7 +174,7 @@ export function CheckoutPanel() {
         return
       }
 
-      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string }; earned_points?: number } }>('/orders', {
+      const res = await api.post<{ data: { id: string; metadata?: unknown; earned_points?: number } }>('/orders', {
         customer_id: customer_id || undefined,
         table_number: table_number || undefined,
         type: order_type,
@@ -196,7 +198,8 @@ export function CheckoutPanel() {
         cash_amount_given: isCash ? parsedCashGiven : undefined,
       })
 
-      if (isMpPoint && res.data?.metadata?.mpOrderId) {
+      const paymentInfo = readOrderPayment(res.data?.metadata)
+      if (isMpPoint && paymentInfo.providerOrderId) {
         setSubmitting(false)
         setMpPaymentOrderId(res.data.id)
         return
@@ -370,6 +373,7 @@ export function CheckoutPanel() {
                 acceptedMethods={acceptedMethods}
                 amount={totalAmount}
                 mpPointEnabled={mpPointEnabled}
+                cardProviderLabel={cardProviderShortName(activeCardProvider)}
               />
             </div>
 
@@ -472,6 +476,7 @@ export function CheckoutPanel() {
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
         orderId={mpPaymentOrderId}
         total={totalAmount}
+        providerName={activeCardProvider}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}
       />

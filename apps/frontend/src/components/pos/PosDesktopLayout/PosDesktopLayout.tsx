@@ -19,6 +19,7 @@ import { setActiveView, setKitchenNotice, setSearchQuery, setSelectedCategory } 
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setQuickSaleOpen } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
+import { getActiveCardProvider, cardProviderShortName, readOrderPayment } from '@/lib/card-payments'
 import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import { LayoutPanelTop, ShoppingBag, Search, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -90,6 +91,8 @@ export function PosDesktopLayout({
   const checkoutMode = settings?.checkoutMode ?? 'order-only'
   const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
   const mpPointEnabled = settings?.mpPointEnabled ?? false
+  const activeCardProvider = getActiveCardProvider(settings)
+  const cardProviderLabel = cardProviderShortName(activeCardProvider)
 
   const computedTax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
@@ -165,7 +168,7 @@ export function PosDesktopLayout({
         return
       }
 
-      const res = await api.post<{ data: { id: string; metadata: { mpOrderId?: string }; earned_points?: number } }>('/orders', {
+      const res = await api.post<{ data: { id: string; metadata?: unknown; earned_points?: number } }>('/orders', {
         customer_id: customer_id || undefined,
         table_number: table_number || undefined,
         type: order_type,
@@ -186,7 +189,7 @@ export function PosDesktopLayout({
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
       })
-      if (isMpPoint && res.data?.metadata?.mpOrderId) {
+      if (isMpPoint && readOrderPayment(res.data?.metadata).providerOrderId) {
         setSubmitting(false)
         setMpPaymentOrderId(res.data.id)
         return
@@ -325,6 +328,7 @@ export function PosDesktopLayout({
           onConfirm={checkToClose ? handleCloseCheckPayment : handlePaymentConfirm}
           acceptedMethods={acceptedMethods}
           mpPointEnabled={mpPointEnabled}
+          cardProviderLabel={cardProviderLabel}
           isLoading={submitting || closingCheck}
         />
       </div>
@@ -519,6 +523,7 @@ export function PosDesktopLayout({
         onConfirm={checkToClose ? handleCloseCheckPayment : handlePaymentConfirm}
         acceptedMethods={acceptedMethods}
         mpPointEnabled={mpPointEnabled}
+        cardProviderLabel={cardProviderLabel}
         isLoading={submitting || closingCheck}
       />
 
@@ -527,6 +532,7 @@ export function PosDesktopLayout({
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
         orderId={mpPaymentOrderId}
         total={totalAmount}
+        providerName={activeCardProvider}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}
       />

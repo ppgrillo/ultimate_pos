@@ -10,6 +10,7 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 import { OpenChecksPanel } from '@/components/pos/OpenChecksPanel/OpenChecksPanel'
 import { PaymentModal } from '@/components/pos/PaymentModal'
 import { useCloseCheckMutation } from '@/store/api'
+import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
 import type { Check, PaymentMethod } from '@ultimate-pos/shared'
 
 export function PosCart() {
@@ -150,6 +151,7 @@ export function PosCart() {
         onConfirm={handleCloseCheckPayment}
         acceptedMethods={settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']}
         mpPointEnabled={settings?.mpPointEnabled ?? false}
+        cardProviderLabel={cardProviderShortName(getActiveCardProvider(settings))}
         isLoading={closingCheck}
       />
     </div>

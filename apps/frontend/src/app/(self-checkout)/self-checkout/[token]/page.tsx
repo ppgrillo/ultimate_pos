@@ -12,13 +12,14 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { getActiveCardProvider } from '@/lib/card-payments'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/self-checkout/CustomizeProduct'
 // LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
-import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse } from '@ultimate-pos/shared'
+import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse, CardPaymentProviderName } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
   X,
@@ -74,6 +75,7 @@ export default function SelfCheckoutPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [storeName, setStoreName] = useState('')
   const [stationName, setStationName] = useState('')
+  const [stationProvider, setStationProvider] = useState<CardPaymentProviderName>('mercado_pago')
   const [storeSlug, setStoreSlug] = useState('')
   const [taxRate, setTaxRate] = useState(0)
   const [taxEnabled, setTaxEnabled] = useState(false)
@@ -182,7 +184,7 @@ export default function SelfCheckoutPage() {
   async function loadData() {
     try {
       const [verifyRes, productsRes, categoriesRes, promosRes] = await Promise.all([
-        api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string } } }>('/self-checkout/verify'),
+        api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string; provider?: CardPaymentProviderName } } }>('/self-checkout/verify'),
         api.get<{ data: Product[] }>('/self-checkout/products'),
         api.get<{ data: ProductCategory[] }>('/self-checkout/categories'),
         api.get<{ data: Promotion[] }>('/promotions').catch(() => ({ data: [] })),
@@ -193,6 +195,7 @@ export default function SelfCheckoutPage() {
       setStoreName(storeData.name)
       setStoreSlug(storeData.slug)
       setStationName(verifyRes.data.station.name)
+      setStationProvider(verifyRes.data.station.provider ?? getActiveCardProvider(settings))
       setTaxRate(storeData.tax_rate ? Number(storeData.tax_rate) / 100 : 0)
       setTaxEnabled((settings?.taxEnabled as boolean) ?? false)
       setTaxLabel((settings?.taxLabel as string) ?? 'Tax')
@@ -668,7 +671,7 @@ export default function SelfCheckoutPage() {
     if (cartItems.length === 0) return
     setIsCreatingOrder(true)
     try {
-      const json = await apiFetch<{ data: { id: string; metadata: { mpOrderId: string } } }>(
+      const json = await apiFetch<{ data: { id: string; metadata?: unknown } }>(
         '/orders',
         {
           method: 'POST',
@@ -2043,6 +2046,7 @@ export default function SelfCheckoutPage() {
         }
         onPaid={handlePaid}
         onCancel={handlePaymentCancel}
+        providerName={stationProvider}
         fetchOrder={(id) => apiFetch<any>(`/orders/${id}`)}
       />
 

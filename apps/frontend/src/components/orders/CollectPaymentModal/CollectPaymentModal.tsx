@@ -5,17 +5,20 @@ import { Lock, Banknote, BadgeCheck, Bolt } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { readOrderPayment } from '@/lib/card-payments'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalClose } from '@/components/ui/Modal'
-import type { PaymentMethod } from '@ultimate-pos/shared'
+import type { CardPaymentProviderName, PaymentMethod } from '@ultimate-pos/shared'
 
 interface CollectPaymentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   total: number
-  onPay: (paymentMethod: PaymentMethod, cashGiven?: number) => Promise<{ id: string; metadata?: { mpOrderId?: string } }>
+  onPay: (paymentMethod: PaymentMethod, cashGiven?: number) => Promise<{ id: string; metadata?: unknown }>
   onPaid: (data?: { orderId?: string; paymentMethod?: string; changeDue?: number; total?: number }) => void
   mpPointEnabled?: boolean
   acceptedMethods?: PaymentMethod[]
+  cardProviderLabel?: string
+  providerName?: CardPaymentProviderName
 }
 
 export function CollectPaymentModal({
@@ -26,6 +29,8 @@ export function CollectPaymentModal({
   onPaid,
   mpPointEnabled = false,
   acceptedMethods = ['cash', 'card', 'transfer'],
+  cardProviderLabel = 'Point',
+  providerName = 'mercado_pago',
 }: CollectPaymentModalProps) {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState<string>('')
@@ -83,7 +88,8 @@ export function CollectPaymentModal({
         isCash ? parsedCashGiven : undefined,
       )
 
-      if (isMpPoint && result.metadata?.mpOrderId) {
+      const paymentInfo = readOrderPayment(result.metadata)
+      if (isMpPoint && paymentInfo.providerOrderId) {
         setSubmitting(false)
         setMpPaymentOrderId(result.id)
         return
@@ -128,6 +134,7 @@ export function CollectPaymentModal({
                 acceptedMethods={acceptedMethods}
                 amount={total}
                 mpPointEnabled={mpPointEnabled}
+                cardProviderLabel={cardProviderLabel}
                 layout="horizontal"
               />
             </div>
@@ -222,6 +229,7 @@ export function CollectPaymentModal({
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
         orderId={mpPaymentOrderId}
         total={total}
+        providerName={providerName}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}
       />

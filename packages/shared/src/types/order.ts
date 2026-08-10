@@ -1,6 +1,7 @@
 import type { Payment } from './customer'
 import type { AppliedPromotion } from './promotion'
 import type { RewardType } from './loyalty'
+import type { OrderPaymentMetadata } from './payments'
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled' | 'refunded'
 
@@ -211,6 +212,7 @@ export interface OrderMetadata {
   mpOrderId?: string
   mpOrderStatus?: 'created' | 'at_terminal' | 'processing' | 'processed' | 'failed' | 'expired' | 'canceled' | 'refunded' | 'action_required'
   mpStatusDetail?: string
+  payment?: OrderPaymentMetadata
   redeemedRewardId?: string
   redeemedRewardName?: string
   redeemedRewardType?: RewardType

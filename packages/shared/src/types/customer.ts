@@ -60,6 +60,7 @@ export interface Payment {
   amount: number
   method: 'cash' | 'card' | 'transfer' | 'wallet' | 'other'
   status: 'pending' | 'completed' | 'failed' | 'refunded'
+  provider?: string
   reference: string | null
   amount_given?: number | null
   change_due?: number | null

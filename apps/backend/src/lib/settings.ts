@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 
 const ENCRYPTED_PREFIX = 'enc:'
-const SENSITIVE_KEYS = ['mpPointAccessToken', 'mpClientSecret']
+const SENSITIVE_KEYS = ['mpPointAccessToken', 'mpClientSecret', 'clipApiKey', 'clipApiSecret']
 
 function getKey(): Buffer {
   const secret = process.env.SETTINGS_ENCRYPTION_KEY || process.env.NEXTAUTH_SECRET

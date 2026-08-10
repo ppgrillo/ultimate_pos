@@ -1,9 +1,15 @@
 import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { orderBus } from '../events'
-import { mpService } from '../services/mp-point'
 import { decryptSettings } from '../lib/settings'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import {
+  getCardProvider,
+  getProviderCredentials,
+  getActiveCardProvider,
+} from '../services/payments'
+import { buildPaymentMetadata } from '../services/payments/metadata'
+import type { CardOrderStatus } from '../services/payments/types'
 
 export const webhooksRouter = new Hono()
 
@@ -70,7 +76,7 @@ async function enrichOrder(order: Record<string, unknown>) {
   }
 }
 
-const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string; mpStatus: string }> = {
+const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string; mpStatus: CardOrderStatus }> = {
   'order.created': { mpStatus: 'created' },
   'order.at_terminal': { mpStatus: 'at_terminal' },
   'order.processing': { mpStatus: 'processing' },
@@ -113,6 +119,7 @@ webhooksRouter.post('/mp-point', async (c) => {
   }
 
   const storeId = orderData.store_id
+  let storeSettings: Record<string, unknown> = {}
   if (storeId) {
     const { data: store } = await supabaseAdmin
       .from('stores')
@@ -120,7 +127,7 @@ webhooksRouter.post('/mp-point', async (c) => {
       .eq('id', storeId)
       .single()
 
-    const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+    storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
     const clientSecret = storeSettings?.mpClientSecret as string | undefined
 
     if (clientSecret) {
@@ -140,34 +147,34 @@ webhooksRouter.post('/mp-point', async (c) => {
     return c.json({ message: 'Already processed' }, 200)
   }
 
-  // Fetch granular payment detail from MP API for terminal states
+  // Fetch granular payment detail from the provider API for terminal states
   let mpPaymentDetail: string | undefined
   let mpPaymentStatus: string | undefined
+  const cardProvider = getCardProvider(getActiveCardProvider(storeSettings))
   if (['processed', 'failed', 'canceled', 'expired'].includes(mapping.mpStatus) && storeId) {
     try {
-      const { data: store } = await supabaseAdmin
-        .from('stores')
-        .select('settings')
-        .eq('id', storeId)
-        .single()
-      const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-      const accessToken = storeSettings?.mpPointAccessToken as string
-      if (accessToken) {
-        const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
-        mpPaymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
-        mpPaymentStatus = mpOrder.transactions?.payments?.[0]?.status
+      const credentials = getProviderCredentials(storeSettings)
+      if (credentials.accessToken) {
+        const payment = await cardProvider.getPayment(mpOrderId, credentials)
+        mpPaymentDetail = payment.paymentDetail
+        mpPaymentStatus = payment.paymentStatus
       }
     } catch {
       // Fallback — use action-based detail
     }
   }
 
-  const metadata: Record<string, unknown> = {
-    ...currentMetadata,
-    ...((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
-    mpOrderStatus: mapping.mpStatus,
-    mpPaymentDetail: mpPaymentDetail || mapping.mpStatus,
-  }
+  const provider = getActiveCardProvider(storeSettings)
+  const metadata = buildPaymentMetadata(
+    {
+      ...currentMetadata,
+      ...((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
+    },
+    provider,
+    mpOrderId,
+    mapping.mpStatus,
+    mpPaymentDetail || mapping.mpStatus,
+  )
 
   const updateData: Record<string, unknown> = {
     metadata,

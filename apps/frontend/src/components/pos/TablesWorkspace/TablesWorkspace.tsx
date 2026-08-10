@@ -8,6 +8,7 @@ import { setActiveView } from '@/store/slices/posSlice'
 import { setOrderType, setTable } from '@/store/slices/cartSlice'
 import { useCloseCheckMutation, useGetCheckByIdQuery, useGetChecksQuery, useVoidCheckMutation } from '@/store/api'
 import { PaymentModal } from '@/components/pos/PaymentModal'
+import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
 import { SecureActionDialog } from '@/components/ui/SecureActionDialog'
 import type { Check, KitchenWorkflowConfig, PaymentMethod } from '@ultimate-pos/shared'
 import { getKitchenStatusLabel } from '@ultimate-pos/shared'
@@ -358,6 +359,7 @@ export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps
           onConfirm={handleLocalCloseConfirm}
           acceptedMethods={settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']}
           mpPointEnabled={settings?.mpPointEnabled ?? false}
+          cardProviderLabel={cardProviderShortName(getActiveCardProvider(settings))}
           isLoading={closingCheck}
         />
       )}

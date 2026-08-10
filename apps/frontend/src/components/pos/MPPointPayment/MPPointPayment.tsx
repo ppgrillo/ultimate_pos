@@ -8,6 +8,8 @@ import {
 import { useAppSelector } from '@/store/hooks'
 import { api } from '@/lib/api/client'
 import { formatCurrency } from '@/lib/utils'
+import type { CardPaymentProviderName } from '@ultimate-pos/shared'
+import { cardProviderDisplayName, readOrderPayment } from '@/lib/card-payments'
 import {
   CreditCard,
   CheckCircle2,
@@ -31,6 +33,7 @@ interface MPPointPaymentProps {
   orderId: string | null
   isCreating?: boolean
   total: number
+  providerName?: CardPaymentProviderName
   onPaid: (loyalty?: LoyaltyData) => void
   onCancel: () => void
   fetchOrder?: (orderId: string) => Promise<{ data: OrderResponse }>
@@ -48,13 +51,13 @@ const STATE_CONFIG: Record<PaymentState, {
   created: {
     icon: Loader2,
     title: 'Enviando orden a la terminal...',
-    description: 'Comunicándose con la terminal Point',
+    description: 'Comunicándose con la terminal',
     color: 'text-primary',
     bg: 'bg-primary/10',
   },
   at_terminal: {
     icon: Smartphone,
-    title: 'Acerca la tarjeta a la terminal Point',
+    title: 'Acerca la tarjeta a la terminal',
     description: 'La terminal está lista para recibir el pago',
     color: 'text-primary',
     bg: 'bg-primary/10',
@@ -90,7 +93,7 @@ const STATE_CONFIG: Record<PaymentState, {
   failed_in_review: {
     icon: Clock,
     title: 'Pago en revisión',
-    description: 'El pago está siendo revisado por MercadoPago. Te notificaremos cuando se resuelva.',
+    description: 'El pago está siendo revisado por el proveedor. Te notificaremos cuando se resuelva.',
     color: 'text-warning',
     bg: 'bg-warning/10',
   },
@@ -118,7 +121,7 @@ const STATE_CONFIG: Record<PaymentState, {
   canceled_by_terminal: {
     icon: XCircle,
     title: 'Pago cancelado en terminal',
-    description: 'El pago fue cancelado desde la terminal Point',
+    description: 'El pago fue cancelado desde la terminal',
     color: 'text-on-surface-variant',
     bg: 'bg-surface-container',
   },
@@ -134,7 +137,7 @@ const STATE_CONFIG: Record<PaymentState, {
 type OrderResponse = {
   status?: string
   payment_status?: string
-  metadata?: { mpOrderStatus?: string; mpPaymentDetail?: string }
+  metadata?: Record<string, unknown>
   loyalty?: LoyaltyData
 }
 
@@ -142,8 +145,7 @@ function toPaymentState(res: OrderResponse | undefined): PaymentState | undefine
   if (!res) return undefined
   if (res.status === 'paid' || res.payment_status === 'paid') return 'paid'
 
-  const raw = res.metadata?.mpOrderStatus
-  const detail = res.metadata?.mpPaymentDetail
+  const { providerStatus: raw, detail } = readOrderPayment(res.metadata)
 
   if (raw === 'processed') return 'paid'
 
@@ -165,12 +167,13 @@ function toPaymentState(res: OrderResponse | undefined): PaymentState | undefine
   return undefined
 }
 
-export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total, onPaid, onCancel, fetchOrder }: MPPointPaymentProps) {
+export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total, providerName = 'mercado_pago', onPaid, onCancel, fetchOrder }: MPPointPaymentProps) {
   const orderFromStore = useAppSelector((s) => {
     if (!orderId) return undefined
     const state = s as { order?: { items?: Array<{ id: string; metadata?: Record<string, unknown> }> } }
     return state.order?.items?.find((o) => o.id === orderId)
   })
+  const providerLabel = cardProviderDisplayName(providerName)
   const [localState, setLocalState] = useState<PaymentState>('created')
   const [loyaltyData, setLoyaltyData] = useState<LoyaltyData | undefined>(undefined)
   const hasRedirected = useRef(false)
@@ -334,7 +337,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             <div className="w-full space-y-2">
               <div className="rounded-xl bg-error/10 border border-error/30 p-3 text-left">
                 <p className="text-xs text-error">
-                  El pago fue rechazado por el sistema de seguridad de MercadoPago. Esto puede deberse a un intento de fraude o datos incorrectos de la tarjeta.
+                  El pago fue rechazado por el sistema de seguridad de {providerLabel}. Esto puede deberse a un intento de fraude o datos incorrectos de la tarjeta.
                 </p>
               </div>
               <div className="flex gap-2">
@@ -361,7 +364,7 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
             <div className="w-full space-y-2">
               <div className="rounded-xl bg-warning/10 border border-warning/30 p-3 text-left">
                 <p className="text-xs text-warning">
-                  El pago está siendo revisado por MercadoPago. Esto puede tomar unos minutos. Te notificaremos cuando se resuelva.
+                  El pago está siendo revisado por {providerLabel}. Esto puede tomar unos minutos. Te notificaremos cuando se resuelva.
                 </p>
               </div>
               <button

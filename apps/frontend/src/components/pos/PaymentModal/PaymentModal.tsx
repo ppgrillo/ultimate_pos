@@ -20,10 +20,11 @@ interface PaymentModalProps {
   onConfirm: (method: PaymentMethod, cashGiven?: number) => void
   acceptedMethods?: PaymentMethod[]
   mpPointEnabled?: boolean
+  cardProviderLabel?: string
   isLoading?: boolean
 }
 
-export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, isLoading }: PaymentModalProps) {
+export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, cardProviderLabel, isLoading }: PaymentModalProps) {
   const [selected, setSelected] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState('')
   const autoConfirmed = useRef(false)
@@ -83,6 +84,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             amount={total}
             layout="vertical"
             mpPointEnabled={mpPointEnabled}
+            cardProviderLabel={cardProviderLabel}
           />
         </div>
 

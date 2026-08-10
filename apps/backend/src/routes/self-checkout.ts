@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { selfCheckoutAuth } from '../middleware/self-checkout'
 import { notFound, badRequest } from '../middleware/error'
-import { mpService } from '../services/mp-point'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
 import {
@@ -14,10 +13,32 @@ import {
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 import { getAvailableRewards, createRedemption, revertRedemption } from '../services/rewards.service'
 import { orderBus } from '../events'
+import {
+  getCardProvider,
+  getProviderCredentials,
+  getActiveCardProvider,
+  cardProviderDisplayName,
+} from '../services/payments'
+import { buildPaymentMetadata } from '../services/payments/metadata'
+import { isFailedCardStatus } from '../services/payments/status'
+import type { CardOrderStatus, CardPaymentProviderName, CardProviderCredentials, PaymentProvider } from '../services/payments/types'
 
 export const selfCheckoutRouter = new Hono()
 
 selfCheckoutRouter.use('*', selfCheckoutAuth)
+
+function resolveStationPayment(
+  settings: Record<string, unknown>,
+  station: SelfCheckoutStation,
+): { provider: PaymentProvider; providerName: CardPaymentProviderName; credentials: CardProviderCredentials; terminalId: string } {
+  const providerName: CardPaymentProviderName = station.provider || getActiveCardProvider(settings)
+  return {
+    provider: getCardProvider(providerName),
+    providerName,
+    credentials: getProviderCredentials(settings, providerName),
+    terminalId: station.terminalId,
+  }
+}
 
 selfCheckoutRouter.get('/verify', async (c) => {
   const storeId = c.get('storeId')
@@ -34,6 +55,8 @@ selfCheckoutRouter.get('/verify', async (c) => {
   const safeSettings = { ...(store.settings as Record<string, unknown>) }
   delete safeSettings.mpPointAccessToken
   delete safeSettings.mpClientSecret
+  delete safeSettings.clipApiKey
+  delete safeSettings.clipApiSecret
 
   return c.json({
     data: {
@@ -212,14 +235,13 @@ selfCheckoutRouter.post('/orders', async (c) => {
   if (!store) throw notFound('Store not found')
 
   const settings = decryptSettings((store.settings as Record<string, unknown>) || {})
-  const mpPointAccessToken = settings.mpPointAccessToken as string | undefined
-
-  if (!mpPointAccessToken) {
-    throw badRequest('MP Point is not configured. Contact the store admin.')
-  }
-
   if (!station.terminalId) {
     throw badRequest('Station has no terminal assigned. Contact the store admin.')
+  }
+
+  const stationPayment = resolveStationPayment(settings, station)
+  if (!stationPayment.credentials.accessToken) {
+    throw badRequest(`${cardProviderDisplayName(stationPayment.providerName)} is not configured for this station. Contact the store admin.`)
   }
 
   const taxRate = store.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -501,61 +523,56 @@ selfCheckoutRouter.post('/orders', async (c) => {
 
   if (paymentError) throw badRequest(paymentError.message)
 
-  let mpOrderId: string | null = null
-  let mpOrderStatus = 'created'
+  const stationBaseMeta: Record<string, unknown> = {
+    stationId: station.id,
+    stationName: station.name,
+    source: 'self-checkout',
+    ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds, promotionUsageReverted: false } : {}),
+  }
+
+  let providerOrderId: string | null = null
+  let providerStatus: CardOrderStatus = 'created'
 
   try {
-    const mpOrder = await mpService.createOrder(mpPointAccessToken, {
+    const payment = await stationPayment.provider.createPayment({
       totalAmount: total,
       externalReference: order.id,
       description: `Self-checkout - ${items.length} items`,
-      terminalId: station.terminalId,
-    })
+      terminalId: stationPayment.terminalId,
+    }, stationPayment.credentials)
 
-    mpOrderId = mpOrder.id
+    providerOrderId = payment.providerOrderId
 
     await supabaseAdmin
       .from('orders')
-      .update({
-        metadata: {
-          stationId: station.id,
-          stationName: station.name,
-          source: 'self-checkout',
-          ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds, promotionUsageReverted: false } : {}),
-          mpOrderId: mpOrder.id,
-          mpOrderStatus: 'created',
-        },
-      })
+      .update({ metadata: buildPaymentMetadata(stationBaseMeta, stationPayment.providerName, providerOrderId, 'created') })
       .eq('id', order.id)
 
     await supabaseAdmin
       .from('payments')
-      .update({ reference: mpOrder.id })
+      .update({ reference: providerOrderId, provider: stationPayment.providerName })
       .eq('order_id', order.id)
 
-    // Poll MP status immediately — payment may already be processed at the terminal
+    // Poll the provider immediately — payment may already be processed at the terminal
     try {
-      const earlyMp = await mpService.getOrder(mpPointAccessToken, mpOrder.id)
-      if (earlyMp.status === 'processed') {
+      const early = await stationPayment.provider.getPayment(providerOrderId, stationPayment.credentials)
+      if (early.status === 'processed') {
         await supabaseAdmin
           .from('orders')
-          .update({ status: 'paid', payment_status: 'paid', metadata: { ...order.metadata, stationId: station.id, stationName: station.name, source: 'self-checkout', mpOrderId: mpOrder.id, mpOrderStatus: 'processed' } })
+          .update({
+            status: 'paid',
+            payment_status: 'paid',
+            metadata: buildPaymentMetadata({ ...order.metadata, ...stationBaseMeta }, stationPayment.providerName, providerOrderId, 'processed', early.paymentDetail),
+          })
           .eq('id', order.id)
         await supabaseAdmin
           .from('payments')
           .update({ status: 'completed' })
           .eq('order_id', order.id)
-      } else if (['canceled', 'expired', 'failed'].includes(earlyMp.status)) {
+      } else if (isFailedCardStatus(early.status)) {
         await revertPromotionUsageIfNeeded(
           order.id,
-          {
-            stationId: station.id,
-            stationName: station.name,
-            source: 'self-checkout',
-            ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds, promotionUsageReverted: false } : {}),
-            mpOrderId: mpOrder.id,
-            mpOrderStatus: 'created',
-          },
+          { ...stationBaseMeta },
           [],
         ).catch(() => {})
           await revertRedemption(order.id).catch(() => {})
@@ -565,16 +582,13 @@ selfCheckoutRouter.post('/orders', async (c) => {
           .update({
             status: 'cancelled',
             payment_status: 'unpaid',
-            metadata: {
-              ...order.metadata,
-              stationId: station.id,
-              stationName: station.name,
-              source: 'self-checkout',
-              ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds } : {}),
-              promotionUsageReverted: true,
-              mpOrderId: mpOrder.id,
-              mpOrderStatus: earlyMp.status,
-            },
+            metadata: buildPaymentMetadata(
+              { ...order.metadata, ...stationBaseMeta, promotionUsageReverted: true },
+              stationPayment.providerName,
+              providerOrderId,
+              early.status,
+              early.paymentDetail,
+            ),
           })
           .eq('id', order.id)
         await supabaseAdmin
@@ -586,17 +600,12 @@ selfCheckoutRouter.post('/orders', async (c) => {
       // Not yet processed — client polling will catch it
     }
   } catch (err: unknown) {
-    const mpErr = err as { message?: string; body?: unknown }
-    const detail = JSON.stringify(mpErr?.body || mpErr?.message || 'MP Point error')
+    const payErr = err as { message?: string; body?: unknown }
+    const detail = JSON.stringify(payErr?.body || payErr?.message || `${cardProviderDisplayName(stationPayment.providerName)} error`)
 
     await revertPromotionUsageIfNeeded(
       order.id,
-      {
-        stationId: station.id,
-        stationName: station.name,
-        source: 'self-checkout',
-        ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds, promotionUsageReverted: false } : {}),
-      },
+      { ...stationBaseMeta },
       [],
     ).catch(() => {})
       await revertRedemption(order.id).catch(() => {})
@@ -606,10 +615,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .update({
         status: 'cancelled',
         metadata: {
+          ...stationBaseMeta,
           mpError: detail,
-          stationId: station.id,
-          source: 'self-checkout',
-          ...(uniquePromoIds.length > 0 ? { promotionUsageIds: uniquePromoIds } : {}),
           promotionUsageReverted: true,
         },
       })
@@ -620,7 +627,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .update({ status: 'failed' })
       .eq('order_id', order.id)
 
-    throw badRequest(`Payment error: ${mpErr?.message || 'Could not connect to terminal'}`)
+    throw badRequest(`Payment error: ${payErr?.message || 'Could not connect to terminal'}`)
   }
 
   const { data: fullOrder } = await supabaseAdmin
@@ -633,7 +640,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
     ...fullOrder,
     customer_name: (fullOrder as Record<string, unknown>).customer ? ((fullOrder as Record<string, unknown>).customer as Record<string, unknown>).name : null,
     customer: undefined,
-    metadata: { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId, mpOrderStatus },
+    metadata: { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId: providerOrderId, mpOrderStatus: providerStatus },
   } : null
 
   if (enriched) {
@@ -660,19 +667,22 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
 
   let loyaltyData: { pointsEarned: number; pointsBefore: number; pointsAfter: number } | undefined
 
-  if (meta.mpOrderId && (meta.mpOrderStatus === 'created' || meta.mpOrderStatus === 'at_terminal')) {
+  const providerOrderId = (meta.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? (meta.mpOrderId as string | undefined)
+  const providerStatus = (meta.payment as { providerStatus?: CardOrderStatus } | undefined)?.providerStatus ?? (meta.mpOrderStatus as CardOrderStatus | undefined)
+
+  if (providerOrderId && (providerStatus === 'created' || providerStatus === 'at_terminal')) {
     const settings = await getStoreSettings(storeId)
-    const accessToken = (settings?.mpPointAccessToken as string)
-    if (accessToken) {
+    const providerName = (meta.payment as { provider?: CardPaymentProviderName } | undefined)?.provider ?? getActiveCardProvider(settings)
+    const credentials = getProviderCredentials(settings, providerName)
+    if (credentials.accessToken) {
       try {
-        const mpOrder = await mpService.getOrder(accessToken, meta.mpOrderId as string)
-        const mpStatus = mpOrder.status
-        const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
-        if (mpStatus !== meta.mpOrderStatus) {
+        const payment = await getCardProvider(providerName).getPayment(providerOrderId, credentials)
+        const status = payment.status
+        if (status !== providerStatus) {
           const updates: Record<string, unknown> = {
-            metadata: { ...meta, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail },
+            metadata: buildPaymentMetadata(meta, providerName, providerOrderId, status, payment.paymentDetail),
           }
-          if (mpStatus === 'processed') {
+          if (status === 'processed') {
             updates.status = 'paid'
             updates.payment_status = 'paid'
             await supabaseAdmin
@@ -684,7 +694,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
             if (loyaltyResult) {
               loyaltyData = loyaltyResult
             }
-          } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
+          } else if (['canceled', 'expired', 'failed'].includes(status)) {
             await revertPromotionUsageIfNeeded(
               orderId,
               meta,
@@ -706,7 +716,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
             await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
           }
           await supabaseAdmin.from('orders').update(updates).eq('id', orderId)
-          meta.mpOrderStatus = mpStatus
+          meta.mpOrderStatus = status
         }
       } catch {
       }

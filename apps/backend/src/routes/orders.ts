@@ -5,7 +5,17 @@ import { orderSchema, canTransition } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
 import { orderBus } from '../events'
-import { mpService } from '../services/mp-point'
+import {
+  getCardProvider,
+  getProviderCredentials,
+  getProviderTerminalId,
+  getActiveCardProvider,
+  isCardPaymentConfigured,
+  cardProviderDisplayName,
+} from '../services/payments'
+import { buildPaymentMetadata } from '../services/payments/metadata'
+import { getCardPaymentOutcome, isFailedCardStatus } from '../services/payments/status'
+import type { CardPaymentProviderName, CardOrderStatus, CardProviderCredentials } from '../services/payments/types'
 import type { OrderMetadata } from '@ultimate-pos/shared'
 import type { KitchenWorkflowConfig } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
@@ -132,9 +142,9 @@ ordersRouter.get('/:id', async (c) => {
   if (error || !data) throw notFound('Order not found')
 
   const meta = (data.metadata as Record<string, unknown> | null) || {}
-  const mpOrderId = meta.mpOrderId as string | undefined
-  const mpOrderStatus = meta.mpOrderStatus as string | undefined
-  const needsSync = mpOrderId && (mpOrderStatus === 'created' || mpOrderStatus === 'at_terminal')
+  const providerOrderId = (meta.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? (meta.mpOrderId as string | undefined)
+  const providerStatus = (meta.payment as { providerStatus?: CardOrderStatus } | undefined)?.providerStatus ?? (meta.mpOrderStatus as CardOrderStatus | undefined)
+  const needsSync = providerOrderId && (providerStatus === 'created' || providerStatus === 'at_terminal')
 
   if (needsSync) {
     try {
@@ -145,66 +155,46 @@ ordersRouter.get('/:id', async (c) => {
         .single()
 
       const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
-      const accessToken = decrypted?.mpPointAccessToken as string | undefined
+      const provider = getCardProvider(getActiveCardProvider(decrypted))
+      const credentials = getProviderCredentials(decrypted)
 
-      if (accessToken) {
-        const mpOrder = await mpService.getOrder(accessToken, mpOrderId)
-        const mpStatus = mpOrder.status
-        const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
+      if (credentials.accessToken) {
+        const payment = await provider.getPayment(providerOrderId, credentials)
+        const status = payment.status
 
-        if (mpStatus !== 'created' && mpStatus !== 'at_terminal') {
-          let orderStatus: string
-          let orderPaymentStatus: string
-          let paymentStatus: string
-          let mpStatusMapped: string
-
-          if (mpStatus === 'processed') {
-            orderStatus = 'paid'
-            orderPaymentStatus = 'paid'
-            paymentStatus = 'completed'
-            mpStatusMapped = 'processed'
-          } else if (mpStatus === 'canceled') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'canceled'
-          } else if (mpStatus === 'expired') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'expired'
-          } else if (mpStatus === 'failed') {
-            orderStatus = 'cancelled'
-            orderPaymentStatus = 'unpaid'
-            paymentStatus = 'failed'
-            mpStatusMapped = 'failed'
-          } else {
-            throw new Error(`Unhandled MP status: ${mpStatus}`)
+        if (status !== 'created' && status !== 'at_terminal') {
+          const outcome = getCardPaymentOutcome(status)
+          if (!outcome.orderStatus) {
+            throw new Error(`Unhandled card payment status: ${status}`)
           }
 
           await supabase
             .from('orders')
             .update({
-              status: orderStatus,
-              payment_status: orderPaymentStatus,
-              metadata: {
-                ...meta,
-                ...((['canceled', 'expired', 'failed'].includes(mpStatusMapped) ? { promotionUsageReverted: true } : {})),
-                mpOrderStatus: mpStatusMapped,
-                mpPaymentDetail: paymentDetail,
-              },
+              status: outcome.orderStatus,
+              payment_status: outcome.orderStatus === 'paid' ? 'paid' : 'unpaid',
+              metadata: buildPaymentMetadata(
+                {
+                  ...meta,
+                  ...((outcome.orderStatus === 'cancelled' || outcome.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
+                },
+                getActiveCardProvider(decrypted),
+                providerOrderId,
+                status,
+                payment.paymentDetail,
+              ),
               updated_at: new Date().toISOString(),
             })
             .eq('id', id)
 
           await supabase
             .from('payments')
-            .update({ status: paymentStatus })
+            .update({ status: outcome.paymentStatus })
             .eq('order_id', id)
 
-          if (mpStatus === 'processed') {
+          if (outcome.orderStatus === 'paid') {
             await processMpLoyalty(supabaseAdmin, id, data.store_id as string).catch(() => {})
-          } else if (['canceled', 'expired', 'failed'].includes(mpStatus)) {
+          } else if (outcome.orderStatus === 'cancelled' || outcome.orderStatus === 'refunded') {
             await revertPromotionUsageIfNeeded(
               id,
               meta,
@@ -291,9 +281,9 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const taxExemptEnabled = (settings?.taxExemptEnabled as boolean) ?? false
   const checkoutMode = (settings?.checkoutMode as string) ?? 'order-only'
   const acceptedMethods = (settings?.acceptedPaymentMethods as string[]) ?? ['cash', 'card']
-  const mpPointEnabled = (settings?.mpPointEnabled as boolean) ?? false
-  const mpPointTerminalId = (settings?.mpPointTerminalId as string) ?? ''
-  const mpPointAccessToken = (settings?.mpPointAccessToken as string) ?? ''
+  const cardProviderName = getActiveCardProvider(settings)
+  const cardCredentials = getProviderCredentials(settings)
+  const cardTerminalId = getProviderTerminalId(settings)
 
   const paymentMethod = input.payment_method
   const cashAmountGiven = input.cash_amount_given
@@ -306,7 +296,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     throw badRequest(`Payment method "${paymentMethod}" is not accepted`)
   }
 
-  const isMpPoint = paymentMethod === 'card' && mpPointEnabled && mpPointAccessToken && mpPointTerminalId
+  const isCardPayment = paymentMethod === 'card' && isCardPaymentConfigured(settings)
+  const cardProvider = getCardProvider(cardProviderName)
 
   const productIds = input.items.map((i) => i.product_id).filter(Boolean) as string[]
   const { data: products } = await supabase
@@ -433,8 +424,8 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     : Math.round((subtotal + tax - totalDiscount) * 100) / 100
 
   const hasKitchen = (settings?.hasKitchen as boolean) ?? false
-  const initialStatus = !hasKitchen && paymentMethod && !isMpPoint ? 'paid' : 'pending'
-  const paymentStatus = paymentMethod && !isMpPoint ? 'paid' : 'unpaid'
+  const initialStatus = !hasKitchen && paymentMethod && !isCardPayment ? 'paid' : 'pending'
+  const paymentStatus = paymentMethod && !isCardPayment ? 'paid' : 'unpaid'
 
   const tz = (settings?.timezone as string) || 'UTC'
   const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -562,7 +553,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       order_id: order.id,
       amount: total,
       method: paymentMethod,
-      status: isMpPoint ? 'pending' : 'completed',
+      status: isCardPayment ? 'pending' : 'completed',
     }
 
     if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
@@ -571,6 +562,10 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       }
       paymentData.amount_given = cashAmountGiven
       paymentData.change_due = Math.round((cashAmountGiven - total) * 100) / 100
+    }
+
+    if (isCardPayment) {
+      paymentData.provider = cardProviderName
     }
 
     const { error: paymentError } = await supabaseAdmin
@@ -582,58 +577,52 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
   let mpOrderId: string | null = null
 
-  if (isMpPoint) {
-    let mpOrder: Awaited<ReturnType<typeof mpService.createOrder>> | null = null
-    let mpAttempt = 0
+  if (isCardPayment) {
+    let payment = await cardProvider.createPayment({
+      totalAmount: total,
+      externalReference: order.id,
+      description: `Ultimate POS - ${input.items.length} items`,
+      terminalId: cardTerminalId,
+    }, cardCredentials).catch(async (err: unknown) => {
+      const mpErr = err as { status?: number; body?: unknown; message?: string }
+      const body = mpErr?.body as { errors?: Array<{ code: string }> } | undefined
+      const isQueued = body?.errors?.some((e) => e.code === 'already_queued_order_on_terminal')
 
-    while (mpAttempt < 2) {
-      mpAttempt++
-      try {
-        mpOrder = await mpService.createOrder(mpPointAccessToken, {
+      if (isQueued) {
+        await clearStuckCardOrders(supabaseAdmin, cardProvider, cardCredentials, storeId)
+        await new Promise((r) => setTimeout(r, 1000))
+        return cardProvider.createPayment({
           totalAmount: total,
           externalReference: order.id,
           description: `Ultimate POS - ${input.items.length} items`,
-          terminalId: mpPointTerminalId,
-        })
-        break
-      } catch (err: unknown) {
-        const mpErr = err as { status?: number; body?: unknown; message?: string }
-        const body = mpErr?.body as { errors?: Array<{ code: string }> } | undefined
-        const isQueued = body?.errors?.some((e) => e.code === 'already_queued_order_on_terminal')
-
-        if (isQueued && mpAttempt === 1) {
-          await clearStuckMpOrders(supabaseAdmin, mpPointAccessToken, storeId)
-          await new Promise((r) => setTimeout(r, 1000))
-          continue
-        }
-
-        const detail = body ? JSON.stringify(body) : (mpErr?.message || 'MP Point error')
-
-        await supabaseAdmin
-          .from('orders')
-          .update({ status: 'cancelled', metadata: { mpError: detail } })
-          .eq('id', order.id)
-
-        await supabaseAdmin
-          .from('payments')
-          .update({ status: 'failed' })
-          .eq('order_id', order.id)
-
-        throw badRequest(`MP Point payment failed: ${detail}`)
+          terminalId: cardTerminalId,
+        }, cardCredentials)
       }
-    }
 
-    if (!mpOrder) {
-      throw badRequest('MP Point payment failed: could not create order after retry')
-    }
+      const detail = body ? JSON.stringify(body) : (mpErr?.message || `${cardProviderDisplayName(cardProviderName)} error`)
 
-    mpOrderId = mpOrder.id
+      await supabaseAdmin
+        .from('orders')
+        .update({ status: 'cancelled', metadata: { mpError: detail } })
+        .eq('id', order.id)
 
-    const metadata = {
-      ...(promotionUsageIds.length > 0 ? { promotionUsageIds, promotionUsageReverted: false } : {}),
-      mpOrderId: mpOrder.id,
-      mpOrderStatus: 'created' as const,
-    }
+      await supabaseAdmin
+        .from('payments')
+        .update({ status: 'failed' })
+        .eq('order_id', order.id)
+
+      throw badRequest(`${cardProviderDisplayName(cardProviderName)} payment failed: ${detail}`)
+    })
+
+    mpOrderId = payment.providerOrderId
+
+    const provider = getActiveCardProvider(settings)
+    const metadata = buildPaymentMetadata(
+      promotionUsageIds.length > 0 ? { promotionUsageIds, promotionUsageReverted: false } : {},
+      provider,
+      payment.providerOrderId,
+      'created',
+    )
     await supabaseAdmin
       .from('orders')
       .update({ metadata })
@@ -641,27 +630,47 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
     await supabaseAdmin
       .from('payments')
-      .update({ reference: mpOrder.id })
+      .update({ reference: payment.providerOrderId })
       .eq('order_id', order.id)
 
-    // Poll MP status immediately — payment may already be processed at the terminal
+    // Poll the provider immediately — payment may already be processed at the terminal
     try {
       await new Promise((r) => setTimeout(r, 2000))
-      const earlyMp = await mpService.getOrder(mpPointAccessToken, mpOrder.id)
-      if (earlyMp.status === 'processed') {
+      const early = await cardProvider.getPayment(payment.providerOrderId, cardCredentials)
+      if (early.status === 'processed') {
         await supabaseAdmin
           .from('orders')
-          .update({ status: 'paid', payment_status: 'paid', metadata: { mpOrderId: mpOrder.id, mpOrderStatus: 'processed' } })
+          .update({
+            status: 'paid',
+            payment_status: 'paid',
+            metadata: buildPaymentMetadata(
+              {},
+              provider,
+              payment.providerOrderId,
+              'processed',
+              early.paymentDetail,
+            ),
+          })
           .eq('id', order.id)
         await supabaseAdmin
           .from('payments')
           .update({ status: 'completed' })
           .eq('order_id', order.id)
         await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => {})
-      } else if (['canceled', 'expired', 'failed'].includes(earlyMp.status)) {
+      } else if (isFailedCardStatus(early.status)) {
         await supabaseAdmin
           .from('orders')
-          .update({ status: 'cancelled', payment_status: 'unpaid', metadata: { mpOrderId: mpOrder.id, mpOrderStatus: earlyMp.status } })
+          .update({
+            status: 'cancelled',
+            payment_status: 'unpaid',
+            metadata: buildPaymentMetadata(
+              {},
+              provider,
+              payment.providerOrderId,
+              early.status,
+              early.paymentDetail,
+            ),
+          })
           .eq('id', order.id)
         await supabaseAdmin
           .from('payments')
@@ -677,7 +686,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   // and loyalty earning to POST /orders/:id/pay to avoid double counting
   const isDeferredPayment = checkoutMode === 'order-first-pay-later' && !paymentMethod
 
-  if (input.customer_id && !isMpPoint && !isDeferredPayment) {
+  if (input.customer_id && !isCardPayment && !isDeferredPayment) {
     const { data: cust } = await supabase
       .from('customers')
       .select('total_visits, total_spent')
@@ -731,7 +740,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
           points: i.points,
         }))
         earnedPoints = await calculateEarnPoints(itemsForPoints, subtotal, discount, settings as any)
-        if (earnedPoints > 0 && !isMpPoint) {
+        if (earnedPoints > 0 && !isCardPayment) {
           try {
             await doEarn(effectiveCard.id, earnedPoints, `Compra en orden #${nextOrderNumber}`, order.id)
             syncWallets(effectiveCard.id).catch(() => {})
@@ -797,16 +806,18 @@ ordersRouter.post('/:id/pay', async (c) => {
     throw badRequest('Amount given must be at least the total')
   }
 
-  const isMpPoint = paymentMethod === 'card' && ((decrypted?.mpPointEnabled as boolean) ?? false)
-  const mpPointAccessToken = decrypted?.mpPointAccessToken as string | undefined
-  const mpPointTerminalId = decrypted?.mpPointTerminalId as string | undefined
+  const isCardPayment = paymentMethod === 'card' && isCardPaymentConfigured(decrypted)
+  const cardProviderName = getActiveCardProvider(decrypted)
+  const cardProvider = getCardProvider(cardProviderName)
+  const cardCredentials = getProviderCredentials(decrypted)
+  const cardTerminalId = getProviderTerminalId(decrypted)
 
   let paidStatus = 'paid'
   let paidPaymentStatus = 'paid'
-  let isMpFlow = false
+  let isCardFlow = false
 
-  if (isMpPoint && mpPointAccessToken && mpPointTerminalId) {
-    isMpFlow = true
+  if (isCardPayment && cardCredentials.accessToken && cardTerminalId) {
+    isCardFlow = true
     paidStatus = 'pending'
     paidPaymentStatus = 'unpaid'
   }
@@ -815,7 +826,8 @@ ordersRouter.post('/:id/pay', async (c) => {
     order_id: orderId,
     amount: Number(order.total),
     method: paymentMethod,
-    status: isMpFlow ? 'pending' : 'completed',
+    status: isCardFlow ? 'pending' : 'completed',
+    ...(isCardFlow ? { provider: cardProviderName } : {}),
   }
 
   if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
@@ -838,33 +850,22 @@ ordersRouter.post('/:id/pay', async (c) => {
     })
     .eq('id', orderId)
 
-  // MP Point flow
-  let mpOrderId: string | null = null
-  if (isMpFlow && mpPointAccessToken && mpPointTerminalId) {
-    let mpAttempt = 0
-    while (mpAttempt < 2) {
-      mpAttempt++
-      try {
-        const mpOrder = await mpService.createOrder(mpPointAccessToken, {
-          totalAmount: Number(order.total),
-          externalReference: orderId,
-          description: `Ultimate POS - Pay later #${order.order_number}`,
-          terminalId: mpPointTerminalId,
-        })
-        mpOrderId = mpOrder.id
-        await supabase
-          .from('orders')
-          .update({ metadata: { ...(order.metadata as Record<string, unknown> || {}), mpOrderId: mpOrder.id, mpOrderStatus: 'created' } })
-          .eq('id', orderId)
-        break
-      } catch (err: unknown) {
-        if (mpAttempt < 2) {
-          await new Promise(r => setTimeout(r, 1000))
-          continue
-        }
-        throw badRequest(`MP Point payment failed: ${(err as { message?: string })?.message || 'Unknown error'}`)
-      }
-    }
+  // Card payment flow (provider-agnostic)
+  let providerOrderId: string | null = null
+  if (isCardFlow && cardCredentials.accessToken && cardTerminalId) {
+    const payment = await cardProvider.createPayment({
+      totalAmount: Number(order.total),
+      externalReference: orderId,
+      description: `Ultimate POS - Pay later #${order.order_number}`,
+      terminalId: cardTerminalId,
+    }, cardCredentials).catch((err: unknown) => {
+      throw badRequest(`${cardProviderDisplayName(cardProviderName)} payment failed: ${(err as { message?: string })?.message || 'Unknown error'}`)
+    })
+    providerOrderId = payment.providerOrderId
+    await supabase
+      .from('orders')
+      .update({ metadata: buildPaymentMetadata(order.metadata as Record<string, unknown> || {}, cardProviderName, payment.providerOrderId, 'created') })
+      .eq('id', orderId)
   }
 
   // Customer stats
@@ -888,7 +889,7 @@ ordersRouter.post('/:id/pay', async (c) => {
 
   // Loyalty
   const hasLoyalty = (decrypted?.hasLoyalty as boolean) ?? false
-  if (hasLoyalty && order.customer_id && !mpOrderId) {
+  if (hasLoyalty && order.customer_id && !providerOrderId) {
     const { getLoyaltyCard, earnPoints: doEarn, calculateEarnPoints, syncWallets } = await import('../services/loyalty.service')
     const card = await getLoyaltyCard(order.customer_id, storeId)
     if (card) {
@@ -913,8 +914,8 @@ ordersRouter.post('/:id/pay', async (c) => {
     .single()
 
   const enriched = enrichOrder(fullOrder!)
-  if (mpOrderId) {
-    enriched.metadata = { ...(enriched.metadata || {}), mpOrderId }
+  if (providerOrderId) {
+    enriched.metadata = { ...(enriched.metadata || {}), mpOrderId: providerOrderId }
   }
   orderBus.emit('order:status-changed', enriched)
 
@@ -933,8 +934,10 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
     .single()
 
   const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const accessToken = decrypted?.mpPointAccessToken as string | undefined
-  if (!accessToken) throw badRequest('MP Point access token not configured')
+  const cardProviderName = getActiveCardProvider(decrypted)
+  const cardProvider = getCardProvider(cardProviderName)
+  const cardCredentials = getProviderCredentials(decrypted)
+  if (!cardCredentials.accessToken) throw badRequest(`${cardProviderDisplayName(cardProviderName)} credentials not configured`)
 
   const { data: order } = await supabase
     .from('orders')
@@ -946,31 +949,33 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
   if (!order) throw notFound('Order not found')
 
   const meta = (order.metadata as OrderMetadata | null) || {}
-  const mpOrderId = meta.mpOrderId
-  let mpCancelError: string | null = null
+  const providerOrderId = (meta.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? meta.mpOrderId
+  let cancelError: string | null = null
 
-  if (mpOrderId) {
+  if (providerOrderId) {
     try {
-      await mpService.cancelOrder(accessToken, mpOrderId)
+      await cardProvider.cancelPayment(providerOrderId, cardCredentials)
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || ''
       if (code === 'cannot_cancel_order') {
-        mpCancelError = 'expired'
+        cancelError = 'expired'
       } else {
-        throw badRequest(`Failed to cancel MP Point order: ${(err as { message?: string })?.message || code}`)
+        throw badRequest(`Failed to cancel ${cardProviderDisplayName(cardProviderName)} order: ${(err as { message?: string })?.message || code}`)
       }
     }
   }
 
+  const finalStatus: CardOrderStatus = cancelError === 'expired' ? 'expired' : 'canceled'
   await supabase
     .from('orders')
     .update({
       status: 'cancelled',
-      metadata: {
-        ...meta,
-        promotionUsageReverted: true,
-        mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled',
-      },
+      metadata: buildPaymentMetadata(
+        { ...meta, promotionUsageReverted: true },
+        cardProviderName,
+        providerOrderId || '',
+        finalStatus,
+      ),
     })
     .eq('id', orderId)
 
@@ -984,7 +989,7 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
 
   await revertRedemption(orderId).catch(() => {})
 
-  return c.json({ success: true, meta: { mpOrderStatus: mpCancelError === 'expired' ? 'expired' : 'canceled' } })
+  return c.json({ success: true, meta: { mpOrderStatus: finalStatus } })
 })
 
 ordersRouter.patch('/:id/status', async (c) => {
@@ -1149,7 +1154,8 @@ export async function processMpLoyalty(
   const pointsBefore = card.points || 0
 
   if (earnedPoints > 0) {
-    const result = await doEarn(card.id, earnedPoints, `Compra MP Point orden #${order.order_number}`, orderId)
+    const providerLabel = cardProviderDisplayName(getActiveCardProvider(settings))
+    const result = await doEarn(card.id, earnedPoints, `Compra ${providerLabel} orden #${order.order_number}`, orderId)
     syncWallets(card.id).catch(() => {})
 
     const pointsAfter = result?.new_balance ?? (pointsBefore + earnedPoints)
@@ -1202,7 +1208,12 @@ export async function reverseMpLoyalty(
   }
 }
 
-async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: string, storeId: string) {
+async function clearStuckCardOrders(
+  supabase: typeof supabaseAdmin,
+  provider: ReturnType<typeof getCardProvider>,
+  credentials: CardProviderCredentials,
+  storeId: string,
+) {
   const seen = new Set<string>()
   const candidates: Array<{ id: string; metadata: Record<string, unknown> | null }> = []
 
@@ -1231,20 +1242,26 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
     if (!seen.has(o.id)) { seen.add(o.id); candidates.push(o) }
   }
 
+  const providerName = provider.name
+
   for (const order of candidates) {
     const meta = order.metadata as OrderMetadata | null
-    const mpId = meta?.mpOrderId
-    if (!mpId) continue
+    const providerOrderId = (meta?.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? meta?.mpOrderId
+    if (!providerOrderId) continue
 
     try {
-      const mpOrder = await mpService.getOrder(accessToken, mpId)
-      const mpStatus = mpOrder.status
-      const paymentDetail = mpOrder.transactions?.payments?.[0]?.status_detail
+      const payment = await provider.getPayment(providerOrderId, credentials)
+      const status = payment.status
+      const paymentDetail = payment.paymentDetail
 
-      if (mpStatus === 'processed') {
+      if (status === 'processed') {
         await supabase
           .from('orders')
-          .update({ status: 'paid', payment_status: 'paid', metadata: { ...meta, mpOrderStatus: 'processed', mpPaymentDetail: paymentDetail } })
+          .update({
+            status: 'paid',
+            payment_status: 'paid',
+            metadata: buildPaymentMetadata(meta || {}, providerName, providerOrderId, 'processed', paymentDetail),
+          })
           .eq('id', order.id)
         await supabase
           .from('payments')
@@ -1254,7 +1271,7 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
         continue
       }
 
-      if (mpStatus === 'canceled' || mpStatus === 'expired' || mpStatus === 'failed') {
+      if (status === 'canceled' || status === 'expired' || status === 'failed') {
         await revertPromotionUsageIfNeeded(
           order.id,
           (meta as Record<string, unknown> | null | undefined) || {},
@@ -1264,7 +1281,13 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
           .from('orders')
           .update({
             status: 'cancelled',
-            metadata: { ...meta, promotionUsageReverted: true, mpOrderStatus: mpStatus, mpPaymentDetail: paymentDetail },
+            metadata: buildPaymentMetadata(
+              { ...(meta || {}), promotionUsageReverted: true },
+              providerName,
+              providerOrderId,
+              status,
+              paymentDetail,
+            ),
           })
           .eq('id', order.id)
         await supabase
@@ -1276,8 +1299,8 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
         continue
       }
 
-      if (mpStatus === 'created' || mpStatus === 'at_terminal') {
-        await mpService.cancelOrder(accessToken, mpId)
+      if (status === 'created' || status === 'at_terminal') {
+        await provider.cancelPayment(providerOrderId, credentials)
         await revertPromotionUsageIfNeeded(
           order.id,
           (meta as Record<string, unknown> | null | undefined) || {},
@@ -1285,7 +1308,15 @@ async function clearStuckMpOrders(supabase: typeof supabaseAdmin, accessToken: s
         ).catch(() => {})
         await supabase
           .from('orders')
-          .update({ status: 'cancelled', metadata: { ...meta, promotionUsageReverted: true, mpOrderStatus: 'canceled' } })
+          .update({
+            status: 'cancelled',
+            metadata: buildPaymentMetadata(
+              { ...(meta || {}), promotionUsageReverted: true },
+              providerName,
+              providerOrderId,
+              'canceled',
+            ),
+          })
           .eq('id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
         await revertRedemption(order.id).catch(() => {})

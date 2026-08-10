@@ -11,6 +11,8 @@ import {
   Circle, AlertTriangle, Info,
 } from 'lucide-react'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
+import type { CardPaymentProviderName } from '@ultimate-pos/shared'
+import { getActiveCardProvider, cardProviderDisplayName } from '@/lib/card-payments'
 
 type TerminalStatus = 'available' | 'pos' | 'station' | 'conflict'
 
@@ -62,6 +64,7 @@ export function SelfCheckoutSettings() {
   const [showForm, setShowForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newTerminalId, setNewTerminalId] = useState('')
+  const [newProvider, setNewProvider] = useState<CardPaymentProviderName>('mercado_pago')
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
@@ -74,6 +77,10 @@ export function SelfCheckoutSettings() {
       setStations(store.settings.selfCheckoutStations as SelfCheckoutStation[])
     }
   }, [store])
+
+  useEffect(() => {
+    setNewProvider(getActiveCardProvider(store?.settings))
+  }, [store?.settings])
 
   const terminalInfos = useMemo(
     () => terminals
@@ -115,6 +122,7 @@ export function SelfCheckoutSettings() {
       const res = await api.post<{ data: SelfCheckoutStation }>('/stores/self-checkout/stations', {
         name: newName.trim(),
         terminalId: newTerminalId.trim(),
+        provider: newProvider,
       })
       setStations((prev) => [...prev, res.data])
       setShowForm(false)
@@ -298,6 +306,23 @@ export function SelfCheckoutSettings() {
                 )}
               </div>
 
+              <div>
+                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5 uppercase tracking-wider">
+                  Card provider
+                </label>
+                <select
+                  value={newProvider}
+                  onChange={(e) => setNewProvider(e.target.value as CardPaymentProviderName)}
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none"
+                >
+                  <option value="mercado_pago">Mercado Pago Point</option>
+                  <option value="clip" disabled>Clip PinPad (coming soon)</option>
+                </select>
+                <p className="text-[11px] text-on-surface-variant mt-1.5">
+                  This station sends card payments to this provider&apos;s terminal.
+                </p>
+              </div>
+
               <div className="flex gap-2">
                 <Button onClick={createStation} isLoading={creating} disabled={!newName.trim() || !newTerminalId.trim()}>
                   Create Station
@@ -308,6 +333,7 @@ export function SelfCheckoutSettings() {
                     setShowForm(false)
                     setNewName('')
                     setNewTerminalId('')
+                    setNewProvider(getActiveCardProvider(store?.settings))
                     setTerminals(null)
                   }}
                 >
@@ -349,6 +375,9 @@ export function SelfCheckoutSettings() {
                     <div className="flex items-center gap-2 text-sm text-on-surface-variant">
                       <Terminal className="h-3.5 w-3.5" />
                       <span className="font-mono">{station.terminalId}</span>
+                      <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
+                        {cardProviderDisplayName(station.provider ?? 'mercado_pago')}
+                      </span>
                     </div>
 
                     {/* Conflict indicators */}

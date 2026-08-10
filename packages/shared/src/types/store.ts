@@ -1,6 +1,7 @@
 import type { PaymentMethod, PreferenceField } from './customer'
 import type { LoyaltyProgram } from './loyalty'
 import type { KitchenWorkflowConfig } from './order'
+import type { CardPaymentProviderName } from './payments'
 
 export interface RegistrationInterestsConfig {
   enabled: boolean
@@ -23,10 +24,16 @@ export interface StoreSettings {
   specialInstructionsEnabled: boolean
   checkoutMode: 'order-only' | 'payment-required' | 'order-first-pay-later'
   acceptedPaymentMethods: PaymentMethod[]
+  // Card payments — one active provider per store, chosen via settings UI
+  activeCardProvider?: CardPaymentProviderName
   mpPointEnabled: boolean
   mpPointTerminalId: string
   mpPointAccessToken: string
   mpClientSecret?: string
+  clipEnabled?: boolean
+  clipApiKey?: string
+  clipApiSecret?: string
+  clipTerminalId?: string
   preferenceFields: PreferenceField[]
   registrationInterestsConfig?: RegistrationInterestsConfig
   // Timezone
@@ -51,6 +58,7 @@ export interface SelfCheckoutStation {
   id: string
   name: string
   terminalId: string
+  provider?: CardPaymentProviderName
   isActive: boolean
   createdAt: string
   token?: string

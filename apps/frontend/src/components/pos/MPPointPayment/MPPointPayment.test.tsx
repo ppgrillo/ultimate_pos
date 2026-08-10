@@ -74,7 +74,7 @@ describe('MPPointPayment', () => {
     act(() => {
       store.dispatch(orderUpdated(mockOrder({ metadata: { mpOrderId: 'MP_ORD_001', mpOrderStatus: 'at_terminal' } })))
     })
-    expect(screen.getByText('Acerca la tarjeta a la terminal Point')).toBeInTheDocument()
+    expect(screen.getByText('Acerca la tarjeta a la terminal')).toBeInTheDocument()
   })
 
   it('shows processing state from Redux metadata', () => {
@@ -133,6 +133,6 @@ describe('MPPointPayment', () => {
     act(() => {
       screen.getByText('Ya revisé').click()
     })
-    expect(screen.getByText('Acerca la tarjeta a la terminal Point')).toBeInTheDocument()
+    expect(screen.getByText('Acerca la tarjeta a la terminal')).toBeInTheDocument()
   })
 })

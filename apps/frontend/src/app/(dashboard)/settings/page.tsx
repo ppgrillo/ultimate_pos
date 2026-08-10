@@ -12,6 +12,8 @@ import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { api } from '@/lib/api/client'
+import { getActiveCardProvider } from '@/lib/card-payments'
+import type { CardPaymentProviderName } from '@ultimate-pos/shared'
 import { SelfCheckoutSettings } from './SelfCheckoutSettings'
 import type { KitchenWorkflowConfig, KitchenWorkflowStepStatus } from '@ultimate-pos/shared'
 import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
@@ -46,6 +48,7 @@ export default function SettingsPage() {
   const [mpPointTerminalId, setMpPointTerminalId] = useState('')
   const [mpPointAccessToken, setMpPointAccessToken] = useState('')
   const [mpClientSecret, setMpClientSecret] = useState('')
+  const [activeCardProvider, setActiveCardProvider] = useState<CardPaymentProviderName>('mercado_pago')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(false)
   const [terminals, setTerminals] = useState<Array<{ id: string; model: string; operating_mode: string }> | null>(null)
@@ -127,6 +130,7 @@ export default function SettingsPage() {
     setTransferEnabled(methods.includes('transfer'))
     setMpPointEnabled(settings?.mpPointEnabled ?? false)
     setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
+    setActiveCardProvider(getActiveCardProvider(settings))
     const ic = settings?.registrationInterestsConfig
     setInterestsEnabled(ic?.enabled ?? true)
     setInterestsSectionTitle(ic?.sectionTitle ?? 'Tus gustos e intereses')
@@ -191,6 +195,7 @@ export default function SettingsPage() {
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
     mpPointAccessToken !== '' ||
     mpClientSecret !== '' ||
+    activeCardProvider !== getActiveCardProvider(settings) ||
     interestsEnabled !== (settings?.registrationInterestsConfig?.enabled ?? true) ||
     interestsSectionTitle !== (settings?.registrationInterestsConfig?.sectionTitle ?? 'Tus gustos e intereses') ||
     interestsSectionDescription !== (settings?.registrationInterestsConfig?.sectionDescription ?? 'Ayúdanos a conocerte mejor para enviarte ofertas personalizadas') ||
@@ -260,6 +265,7 @@ export default function SettingsPage() {
         acceptedPaymentMethods: enabledMethods,
         mpPointEnabled,
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
+        activeCardProvider,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         ...(mpClientSecret ? { mpClientSecret } : {}),
         registrationInterestsConfig: {
@@ -889,10 +895,29 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Mercado Pago Point</CardTitle>
-                <CardDescription>Accept credit and debit card payments via Mercado Pago Point Smart terminal</CardDescription>
+                <CardTitle>Card Terminal Payments</CardTitle>
+                <CardDescription>Accept in-person credit and debit card payments via a terminal provider</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                    Active provider
+                  </label>
+                  <select
+                    value={activeCardProvider}
+                    onChange={(e) => setActiveCardProvider(e.target.value as CardPaymentProviderName)}
+                    className="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="mercado_pago">Mercado Pago Point</option>
+                    <option value="clip" disabled>Clip PinPad (coming soon)</option>
+                  </select>
+                  <p className="text-[10px] text-on-surface-variant/50 mt-2">
+                    Your store uses this provider for all in-person card payments. Configure its credentials below.
+                  </p>
+                </div>
+
+                {activeCardProvider === 'mercado_pago' && (
+                <>
                 <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
                   <input
                     type="checkbox"
@@ -906,6 +931,15 @@ export default function SettingsPage() {
                     <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Mercado Pago Point Smart 2 terminal for in-person processing</span>
                   </div>
                 </label>
+                </>)}
+
+                {activeCardProvider === 'clip' && (
+                  <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                    <p className="text-sm text-on-surface-variant">
+                      Clip PinPad integration is coming soon. Stay on Mercado Pago Point for now.
+                    </p>
+                  </div>
+                )}
 
                 {mpPointEnabled && (
                   <>

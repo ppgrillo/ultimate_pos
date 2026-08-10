@@ -2,11 +2,17 @@ import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
-import { mpService } from '../services/mp-point'
 import { SignJWT } from 'jose'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 import { encryptSettings, decryptSettings } from '../lib/settings'
 import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
+import {
+  getCardProvider,
+  getProviderCredentials,
+  getActiveCardProvider,
+  cardProviderDisplayName,
+} from '../services/payments'
+import type { CardPaymentProviderName } from '../services/payments/types'
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
 const MAX_LOGO_SIZE = 3 * 1024 * 1024
@@ -32,6 +38,8 @@ storesRouter.get('/current', async (c) => {
     const s = { ...(safe.settings as Record<string, unknown>) }
     delete s.mpPointAccessToken
     delete s.mpClientSecret
+    delete s.clipApiKey
+    delete s.clipApiSecret
     safe.settings = s as typeof safe.settings
   }
 
@@ -145,6 +153,8 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
   const safeSettings = { ...(data.settings as Record<string, unknown>) }
   delete safeSettings.mpPointAccessToken
   delete safeSettings.mpClientSecret
+  delete safeSettings.clipApiKey
+  delete safeSettings.clipApiSecret
 
   return c.json({ settings: safeSettings, tax_rate: data.tax_rate })
 })
@@ -160,12 +170,15 @@ storesRouter.get('/terminals', requireRole('admin'), async (c) => {
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const accessToken = settings?.mpPointAccessToken as string | undefined
-  if (!accessToken) throw badRequest('MP Point access token not configured. Save your access token in settings first.')
+  const providerName = getActiveCardProvider(settings)
+  const credentials = getProviderCredentials(settings)
+  if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured. Save them in settings first.`)
+
+  const provider = getCardProvider(providerName)
+  if (!provider.listTerminals) throw badRequest(`${cardProviderDisplayName(providerName)} does not support terminal listing`)
 
   try {
-    const result = await mpService.listTerminals(accessToken)
-    const terminals = (result as any)?.data?.terminals ?? []
+    const terminals = await provider.listTerminals(credentials)
     return c.json({ terminals })
   } catch (err: any) {
     throw badRequest(`Failed to list terminals: ${err.message}`)
@@ -186,11 +199,15 @@ storesRouter.post('/terminals/setup-pdv', requireRole('admin'), async (c) => {
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const accessToken = settings?.mpPointAccessToken as string | undefined
-  if (!accessToken) throw badRequest('MP Point access token not configured')
+  const providerName = getActiveCardProvider(settings)
+  const credentials = getProviderCredentials(settings)
+  if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured`)
+
+  const provider = getCardProvider(providerName)
+  if (!provider.setupTerminal) throw badRequest(`${cardProviderDisplayName(providerName)} does not support terminal setup`)
 
   try {
-    await mpService.setPdvMode(accessToken, terminalId)
+    await provider.setupTerminal(terminalId, credentials)
     return c.json({ success: true })
   } catch (err: any) {
     throw badRequest(`Failed to set PDV mode: ${err.message}`)
@@ -208,8 +225,11 @@ storesRouter.post('/terminals/cancel-queued', requireRole('admin'), async (c) =>
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const accessToken = settings?.mpPointAccessToken as string | undefined
-  if (!accessToken) throw badRequest('MP Point access token not configured')
+  const providerName = getActiveCardProvider(settings)
+  const credentials = getProviderCredentials(settings)
+  if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured`)
+
+  const provider = getCardProvider(providerName)
 
   const { data: pendingOrders } = await supabaseAdmin
     .from('orders')
@@ -220,32 +240,32 @@ storesRouter.post('/terminals/cancel-queued', requireRole('admin'), async (c) =>
     .order('created_at', { ascending: false })
     .limit(5)
 
-  const mpOrderIds: Array<{ orderId: string; mpOrderId: string }> = []
+  const providerOrderIds: Array<{ orderId: string; providerOrderId: string }> = []
   for (const order of pendingOrders || []) {
     const meta = order.metadata as Record<string, unknown> | null
-    const mpId = meta?.mpOrderId as string | undefined
+    const providerOrderId = (meta?.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? (meta?.mpOrderId as string | undefined)
     const mpStatus = meta?.mpOrderStatus as string | undefined
-    if (mpId && (mpStatus === 'created' || mpStatus === 'at_terminal' || !mpStatus)) {
-      mpOrderIds.push({ orderId: order.id, mpOrderId: mpId })
+    if (providerOrderId && (mpStatus === 'created' || mpStatus === 'at_terminal' || !mpStatus)) {
+      providerOrderIds.push({ orderId: order.id, providerOrderId })
     }
   }
 
-  if (mpOrderIds.length === 0) {
-    return c.json({ cancelled: 0, message: 'No pending MP Point orders found to cancel' })
+  if (providerOrderIds.length === 0) {
+    return c.json({ cancelled: 0, message: 'No pending card payment orders found to cancel' })
   }
 
   let cancelledCount = 0
   const errors: string[] = []
-  for (const { orderId, mpOrderId } of mpOrderIds) {
+  for (const { orderId, providerOrderId } of providerOrderIds) {
     try {
-      await mpService.cancelOrder(accessToken, mpOrderId)
+      await provider.cancelPayment(providerOrderId, credentials)
       await supabaseAdmin
         .from('orders')
         .update({ status: 'cancelled', metadata: { ...(await getMetadata(supabaseAdmin, orderId)), mpOrderStatus: 'canceled' } })
         .eq('id', orderId)
       cancelledCount++
     } catch (err: any) {
-      errors.push(`${mpOrderId}: ${err.message}`)
+      errors.push(`${providerOrderId}: ${err.message}`)
     }
   }
 
@@ -265,7 +285,7 @@ function getJwtSecret() {
 
 storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => {
   const storeId = c.get('storeId')
-  const { name, terminalId } = await c.req.json<{ name: string; terminalId: string }>()
+  const { name, terminalId, provider: requestedProvider } = await c.req.json<{ name: string; terminalId: string; provider?: CardPaymentProviderName }>()
 
   if (!name || !name.trim()) throw badRequest('Station name is required')
   if (!terminalId || !terminalId.trim()) throw badRequest('Terminal ID is required')
@@ -280,6 +300,7 @@ storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => 
 
   const currentSettings = (store.settings as Record<string, unknown>) || {}
   const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
+  const provider: CardPaymentProviderName = requestedProvider || getActiveCardProvider(currentSettings)
 
   const stationId = crypto.randomUUID()
   const createdAt = new Date().toISOString()
@@ -299,6 +320,7 @@ storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => 
     id: stationId,
     name: name.trim(),
     terminalId: terminalId.trim(),
+    provider,
     isActive: true,
     createdAt,
     token,

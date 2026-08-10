@@ -406,13 +406,13 @@ export const api = createApi({
       transformResponse: (response: { data: Order }) => response.data,
       providesTags: (_result, _error, id) => [{ type: 'Order', id }],
     }),
-    createOrder: builder.mutation<{ id: string; metadata: { mpOrderId?: string } }, OrderCreateInput>({
+    createOrder: builder.mutation<{ id: string; metadata?: unknown }, OrderCreateInput>({
       query: (body) => ({
         url: '/orders',
         method: 'POST',
         body,
       }),
-      transformResponse: (response: { data: { id: string; metadata: { mpOrderId?: string } } }) => response.data,
+      transformResponse: (response: { data: { id: string; metadata?: unknown } }) => response.data,
       invalidatesTags: [{ type: 'Order', id: 'LIST' }, { type: 'LoyaltyCard' }, { type: 'Customer' }],
     }),
     updateOrderStatus: builder.mutation<Order, { id: string; status: OrderStatus | string }>({
