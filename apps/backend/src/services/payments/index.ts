@@ -1,4 +1,5 @@
 import { mercadoPagoProvider } from './mercadopago.provider'
+import { clipProvider } from './clip.provider'
 import type {
   CardPaymentProviderName,
   CardProviderCredentials,
@@ -18,6 +19,7 @@ export function getActiveCardProvider(
 export function getCardProvider(
   name: CardPaymentProviderName = DEFAULT_CARD_PROVIDER,
 ): PaymentProvider {
+  if (name === 'clip') return clipProvider
   return mercadoPagoProvider
 }
 
@@ -40,16 +42,28 @@ export function getProviderCredentials(
 
 export function getProviderTerminalId(
   settings: Record<string, unknown> | null | undefined,
+  provider?: CardPaymentProviderName,
 ): string {
+  const resolved = provider ?? getActiveCardProvider(settings)
+  if (resolved === 'clip') {
+    return (settings?.clipTerminalId as string) || ''
+  }
   return (settings?.mpPointTerminalId as string) || ''
 }
 
 export function isCardPaymentConfigured(
   settings: Record<string, unknown> | null | undefined,
 ): boolean {
+  const provider = getActiveCardProvider(settings)
+  const credentials = getProviderCredentials(settings, provider)
+  const terminalId = getProviderTerminalId(settings, provider)
+
+  if (provider === 'clip') {
+    const enabled = (settings?.clipEnabled as boolean) ?? false
+    return enabled && Boolean(credentials.accessToken) && Boolean(credentials.clientSecret) && Boolean(terminalId)
+  }
+
   const enabled = (settings?.mpPointEnabled as boolean) ?? false
-  const credentials = getProviderCredentials(settings)
-  const terminalId = getProviderTerminalId(settings)
   return enabled && Boolean(credentials.accessToken) && Boolean(terminalId)
 }
 

@@ -12,7 +12,7 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
-import { getActiveCardProvider } from '@/lib/card-payments'
+import { getActiveCardProvider, cardProviderDisplayName } from '@/lib/card-payments'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/self-checkout/CustomizeProduct'
@@ -522,14 +522,12 @@ export default function SelfCheckoutPage() {
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
     setDismissedWelcome(true)
+    setQrExpanded(false)
+    setFormExpanded(false)
+    setCameraExpanded(false)
     if (product.modifiers && product.modifiers.length > 0) {
       setCustomizeProduct(product)
       return
-    }
-    if (cartItems.length === 0) {
-      setQrExpanded(false)
-      setFormExpanded(false)
-      setCameraExpanded(false)
     }
     const promo = getPromotionForProduct(product)
     const salePrice = promo
@@ -920,8 +918,8 @@ export default function SelfCheckoutPage() {
                 <CreditCard className="h-3.5 w-3.5 text-primary" />
               </div>
               <div>
-                <p className="text-[11px] font-label font-bold text-on-surface">Pago con MP Point</p>
-                <p className="text-[10px] text-on-surface-variant">Terminal Point</p>
+                <p className="text-[11px] font-label font-bold text-on-surface">Pago con {cardProviderDisplayName(stationProvider)}</p>
+                <p className="text-[10px] text-on-surface-variant">{stationName}</p>
               </div>
             </div>
           </div>

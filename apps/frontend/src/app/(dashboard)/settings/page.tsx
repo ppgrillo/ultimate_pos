@@ -49,6 +49,10 @@ export default function SettingsPage() {
   const [mpPointAccessToken, setMpPointAccessToken] = useState('')
   const [mpClientSecret, setMpClientSecret] = useState('')
   const [activeCardProvider, setActiveCardProvider] = useState<CardPaymentProviderName>('mercado_pago')
+  const [clipEnabled, setClipEnabled] = useState(false)
+  const [clipTerminalId, setClipTerminalId] = useState('')
+  const [clipApiKey, setClipApiKey] = useState('')
+  const [clipApiSecret, setClipApiSecret] = useState('')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(false)
   const [terminals, setTerminals] = useState<Array<{ id: string; model: string; operating_mode: string }> | null>(null)
@@ -131,6 +135,8 @@ export default function SettingsPage() {
     setMpPointEnabled(settings?.mpPointEnabled ?? false)
     setMpPointTerminalId(settings?.mpPointTerminalId ?? '')
     setActiveCardProvider(getActiveCardProvider(settings))
+    setClipEnabled(settings?.clipEnabled ?? false)
+    setClipTerminalId(settings?.clipTerminalId ?? '')
     const ic = settings?.registrationInterestsConfig
     setInterestsEnabled(ic?.enabled ?? true)
     setInterestsSectionTitle(ic?.sectionTitle ?? 'Tus gustos e intereses')
@@ -196,6 +202,10 @@ export default function SettingsPage() {
     mpPointAccessToken !== '' ||
     mpClientSecret !== '' ||
     activeCardProvider !== getActiveCardProvider(settings) ||
+    clipEnabled !== (settings?.clipEnabled ?? false) ||
+    clipTerminalId !== (settings?.clipTerminalId ?? '') ||
+    clipApiKey !== '' ||
+    clipApiSecret !== '' ||
     interestsEnabled !== (settings?.registrationInterestsConfig?.enabled ?? true) ||
     interestsSectionTitle !== (settings?.registrationInterestsConfig?.sectionTitle ?? 'Tus gustos e intereses') ||
     interestsSectionDescription !== (settings?.registrationInterestsConfig?.sectionDescription ?? 'Ayúdanos a conocerte mejor para enviarte ofertas personalizadas') ||
@@ -246,7 +256,7 @@ export default function SettingsPage() {
     }))
   }
 
-  const handleSave = async (overrides?: { mpPointTerminalId?: string }) => {
+  const handleSave = async (overrides?: { mpPointTerminalId?: string; clipTerminalId?: string }) => {
     try {
       await updateStoreSettings({
         address: businessAddress || undefined,
@@ -266,8 +276,12 @@ export default function SettingsPage() {
         mpPointEnabled,
         mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
         activeCardProvider,
+        clipEnabled,
+        clipTerminalId: overrides?.clipTerminalId ?? clipTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         ...(mpClientSecret ? { mpClientSecret } : {}),
+        ...(clipApiKey ? { clipApiKey } : {}),
+        ...(clipApiSecret ? { clipApiSecret } : {}),
         registrationInterestsConfig: {
           enabled: interestsEnabled,
           sectionTitle: interestsSectionTitle,
@@ -328,7 +342,7 @@ export default function SettingsPage() {
     setListError('')
     setTerminals(null)
     try {
-      const result = await triggerTerminals().unwrap()
+      const result = await triggerTerminals({ provider: activeCardProvider }).unwrap()
       setTerminals(result.terminals ?? [])
     } catch (err: any) {
       setListError(err.message || 'Failed to list terminals')
@@ -341,7 +355,7 @@ export default function SettingsPage() {
     setSettingUpPdv(terminalId)
     setListError('')
     try {
-      await setupPdv({ terminalId }).unwrap()
+      await setupPdv({ terminalId, provider: activeCardProvider }).unwrap()
       setTerminals((prev) =>
         prev
           ? prev.map((t) => (t.id === terminalId ? { ...t, operating_mode: 'PDV' } : t))
@@ -358,7 +372,7 @@ export default function SettingsPage() {
     setCancellingMpOrder(true)
     setCancelMpMessage('')
     try {
-      const result = await cancelQueuedMpOrders().unwrap()
+      const result = await cancelQueuedMpOrders({ provider: activeCardProvider }).unwrap()
       if (result.cancelled > 0) {
         setCancelMpMessage(`Orden cancelada exitosamente`)
         setCancelMpSuccess(true)
@@ -909,7 +923,7 @@ export default function SettingsPage() {
                     className="w-full rounded-xl border border-outline-variant bg-surface px-4 py-3 text-sm text-on-surface focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="mercado_pago">Mercado Pago Point</option>
-                    <option value="clip" disabled>Clip PinPad (coming soon)</option>
+                    <option value="clip">Clip PinPad</option>
                   </select>
                   <p className="text-[10px] text-on-surface-variant/50 mt-2">
                     Your store uses this provider for all in-person card payments. Configure its credentials below.
@@ -934,14 +948,23 @@ export default function SettingsPage() {
                 </>)}
 
                 {activeCardProvider === 'clip' && (
-                  <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                    <p className="text-sm text-on-surface-variant">
-                      Clip PinPad integration is coming soon. Stay on Mercado Pago Point for now.
-                    </p>
+                <>
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={clipEnabled}
+                    onChange={(e) => setClipEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <CreditCard className="h-5 w-5 text-on-surface-variant" />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Enable Clip PinPad</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Clip PinPad / Total 3 / Ultra terminal for in-person processing</span>
                   </div>
-                )}
+                </label>
+                </>)}
 
-                {mpPointEnabled && (
+                {((activeCardProvider === 'clip' ? clipEnabled : mpPointEnabled)) && (
                   <>
                     <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
                       <div className="flex items-center justify-between mb-2">
@@ -961,8 +984,8 @@ export default function SettingsPage() {
                       </div>
                       <input
                         type="text"
-                        value={mpPointTerminalId}
-                        onChange={(e) => setMpPointTerminalId(e.target.value)}
+                        value={activeCardProvider === 'clip' ? clipTerminalId : mpPointTerminalId}
+                        onChange={(e) => (activeCardProvider === 'clip' ? setClipTerminalId(e.target.value) : setMpPointTerminalId(e.target.value))}
                         placeholder="Seleccioná una terminal de la lista"
                         className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
                       />
@@ -1005,9 +1028,15 @@ export default function SettingsPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  setMpPointTerminalId(t.id)
-                                  setTerminals(null)
-                                  handleSave({ mpPointTerminalId: t.id })
+                                  if (activeCardProvider === 'clip') {
+                                    setClipTerminalId(t.id)
+                                    setTerminals(null)
+                                    handleSave({ clipTerminalId: t.id })
+                                  } else {
+                                    setMpPointTerminalId(t.id)
+                                    setTerminals(null)
+                                    handleSave({ mpPointTerminalId: t.id })
+                                  }
                                 }}
                               >
                                 Use
@@ -1018,58 +1047,104 @@ export default function SettingsPage() {
                       </div>
                     )}
 
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                        Access Token
-                      </label>
-                      <input
-                        type="password"
-                        value={mpPointAccessToken}
-                        onChange={(e) => setMpPointAccessToken(e.target.value)}
-                        placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current token' : 'Enter your Mercado Pago access token'}
-                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                      />
-                      <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                        Your access token is stored securely and never exposed to the frontend.
-                        {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
-                      </p>
-                    </div>
+                    {activeCardProvider === 'mercado_pago' && (
+                      <>
+                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                            Access Token
+                          </label>
+                          <input
+                            type="password"
+                            value={mpPointAccessToken}
+                            onChange={(e) => setMpPointAccessToken(e.target.value)}
+                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current token' : 'Enter your Mercado Pago access token'}
+                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                          />
+                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                            Your access token is stored securely and never exposed to the frontend.
+                            {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
+                          </p>
+                        </div>
 
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                        Client Secret (Webhook HMAC)
-                      </label>
-                      <input
-                        type="password"
-                        value={mpClientSecret}
-                        onChange={(e) => setMpClientSecret(e.target.value)}
-                        placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago client secret'}
-                        className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                      />
-                      <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                        Used to verify webhook signatures. Stored encrypted and never exposed to the frontend.
-                        {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
-                      </p>
-                    </div>
+                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                            Client Secret (Webhook HMAC)
+                          </label>
+                          <input
+                            type="password"
+                            value={mpClientSecret}
+                            onChange={(e) => setMpClientSecret(e.target.value)}
+                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago client secret'}
+                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                          />
+                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                            Used to verify webhook signatures. Stored encrypted and never exposed to the frontend.
+                            {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
+                          </p>
+                        </div>
+                      </>
+                    )}
 
-                    <div className="flex items-center justify-between rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
-                      <div>
-                        <p className="text-sm font-bold text-on-surface">Orden atorada en la terminal</p>
-                        <p className="text-xs text-on-surface-variant mt-0.5">Cancela la orden MP Point activa si no se puede crear una nueva</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        isLoading={cancellingMpOrder}
-                        onClick={handleCancelQueued}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                    {cancelMpMessage && (
-                      <p className={`text-xs ${cancelMpSuccess ? 'text-primary' : 'text-error'}`}>
-                        {cancelMpMessage}
-                      </p>
+                    {activeCardProvider === 'clip' && (
+                      <>
+                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                            API Key
+                          </label>
+                          <input
+                            type="password"
+                            value={clipApiKey}
+                            onChange={(e) => setClipApiKey(e.target.value)}
+                            placeholder={settings?.clipEnabled ? 'Leave empty to keep current key' : 'Enter your Clip API key'}
+                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                          />
+                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                            Used to authenticate PinPad intents and refunds. Stored encrypted and never exposed to the frontend.
+                            {settings?.clipEnabled && ' Leave empty to keep the existing key.'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                            Clave Secreta (Secret)
+                          </label>
+                          <input
+                            type="password"
+                            value={clipApiSecret}
+                            onChange={(e) => setClipApiSecret(e.target.value)}
+                            placeholder={settings?.clipEnabled ? 'Leave empty to keep current secret' : 'Enter your Clip secret'}
+                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                          />
+                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                            Pair of your Clip API key. Stored encrypted and never exposed to the frontend.
+                            {settings?.clipEnabled && ' Leave empty to keep the existing secret.'}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {activeCardProvider === 'mercado_pago' && (
+                      <>
+                        <div className="flex items-center justify-between rounded-xl bg-surface-container/30 border border-outline-variant/50 p-4">
+                          <div>
+                            <p className="text-sm font-bold text-on-surface">Orden atorada en la terminal</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">Cancela la orden MP Point activa si no se puede crear una nueva</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            isLoading={cancellingMpOrder}
+                            onClick={handleCancelQueued}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                        {cancelMpMessage && (
+                          <p className={`text-xs ${cancelMpSuccess ? 'text-primary' : 'text-error'}`}>
+                            {cancelMpMessage}
+                          </p>
+                        )}
+                      </>
                     )}
                   </>
                 )}

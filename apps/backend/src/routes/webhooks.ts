@@ -1,14 +1,12 @@
 import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
-import { orderBus } from '../events'
 import { decryptSettings } from '../lib/settings'
-import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 import {
   getCardProvider,
   getProviderCredentials,
   getActiveCardProvider,
 } from '../services/payments'
-import { buildPaymentMetadata } from '../services/payments/metadata'
+import { applyCardPaymentOutcome, enrichOrder } from '../services/payments/apply-outcome'
 import type { CardOrderStatus } from '../services/payments/types'
 
 export const webhooksRouter = new Hono()
@@ -64,16 +62,6 @@ async function getOrderByMpOrderId(mpOrderId: string) {
     .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
     .filter('metadata->>mpOrderId', 'eq', mpOrderId)
     .single()
-}
-
-async function enrichOrder(order: Record<string, unknown>) {
-  const customer = order.customer as { name?: string } | null
-  return {
-    ...order,
-    customer_name: customer?.name || null,
-    customer: undefined,
-    metadata: order.metadata || {},
-  }
 }
 
 const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string; mpStatus: CardOrderStatus }> = {
@@ -164,113 +152,94 @@ webhooksRouter.post('/mp-point', async (c) => {
     }
   }
 
-  const provider = getActiveCardProvider(storeSettings)
-  const metadata = buildPaymentMetadata(
-    {
-      ...currentMetadata,
-      ...((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
-    },
-    provider,
-    mpOrderId,
-    mapping.mpStatus,
-    mpPaymentDetail || mapping.mpStatus,
-  )
-
-  const updateData: Record<string, unknown> = {
-    metadata,
-    updated_at: new Date().toISOString(),
-  }
-
-  if (mapping.orderStatus) {
-    updateData.status = mapping.orderStatus
-    if (mapping.orderStatus === 'paid') {
-      updateData.payment_status = 'paid'
-    }
-  }
-
-  if (mapping.paymentStatus === 'failed') {
-    updateData.payment_status = 'unpaid'
-  } else if (mapping.paymentStatus === 'refunded') {
-    updateData.payment_status = 'refunded'
-  }
-
-  const { error: updateError } = await supabaseAdmin
-    .from('orders')
-    .update(updateData)
-    .eq('id', orderData.id)
-
-  if (updateError) {
-    console.error(`[mp-point-webhook] Failed to update order: ${updateError.message}`)
-    return c.json({ message: 'Update failed' }, 500)
-  }
-
-  if (mapping.paymentStatus) {
-    const paymentUpdate: Record<string, unknown> = { status: mpPaymentStatus === 'approved' ? 'completed' : mapping.paymentStatus }
-    await supabaseAdmin
-      .from('payments')
-      .update(paymentUpdate)
-      .eq('order_id', orderData.id)
-  }
-
-  if (mapping.orderStatus === 'paid' && orderData.customer_id) {
-    const { data: cust } = await supabaseAdmin
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', orderData.customer_id)
-      .single()
-
-    if (cust) {
-      await supabaseAdmin
-        .from('customers')
-        .update({
-          total_visits: (cust.total_visits || 0) + 1,
-          total_spent: (Number(cust.total_spent) || 0) + Number(orderData.total),
-        })
-        .eq('id', orderData.customer_id)
-    }
-  }
-
-  if ((mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') && orderData.customer_id) {
-    const { data: cust } = await supabaseAdmin
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', orderData.customer_id)
-      .single()
-
-    if (cust) {
-      await supabaseAdmin
-        .from('customers')
-        .update({
-          total_visits: Math.max(0, (cust.total_visits || 0) - 1),
-          total_spent: Math.max(0, (Number(cust.total_spent) || 0) - Number(orderData.total)),
-        })
-        .eq('id', orderData.customer_id)
-    }
-  }
-
-  const { processMpLoyalty, reverseMpLoyalty } = await import('../routes/orders')
-  if (mapping.orderStatus === 'paid') {
-    await processMpLoyalty(supabaseAdmin, orderData.id, orderData.store_id).catch(() => {})
-  } else if (mapping.orderStatus === 'cancelled' || mapping.orderStatus === 'refunded') {
-    await revertPromotionUsageIfNeeded(
-      orderData.id,
+  try {
+    await applyCardPaymentOutcome({
+      order: orderData,
       currentMetadata,
-      (orderData.applied_promotions as Array<{ promotion_id?: string }> | null | undefined) || [],
-    ).catch(() => {})
-
-    await reverseMpLoyalty(supabaseAdmin, orderData.id).catch(() => {})
-  }
-
-  const { data: fullOrder } = await supabaseAdmin
-    .from('orders')
-    .select('*, items:order_items(*), payments(*), customer:customer_id(name)')
-    .eq('id', orderData.id)
-    .single()
-
-  if (fullOrder) {
-    const enriched = await enrichOrder(fullOrder)
-    orderBus.emit('order:status-changed', enriched)
+      provider: getActiveCardProvider(storeSettings),
+      providerOrderId: mpOrderId,
+      status: mapping.mpStatus,
+      detail: mpPaymentDetail || mapping.mpStatus,
+      paymentStatusOverride: mpPaymentStatus === 'approved' ? 'completed' : mapping.paymentStatus,
+    })
+  } catch (err: unknown) {
+    console.error(`[mp-point-webhook] Failed to update order: ${(err as Error).message}`)
+    return c.json({ message: 'Update failed' }, 500)
   }
 
   return c.json({ message: 'OK' }, 200)
 })
+
+webhooksRouter.post('/clip-pinpad', async (c) => {
+  const body = await c.req.text()
+
+  let parsed: { id?: string; origin?: string; event_type?: string }
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return c.json({ message: 'Invalid JSON' }, 400)
+  }
+
+  const { id, origin, event_type } = parsed
+
+  if (!id || origin !== 'pinpad-payments-api' || event_type !== 'PINPAD_INTENT_STATUS_CHANGED') {
+    return c.json({ message: 'Invalid event' }, 400)
+  }
+
+  const pinpadRequestId = id
+
+  const { data: orderData, error: orderError } = await getOrderByMpOrderId(pinpadRequestId)
+  if (orderError || !orderData) {
+    console.warn(`[clip-pinpad-webhook] Order not found for pinpadRequestId=${pinpadRequestId}`)
+    return c.json({ message: 'Accepted' }, 200)
+  }
+
+  const storeId = orderData.store_id
+  let storeSettings: Record<string, unknown> = {}
+  if (storeId) {
+    const { data: store } = await supabaseAdmin
+      .from('stores')
+      .select('settings')
+      .eq('id', storeId)
+      .single()
+
+    storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  }
+
+  const provider = getCardProvider('clip')
+  const credentials = getProviderCredentials(storeSettings, 'clip')
+
+  // Clip sends no signature — always poll the API as source of truth (idempotent)
+  let payment
+  try {
+    payment = await provider.getPayment(pinpadRequestId, credentials)
+  } catch (err: unknown) {
+    console.error(`[clip-pinpad-webhook] Failed to poll payment ${pinpadRequestId}: ${(err as Error).message}`)
+    return c.json({ message: 'Accepted' }, 200)
+  }
+
+  const currentMetadata = (orderData.metadata as Record<string, unknown>) || {}
+  const currentStatus = (currentMetadata.payment as { providerStatus?: string } | undefined)?.providerStatus ?? currentMetadata.mpOrderStatus
+
+  if (currentStatus === payment.status) {
+    return c.json({ message: 'Already processed' }, 200)
+  }
+
+  try {
+    await applyCardPaymentOutcome({
+      order: orderData,
+      currentMetadata,
+      provider: 'clip',
+      providerOrderId: pinpadRequestId,
+      status: payment.status,
+      detail: payment.paymentDetail,
+    })
+  } catch (err: unknown) {
+    console.error(`[clip-pinpad-webhook] Failed to update order: ${(err as Error).message}`)
+    return c.json({ message: 'Update failed' }, 500)
+  }
+
+  return c.json({ message: 'OK' }, 200)
+})
+
+export { enrichOrder }

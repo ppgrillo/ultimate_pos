@@ -15,12 +15,20 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
 
   if (!passId && !applePassUrl && !googleSaveUrl) return null
 
+  const toAbsoluteUrl = (url?: string) => {
+    if (!url) return url
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    return `${typeof window !== 'undefined' ? window.location.origin : ''}${url}`
+  }
+
+  const appleUrl = toAbsoluteUrl(applePassUrl)
+
   const buildWhatsAppMessage = () => {
     const lines: string[] = []
     lines.push('Your digital loyalty card is ready! Add it to your wallet:')
     lines.push('')
     if (googleSaveUrl) lines.push('Google Wallet: ' + googleSaveUrl)
-    if (applePassUrl) lines.push('Apple Wallet: ' + applePassUrl)
+    if (appleUrl) lines.push('Apple Wallet: ' + appleUrl)
     lines.push('')
     lines.push('Open the link on your phone to add it.')
     return lines.join('\n')
@@ -66,11 +74,11 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
         </div>
       )}
 
-      {showQR === 'apple' && applePassUrl && (
+      {showQR === 'apple' && appleUrl && (
         <div className="flex flex-col items-center gap-3 mb-3">
           <div className="rounded-xl bg-white p-4">
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(applePassUrl)}`}
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(appleUrl)}`}
               alt="Apple Wallet QR"
               className="h-40 w-40"
             />
@@ -94,7 +102,7 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
             Google Wallet
           </button>
         )}
-        {applePassUrl && (
+        {appleUrl && (
           <button
             onClick={() => setShowQR(showQR === 'apple' ? null : 'apple')}
             className={`flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold transition-colors border ${

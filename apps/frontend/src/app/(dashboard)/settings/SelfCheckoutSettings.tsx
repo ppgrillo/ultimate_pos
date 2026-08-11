@@ -92,7 +92,9 @@ export function SelfCheckoutSettings() {
   async function listTerminals() {
     setListingTerminals(true)
     try {
-      const res = await api.get<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }>('/stores/terminals')
+      const res = await api.get<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }>('/stores/terminals', {
+        params: { provider: newProvider },
+      })
       setTerminals(res.terminals)
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to list terminals')
@@ -316,7 +318,7 @@ export function SelfCheckoutSettings() {
                   className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none"
                 >
                   <option value="mercado_pago">Mercado Pago Point</option>
-                  <option value="clip" disabled>Clip PinPad (coming soon)</option>
+                  <option value="clip">Clip PinPad</option>
                 </select>
                 <p className="text-[11px] text-on-surface-variant mt-1.5">
                   This station sends card payments to this provider&apos;s terminal.

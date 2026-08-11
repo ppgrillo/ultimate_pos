@@ -155,8 +155,9 @@ ordersRouter.get('/:id', async (c) => {
         .single()
 
       const decrypted = decryptSettings((store?.settings as Record<string, unknown>) || {})
-      const provider = getCardProvider(getActiveCardProvider(decrypted))
-      const credentials = getProviderCredentials(decrypted)
+      const providerName = (meta.payment as { provider?: CardPaymentProviderName } | undefined)?.provider ?? getActiveCardProvider(decrypted)
+      const provider = getCardProvider(providerName)
+      const credentials = getProviderCredentials(decrypted, providerName)
 
       if (credentials.accessToken) {
         const payment = await provider.getPayment(providerOrderId, credentials)
@@ -178,7 +179,7 @@ ordersRouter.get('/:id', async (c) => {
                   ...meta,
                   ...((outcome.orderStatus === 'cancelled' || outcome.orderStatus === 'refunded') ? { promotionUsageReverted: true } : {}),
                 },
-                getActiveCardProvider(decrypted),
+                providerName,
                 providerOrderId,
                 status,
                 payment.paymentDetail,

@@ -17,6 +17,14 @@ import type { CardPaymentProviderName } from '../services/payments/types'
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
 const MAX_LOGO_SIZE = 3 * 1024 * 1024
 
+function resolveProviderParam(
+  value: string | undefined,
+  fallback: CardPaymentProviderName,
+): CardPaymentProviderName {
+  if (value === 'clip' || value === 'mercado_pago') return value
+  return fallback
+}
+
 export const storesRouter = new Hono()
 
 storesRouter.use('*', authMiddleware)
@@ -170,8 +178,8 @@ storesRouter.get('/terminals', requireRole('admin'), async (c) => {
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const providerName = getActiveCardProvider(settings)
-  const credentials = getProviderCredentials(settings)
+  const providerName = resolveProviderParam(c.req.query('provider'), getActiveCardProvider(settings))
+  const credentials = getProviderCredentials(settings, providerName)
   if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured. Save them in settings first.`)
 
   const provider = getCardProvider(providerName)
@@ -189,7 +197,7 @@ storesRouter.post('/terminals/setup-pdv', requireRole('admin'), async (c) => {
   const storeId = c.get('storeId')
   if (!storeId) throw notFound('No store assigned')
 
-  const { terminalId } = await c.req.json<{ terminalId: string }>()
+  const { terminalId, provider: requestedProvider } = await c.req.json<{ terminalId: string; provider?: string }>()
   if (!terminalId) throw badRequest('terminalId is required')
 
   const { data: store } = await supabaseAdmin
@@ -199,8 +207,8 @@ storesRouter.post('/terminals/setup-pdv', requireRole('admin'), async (c) => {
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const providerName = getActiveCardProvider(settings)
-  const credentials = getProviderCredentials(settings)
+  const providerName = resolveProviderParam(requestedProvider, getActiveCardProvider(settings))
+  const credentials = getProviderCredentials(settings, providerName)
   if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured`)
 
   const provider = getCardProvider(providerName)
@@ -218,6 +226,8 @@ storesRouter.post('/terminals/cancel-queued', requireRole('admin'), async (c) =>
   const storeId = c.get('storeId')
   if (!storeId) throw notFound('No store assigned')
 
+  const { provider: requestedProvider } = await c.req.json<{ provider?: string }>().catch(() => ({} as { provider?: string }))
+
   const { data: store } = await supabaseAdmin
     .from('stores')
     .select('settings')
@@ -225,8 +235,8 @@ storesRouter.post('/terminals/cancel-queued', requireRole('admin'), async (c) =>
     .single()
 
   const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  const providerName = getActiveCardProvider(settings)
-  const credentials = getProviderCredentials(settings)
+  const providerName = resolveProviderParam(requestedProvider, getActiveCardProvider(settings))
+  const credentials = getProviderCredentials(settings, providerName)
   if (!credentials.accessToken) throw badRequest(`${cardProviderDisplayName(providerName)} credentials not configured`)
 
   const provider = getCardProvider(providerName)

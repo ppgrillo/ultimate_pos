@@ -20,6 +20,7 @@ import type {
   ScanLoyaltyResult,
   Expense,
   ExpenseType,
+  CardPaymentProviderName,
 } from '@ultimate-pos/shared'
 
 export interface CustomerWithLoyalty extends Customer {
@@ -279,11 +280,14 @@ export const api = createApi({
       transformResponse: (response: { settings: StoreSettings; tax_rate?: number }) => response as unknown as Store,
       invalidatesTags: [{ type: 'Store', id: 'CURRENT' }],
     }),
-    getTerminals: builder.query<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }, void>({
-      query: () => '/stores/terminals',
+    getTerminals: builder.query<{ terminals: Array<{ id: string; model: string; operating_mode: string }> }, { provider?: CardPaymentProviderName } | void>({
+      query: (params) => ({
+        url: '/stores/terminals',
+        params: params?.provider ? { provider: params.provider } : undefined,
+      }),
       providesTags: [{ type: 'Terminal', id: 'LIST' }],
     }),
-    setupPdv: builder.mutation<{ success: boolean }, { terminalId: string }>({
+    setupPdv: builder.mutation<{ success: boolean }, { terminalId: string; provider?: CardPaymentProviderName }>({
       query: (body) => ({
         url: '/stores/terminals/setup-pdv',
         method: 'POST',
@@ -291,10 +295,11 @@ export const api = createApi({
       }),
       invalidatesTags: [{ type: 'Terminal', id: 'LIST' }],
     }),
-    cancelQueuedMpOrders: builder.mutation<{ cancelled: number; message?: string; errors?: string[] }, void>({
-      query: () => ({
+    cancelQueuedMpOrders: builder.mutation<{ cancelled: number; message?: string; errors?: string[] }, { provider?: CardPaymentProviderName } | void>({
+      query: (body) => ({
         url: '/stores/terminals/cancel-queued',
         method: 'POST',
+        body: body ?? {},
       }),
       invalidatesTags: [{ type: 'Terminal', id: 'LIST' }],
     }),

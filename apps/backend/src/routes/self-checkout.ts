@@ -670,7 +670,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
   const providerOrderId = (meta.payment as { providerOrderId?: string } | undefined)?.providerOrderId ?? (meta.mpOrderId as string | undefined)
   const providerStatus = (meta.payment as { providerStatus?: CardOrderStatus } | undefined)?.providerStatus ?? (meta.mpOrderStatus as CardOrderStatus | undefined)
 
-  if (providerOrderId && (providerStatus === 'created' || providerStatus === 'at_terminal')) {
+  if (providerOrderId && (providerStatus === 'created' || providerStatus === 'at_terminal' || providerStatus === 'processing')) {
     const settings = await getStoreSettings(storeId)
     const providerName = (meta.payment as { provider?: CardPaymentProviderName } | undefined)?.provider ?? getActiveCardProvider(settings)
     const credentials = getProviderCredentials(settings, providerName)
@@ -714,9 +714,13 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
               .eq('order_id', orderId)
             const { reverseMpLoyalty } = await import('../routes/orders')
             await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
+          } else {
+            updates.status = 'pending'
+            updates.payment_status = 'unpaid'
           }
           await supabaseAdmin.from('orders').update(updates).eq('id', orderId)
           meta.mpOrderStatus = status
+          meta.payment = { ...((meta.payment as Record<string, unknown>) || {}), providerStatus: status }
         }
       } catch {
       }
