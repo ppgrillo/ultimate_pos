@@ -31,8 +31,20 @@ export async function revertPromotionUsageIfNeeded(
     await supabaseAdmin.rpc('decrement_promotion_uses', { promo_id: promotionId })
   }
 
+  // Merge the flag into the current metadata from the DB rather than the
+  // caller-supplied copy: callers (apply-outcome, order sync) pass the
+  // pre-update metadata, so writing it back verbatim would clobber a payment
+  // outcome applied moments earlier (e.g. revert `providerStatus` to
+  // `processing` after a cancellation).
+  const { data: fresh } = await supabaseAdmin
+    .from('orders')
+    .select('metadata')
+    .eq('id', orderId)
+    .single()
+
+  const freshMetadata = (fresh?.metadata as Record<string, unknown> | null | undefined) || {}
   await supabaseAdmin
     .from('orders')
-    .update({ metadata: { ...(metadata || {}), promotionUsageReverted: true } })
+    .update({ metadata: { ...freshMetadata, promotionUsageReverted: true } })
     .eq('id', orderId)
 }

@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../../lib/supabase/admin'
 import { orderBus } from '../../events'
 import { revertPromotionUsageIfNeeded } from '../../lib/promotion-usage'
 import { buildPaymentMetadata } from './metadata'
-import { getCardPaymentOutcome } from './status'
+import { getCardPaymentOutcome, isTerminalCardStatus } from './status'
 import type { CardOrderStatus, CardPaymentProviderName } from './types'
 
 export interface ApplyCardPaymentOutcomeParams {
@@ -41,6 +41,20 @@ export async function applyCardPaymentOutcome(
   params: ApplyCardPaymentOutcomeParams,
 ): Promise<void> {
   const { order, currentMetadata, provider, providerOrderId, status, detail, paymentStatusOverride } = params
+
+  const existingProviderStatus = (currentMetadata.payment as { providerStatus?: CardOrderStatus } | undefined)?.providerStatus ?? (currentMetadata.mpOrderStatus as CardOrderStatus | undefined)
+
+  // Fence: an already-terminal order must never regress to a non-terminal state.
+  // Providers can deliver notifications out of order (e.g. IN_PROCESS arriving
+  // after CANCELED), so a late event must not overwrite a finished outcome.
+  // The only allowed terminal→terminal transition is paid → refunded.
+  if (existingProviderStatus && isTerminalCardStatus(existingProviderStatus)) {
+    if (!(existingProviderStatus === 'processed' && status === 'refunded')) {
+      console.log(`[apply-outcome] Skipping status update ${existingProviderStatus} -> ${status} for order ${order.id} (already terminal)`)
+      return
+    }
+  }
+
   const outcome = getCardPaymentOutcome(status)
 
   const metadata = buildPaymentMetadata(

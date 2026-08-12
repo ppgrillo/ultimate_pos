@@ -183,6 +183,7 @@ webhooksRouter.post('/clip-pinpad', async (c) => {
   const { id, origin, event_type } = parsed
 
   if (!id || origin !== 'pinpad-payments-api' || event_type !== 'PINPAD_INTENT_STATUS_CHANGED') {
+    console.warn(`[clip-pinpad-webhook] Rejected payload: ${JSON.stringify(parsed)}`)
     return c.json({ message: 'Invalid event' }, 400)
   }
 

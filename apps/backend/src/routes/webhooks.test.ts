@@ -133,6 +133,16 @@ describe('webhooks POST /mp-point', () => {
       const res = await postWebhook(VALID_PAYLOAD)
       expect(res.status).toBe(200)
     })
+
+    it('does not regress a terminal order when a late non-terminal event arrives out of order', async () => {
+      qb.single.mockResolvedValue({
+        data: { ...validOrder, metadata: { mpOrderId: 'ORD_MP_001', mpOrderStatus: 'canceled' } },
+        error: null,
+      })
+      const res = await postWebhook({ ...VALID_PAYLOAD, action: 'order.processing' })
+      expect(res.status).toBe(200)
+      expect(mockOrderBusEmit).not.toHaveBeenCalled()
+    })
   })
 })
 
@@ -226,6 +236,28 @@ describe('webhooks POST /clip-pinpad', () => {
         },
       },
       error: null,
+    })
+    const res = await postClipWebhook(VALID_CLIP_PAYLOAD)
+    expect(res.status).toBe(200)
+    expect(mockOrderBusEmit).not.toHaveBeenCalled()
+  })
+
+  it('does not regress a terminal (canceled) order when a late non-terminal event arrives out of order', async () => {
+    qb.single.mockResolvedValue({
+      data: {
+        ...clipOrder,
+        metadata: {
+          mpOrderId: PINPAD_ID,
+          mpOrderStatus: 'canceled',
+          payment: { provider: 'clip', providerOrderId: PINPAD_ID, providerStatus: 'canceled' },
+        },
+      },
+      error: null,
+    })
+    clipFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ pinpad_request_id: PINPAD_ID, status: 'IN_PROGRESS' }),
     })
     const res = await postClipWebhook(VALID_CLIP_PAYLOAD)
     expect(res.status).toBe(200)

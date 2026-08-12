@@ -124,6 +124,13 @@ describe('MPPointPayment', () => {
     expect(screen.getByText('Pago cancelado')).toBeInTheDocument()
   })
 
+  it('shows canceled state when order status is cancelled even if metadata regressed to processing', () => {
+    renderWithStore(<MPPointPayment {...defaultProps} />, [
+      mockOrder({ status: 'cancelled', metadata: { mpOrderId: 'MP_ORD_001', mpOrderStatus: 'processing' } }),
+    ])
+    expect(screen.getByText('Pago cancelado')).toBeInTheDocument()
+  })
+
   it('shows action_required with button that resets to at_terminal', () => {
     const { store } = renderWithStore(<MPPointPayment {...defaultProps} />, [mockOrder({})])
     act(() => {

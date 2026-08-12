@@ -163,6 +163,11 @@ function toPaymentState(res: OrderResponse | undefined): PaymentState | undefine
 
   if (raw === 'expired') return 'expired'
 
+  // Order-level terminal states are authoritative. A regressed/missing provider
+  // status (e.g. a late IN_PROCESS webhook overwrote the metadata) must not keep
+  // the UI waiting forever.
+  if (res.status === 'cancelled') return 'canceled'
+
   if (raw && (STATE_CONFIG as Record<string, unknown>)[raw]) return raw as PaymentState
   return undefined
 }
