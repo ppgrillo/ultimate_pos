@@ -4,10 +4,11 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { notFound, badRequest } from '../middleware/error'
+import { compressImageForUpload } from '../lib/image'
 
 const BUCKET = 'product-images'
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
-const MAX_RECEIPT_SIZE = 5 * 1024 * 1024
+const MAX_RECEIPT_SIZE = 10 * 1024 * 1024
 
 export const expensesRouter = new Hono()
 
@@ -157,15 +158,15 @@ expensesRouter.post('/upload-receipt', requireRole('admin'), async (c) => {
   if (!file) throw badRequest('No file uploaded. Send an image as the "file" field.')
   if (!file.type.startsWith('image/')) throw badRequest('File must be an image.')
   if (!ALLOWED_MIME.includes(file.type)) throw badRequest('Invalid file type. Allowed: PNG, JPEG, WebP, AVIF')
-  if (file.size > MAX_RECEIPT_SIZE) throw badRequest('Image must be under 5MB.')
+  if (file.size > MAX_RECEIPT_SIZE) throw badRequest('Image must be under 10MB before compression.')
 
-  const ext = file.name.split('.').pop() || 'jpg'
-  const fileName = `receipts/${crypto.randomUUID()}.${ext}`
+  const compressed = await compressImageForUpload(file, 'receipt', file.type)
+  const fileName = `receipts/${crypto.randomUUID()}.${compressed.fileName.split('.').pop() || 'webp'}`
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from(BUCKET)
-    .upload(fileName, file, {
-      contentType: file.type,
+    .upload(fileName, compressed.data, {
+      contentType: compressed.contentType,
       upsert: false,
     })
 

@@ -5,6 +5,7 @@ import { notFound, badRequest } from '../middleware/error'
 import { SignJWT } from 'jose'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 import { encryptSettings, decryptSettings } from '../lib/settings'
+import { compressImageForUpload } from '../lib/image'
 import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
 import {
   getCardProvider,
@@ -15,7 +16,7 @@ import {
 import type { CardPaymentProviderName } from '../services/payments/types'
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
-const MAX_LOGO_SIZE = 3 * 1024 * 1024
+const MAX_LOGO_SIZE = 10 * 1024 * 1024
 
 function resolveProviderParam(
   value: string | undefined,
@@ -62,14 +63,14 @@ storesRouter.post('/upload-logo', requireRole('admin'), async (c) => {
   const file = body['file']
   if (!file || !(file instanceof File)) throw badRequest('Missing file')
   if (!ALLOWED_MIME.includes(file.type)) throw badRequest('Invalid file type. Allowed: PNG, JPEG, WebP, AVIF')
-  if (file.size > MAX_LOGO_SIZE) throw badRequest('File too large. Max 3 MB')
+  if (file.size > MAX_LOGO_SIZE) throw badRequest('File too large. Max 10 MB before compression')
 
-  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/webp' ? 'webp' : 'avif'
-  const fileName = `logos/${storeId}-${Date.now()}.${ext}`
+  const compressed = await compressImageForUpload(file, 'logo', file.type)
+  const fileName = `logos/${storeId}-${Date.now()}.${compressed.fileName.split('.').pop() || 'webp'}`
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from('product-images')
-    .upload(fileName, file, { contentType: file.type, upsert: true })
+    .upload(fileName, compressed.data, { contentType: compressed.contentType, upsert: true })
 
   if (uploadError) throw badRequest(`Upload failed: ${uploadError.message}`)
 

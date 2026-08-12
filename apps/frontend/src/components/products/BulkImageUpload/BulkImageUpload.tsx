@@ -3,7 +3,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { ImagePlus, X, Upload, CheckCircle, AlertCircle, Loader2, Link, Search, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api/client'
-import { compressImage } from '@/lib/image'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 
@@ -65,7 +64,7 @@ export function BulkImageUpload({ open, onOpenChange, onComplete }: BulkImageUpl
 
   const addFiles = useCallback(async (incoming: FileList | File[]) => {
     const entries: FileEntry[] = Array.from(incoming)
-      .filter((f) => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024)
+      .filter((f) => f.type.startsWith('image/') && f.size <= 10 * 1024 * 1024)
       .map((f) => {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
         return {
@@ -82,29 +81,8 @@ export function BulkImageUpload({ open, onOpenChange, onComplete }: BulkImageUpl
 
     for (const entry of entries) {
       setFiles((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, status: 'compressing' as const } : e)),
+        prev.map((e) => (e.id === entry.id ? { ...e, status: 'ready' as const } : e)),
       )
-      try {
-        const compressed = await compressImage(entry.file)
-        const compressedFile = new File([compressed], entry.file.name.replace(/\.[^.]+$/, '.jpg'), {
-          type: 'image/jpeg',
-        })
-        setFiles((prev) =>
-          prev.map((e) =>
-            e.id === entry.id
-              ? { ...e, file: compressedFile, status: 'ready' as const }
-              : e,
-          ),
-        )
-      } catch {
-        setFiles((prev) =>
-          prev.map((e) =>
-            e.id === entry.id
-              ? { ...e, status: 'error' as const, error: 'Compression failed' }
-              : e,
-          ),
-        )
-      }
     }
   }, [])
 

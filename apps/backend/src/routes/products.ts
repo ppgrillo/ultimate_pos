@@ -6,6 +6,7 @@ import { parse } from 'csv-parse/sync'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
+import { compressImageForUpload } from '../lib/image'
 
 function parseModifiers(raw: string | undefined | null) {
   if (!raw?.trim()) return []
@@ -401,7 +402,7 @@ productsRouter.post('/upload-images', requireRole('admin'), async (c) => {
   const results: Array<{ file: string; sku: string; status: 'matched' | 'unmatched'; url?: string }> = []
 
   for (const file of files) {
-    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
       const sku = file.name.replace(/\.[^.]+$/, '')
       results.push({ file: file.name, sku, status: 'unmatched' })
       continue
@@ -409,13 +410,13 @@ productsRouter.post('/upload-images', requireRole('admin'), async (c) => {
 
     const sku = file.name.replace(/\.[^.]+$/, '')
     const skuLower = sku.toLowerCase()
-    const ext = file.name.split('.').pop() || 'jpg'
-    const fileName = `${crypto.randomUUID()}.${ext}`
+    const compressed = await compressImageForUpload(file, 'product', file.type)
+    const fileName = `${crypto.randomUUID()}.${compressed.fileName.split('.').pop() || 'webp'}`
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from('product-images')
-      .upload(fileName, file, {
-        contentType: file.type,
+      .upload(fileName, compressed.data, {
+        contentType: compressed.contentType,
         upsert: false,
       })
 
@@ -454,15 +455,15 @@ productsRouter.post('/upload-image', requireRole('admin'), async (c) => {
 
   if (!file) throw badRequest('No file uploaded. Send an image as the "file" field.')
   if (!file.type.startsWith('image/')) throw badRequest('File must be an image.')
-  if (file.size > 5 * 1024 * 1024) throw badRequest('Image must be under 5MB.')
+  if (file.size > 10 * 1024 * 1024) throw badRequest('Image must be under 10MB before compression.')
 
-  const ext = file.name.split('.').pop() || 'jpg'
-  const fileName = `${crypto.randomUUID()}.${ext}`
+  const compressed = await compressImageForUpload(file, 'product', file.type)
+  const fileName = `${crypto.randomUUID()}.${compressed.fileName.split('.').pop() || 'webp'}`
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from('product-images')
-    .upload(fileName, file, {
-      contentType: file.type,
+    .upload(fileName, compressed.data, {
+      contentType: compressed.contentType,
       upsert: false,
     })
 

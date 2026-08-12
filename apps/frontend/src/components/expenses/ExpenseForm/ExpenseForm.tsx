@@ -18,7 +18,6 @@ import {
   useUploadReceiptMutation,
   useDeleteReceiptMutation,
 } from '@/store/api'
-import { compressImage } from '@/lib/imageCompress'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { cn } from '@/lib/utils'
 
@@ -84,8 +83,7 @@ export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
     setUploading(true)
     setError(null)
     try {
-      const compressed = await compressImage(file)
-      const result = await uploadReceipt(compressed.file).unwrap()
+      const result = await uploadReceipt(file).unwrap()
       setForm((prev) => ({ ...prev, receipt_url: result.url }))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to upload receipt')
