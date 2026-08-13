@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { badRequest, unauthorized } from '../middleware/error'
 import type { RegisterInput } from '@ultimate-pos/shared'
 import { getPrimaryMembership } from '../lib/membership'
+import { getBillingInfo } from '../lib/billing'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const anonKey = process.env.SUPABASE_ANON_KEY!
@@ -43,6 +44,7 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
     .single()
 
   const membership = await getPrimaryMembership(data.user.id)
+  const billing = await getBillingInfo(data.user.id)
 
   const access_token = await mintToken(
     data.user.id,
@@ -57,6 +59,7 @@ authRouter.post('/login', zValidator('json', loginSchema), async (c) => {
     image: data.user.user_metadata?.avatar_url,
     store_id: membership?.store_id || null,
     role: membership?.role || null,
+    has_access: billing.hasAccess,
     access_token,
   })
 })
@@ -125,10 +128,11 @@ authRouter.get('/me', async (c) => {
     .maybeSingle()
 
   if (!profile) {
-    return c.json({ profile_id: null, store_id: null, role: null, access_token: null })
+    return c.json({ profile_id: null, store_id: null, role: null, has_access: false, access_token: null })
   }
 
   const membership = await getPrimaryMembership(profile.id)
+  const billing = await getBillingInfo(profile.id)
 
   const store_id = membership?.store_id || null
   const role = membership?.role || null
@@ -138,6 +142,7 @@ authRouter.get('/me', async (c) => {
     profile_id: profile.id,
     store_id,
     role,
+    has_access: billing.hasAccess,
     access_token,
   })
 })
@@ -153,12 +158,14 @@ authRouter.post('/check-google', async (c) => {
 
   if (existingProfile) {
     const membership = await getPrimaryMembership(existingProfile.id)
+    const billing = await getBillingInfo(existingProfile.id)
 
     return c.json({
       exists: true,
       profile_id: existingProfile.id,
       store_id: membership?.store_id || null,
       role: membership?.role || null,
+      has_access: billing.hasAccess,
     })
   }
 

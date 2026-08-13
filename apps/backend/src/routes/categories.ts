@@ -3,11 +3,12 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 
 export const categoriesRouter = new Hono()
 
-categoriesRouter.use('*', authMiddleware)
+categoriesRouter.use('*', authMiddleware, requireAccess)
 
 const categorySchema = z.object({
   name: z.string().min(1),

@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { customerSchema } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 
 // Helper: Supabase returns loyalty:loyalty_cards(*) as an array (reverse FK join).
@@ -16,7 +17,7 @@ function normalizeLoyalty<T extends { loyalty?: unknown }>(item: T): T {
 
 export const customersRouter = new Hono()
 
-customersRouter.use('*', authMiddleware)
+customersRouter.use('*', authMiddleware, requireAccess)
 
 customersRouter.get('/', async (c) => {
   const supabase = supabaseAdmin

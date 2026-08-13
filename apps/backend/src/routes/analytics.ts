@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { badRequest } from '../middleware/error'
 import {
   getDateRangeInTimezone,
@@ -11,7 +12,7 @@ import {
 
 export const analyticsRouter = new Hono()
 
-analyticsRouter.use('*', authMiddleware)
+analyticsRouter.use('*', authMiddleware, requireAccess)
 
 async function getStoreTimezone(storeId: string, queryTz?: string | null): Promise<string> {
   if (queryTz) return queryTz

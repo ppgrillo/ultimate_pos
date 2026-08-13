@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import { GoogleWalletService } from '../services/googleWallet.service'
 import { mapProgramToGoogleClass } from '../mappers/googleClassMapper'
@@ -58,7 +59,7 @@ publicWalletRouter.get('/apple/:passId/download', async (c) => {
 // ─── Authenticated routes ─────────────────────────────────────────────────────
 const authWalletRouter = new Hono()
 
-authWalletRouter.use('*', authMiddleware)
+authWalletRouter.use('*', authMiddleware, requireAccess)
 
 // POST /wallet/google/class — admin creates or updates the store's LoyaltyClass.
 // Idempotent: 409 from Google API → falls back to patchClass automatically.

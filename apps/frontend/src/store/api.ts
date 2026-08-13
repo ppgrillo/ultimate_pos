@@ -122,6 +122,12 @@ export interface ProductUpsertInput {
   tax_exempt: boolean
 }
 
+export interface BillingStatusInfo {
+  hasAccess: boolean
+  status: 'inactive' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
+  currentPeriodEnd: string | null
+}
+
 export interface OrderCreateInput {
   check_id?: string
   round_number?: number
@@ -189,7 +195,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Analytics'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Analytics', 'Billing'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -810,6 +816,31 @@ export const api = createApi({
       transformResponse: (response: { data: AnalyticsOverview }) => response.data,
       providesTags: ['Analytics'],
     }),
+
+    // ── Billing / Subscription endpoints ──
+    getBillingStatus: builder.query<BillingStatusInfo, void>({
+      query: () => '/billing/status',
+      providesTags: ['Billing'],
+    }),
+    createCheckoutSession: builder.mutation<{ url: string | null; alreadyActive?: boolean; status?: string }, void>({
+      query: () => ({
+        url: '/billing/checkout',
+        method: 'POST',
+      }),
+    }),
+    createPortalSession: builder.mutation<{ url: string }, void>({
+      query: () => ({
+        url: '/billing/portal',
+        method: 'POST',
+      }),
+    }),
+    refreshBilling: builder.mutation<BillingStatusInfo, void>({
+      query: () => ({
+        url: '/billing/refresh',
+        method: 'POST',
+      }),
+      invalidatesTags: ['Billing'],
+    }),
   }),
 })
 
@@ -882,4 +913,8 @@ export const {
   useDeleteExpenseMutation,
   useUploadReceiptMutation,
   useDeleteReceiptMutation,
+  useGetBillingStatusQuery,
+  useCreateCheckoutSessionMutation,
+  useCreatePortalSessionMutation,
+  useRefreshBillingMutation,
 } = api

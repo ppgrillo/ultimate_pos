@@ -27,6 +27,12 @@ vi.mock('../middleware/auth', () => ({
   },
 }))
 
+vi.mock('../middleware/requireAccess', () => ({
+  requireAccess: async (_c: any, next: any) => {
+    await next()
+  },
+}))
+
 import { analyticsRouter } from './analytics'
 
 function listQuery(result: { data: any; error: any; count?: number }) {

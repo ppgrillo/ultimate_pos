@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import { enrollCustomer, getLoyaltyCard, earnPoints, redeemPoints, syncWallets, calculateEarnPoints } from '../services/loyalty.service'
 import type { StoreSettings } from '@ultimate-pos/shared'
 
 export const loyaltyRouter = new Hono()
 
-loyaltyRouter.use('*', authMiddleware)
+loyaltyRouter.use('*', authMiddleware, requireAccess)
 
 loyaltyRouter.post('/enroll', async (c) => {
   const storeId = c.get('storeId')

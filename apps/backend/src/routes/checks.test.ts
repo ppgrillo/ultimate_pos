@@ -38,6 +38,12 @@ vi.mock('../middleware/auth', () => ({
   },
 }))
 
+vi.mock('../middleware/requireAccess', () => ({
+  requireAccess: async (_c: any, next: any) => {
+    await next()
+  },
+}))
+
 import { checksRouter } from './checks'
 
 function selectQuery(result: { data: any; error: any }) {

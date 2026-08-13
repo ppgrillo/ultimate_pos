@@ -37,6 +37,7 @@ function SessionSyncProvider({ children }: { children: React.ReactNode }) {
         role: raw.role ?? 'employee',
         store_id: raw.storeId ?? '',
         is_active: true,
+        has_access: raw.hasAccess ?? false,
         created_at: '',
       }
       dispatch(setUser(user))

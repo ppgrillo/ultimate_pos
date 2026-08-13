@@ -6,6 +6,7 @@ declare module 'next-auth' {
       id: string
       storeId: string
       role: string
+      hasAccess: boolean
       name?: string | null
       email?: string | null
       image?: string | null
@@ -15,6 +16,7 @@ declare module 'next-auth' {
   interface User {
     store_id?: string
     role?: string
+    has_access?: boolean
   }
 }
 
@@ -23,6 +25,7 @@ declare module 'next-auth/jwt' {
     id: string
     storeId: string
     role: string
+    hasAccess?: boolean
     accessToken?: string
   }
 }

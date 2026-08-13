@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { promotionSchema } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import {
   isPromotionActive,
@@ -13,7 +14,7 @@ import {
 
 export const promotionsRouter = new Hono()
 
-promotionsRouter.use('*', authMiddleware)
+promotionsRouter.use('*', authMiddleware, requireAccess)
 
 // ── GET / — active promotions for POS menu (badges + sale prices) ──
 promotionsRouter.get('/', async (c) => {

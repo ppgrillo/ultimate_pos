@@ -8,5 +8,6 @@ export interface User {
   role: UserRole
   store_id: string
   is_active: boolean
+  has_access: boolean
   created_at: string
 }

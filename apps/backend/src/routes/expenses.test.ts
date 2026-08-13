@@ -41,6 +41,12 @@ vi.mock('../middleware/auth', () => ({
   },
 }))
 
+vi.mock('../middleware/requireAccess', () => ({
+  requireAccess: async (_c: any, next: any) => {
+    await next()
+  },
+}))
+
 import { expensesRouter } from './expenses'
 
 function listQuery(result: { data: any; error: any }) {

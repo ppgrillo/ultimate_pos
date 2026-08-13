@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import { compressImageForUpload } from '../lib/image'
 
@@ -12,7 +13,7 @@ const MAX_RECEIPT_SIZE = 10 * 1024 * 1024
 
 export const expensesRouter = new Hono()
 
-expensesRouter.use('*', authMiddleware)
+expensesRouter.use('*', authMiddleware, requireAccess)
 
 const expenseSchema = z.object({
   type: z.enum(['operating', 'inventory']),

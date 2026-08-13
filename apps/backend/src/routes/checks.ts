@@ -7,6 +7,7 @@ import {
   voidCheckSchema,
 } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { badRequest, notFound } from '../middleware/error'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { decryptSettings } from '../lib/settings'
@@ -15,7 +16,7 @@ import { createRedemption, revertRedemption } from '../services/rewards.service'
 
 export const checksRouter = new Hono()
 
-checksRouter.use('*', authMiddleware)
+checksRouter.use('*', authMiddleware, requireAccess)
 
 checksRouter.get('/', async (c) => {
   const storeId = c.get('storeId')

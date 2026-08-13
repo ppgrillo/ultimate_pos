@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
 import { SignJWT } from 'jose'
@@ -28,7 +29,7 @@ function resolveProviderParam(
 
 export const storesRouter = new Hono()
 
-storesRouter.use('*', authMiddleware)
+storesRouter.use('*', authMiddleware, requireAccess)
 
 storesRouter.get('/current', async (c) => {
   const storeId = c.get('storeId')

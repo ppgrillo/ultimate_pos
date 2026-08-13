@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import { zValidator } from '@hono/zod-validator'
 import { rewardSchema } from '@ultimate-pos/shared'
@@ -8,7 +9,7 @@ import { getAvailableRewards, createRedemption, revertRedemption } from '../serv
 
 export const rewardsRouter = new Hono()
 
-rewardsRouter.use('*', authMiddleware)
+rewardsRouter.use('*', authMiddleware, requireAccess)
 
 // GET /rewards — active rewards for POS display
 rewardsRouter.get('/', async (c) => {

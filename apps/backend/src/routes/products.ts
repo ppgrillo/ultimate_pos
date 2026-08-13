@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator'
 import { modifierGroupSchema, productSchema } from '@ultimate-pos/shared'
 import { parse } from 'csv-parse/sync'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { notFound, badRequest } from '../middleware/error'
 import { compressImageForUpload } from '../lib/image'
@@ -69,7 +70,7 @@ function parseModifiers(raw: string | undefined | null) {
 
 export const productsRouter = new Hono()
 
-productsRouter.use('*', authMiddleware)
+productsRouter.use('*', authMiddleware, requireAccess)
 
 productsRouter.get('/', async (c) => {
   const supabase = supabaseAdmin

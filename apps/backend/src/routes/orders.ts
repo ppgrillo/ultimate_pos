@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { orderSchema, canTransition } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 import { orderBus } from '../events'
 import {
@@ -30,7 +31,7 @@ import { createRedemption, revertRedemption } from '../services/rewards.service'
 
 export const ordersRouter = new Hono()
 
-ordersRouter.use('*', authMiddleware)
+ordersRouter.use('*', authMiddleware, requireAccess)
 
 function enrichOrder(order: Record<string, unknown>): any {
   const customer = order.customer as { name?: string } | null

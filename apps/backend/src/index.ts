@@ -23,6 +23,8 @@ import { analyticsRouter } from './routes/analytics'
 import { checksRouter } from './routes/checks'
 import { rewardsRouter } from './routes/rewards'
 import { expensesRouter } from './routes/expenses'
+import { billingRouter } from './routes/billing'
+import { stripeWebhookRouter } from './routes/stripe-webhook'
 
 const app = new Hono()
 
@@ -51,6 +53,8 @@ app.route('/analytics', analyticsRouter)
 app.route('/checks', checksRouter)
 app.route('/rewards', rewardsRouter)
 app.route('/expenses', expensesRouter)
+app.route('/billing', billingRouter)
+app.route('/webhooks', stripeWebhookRouter)
 
 const port = Number(process.env.PORT) || 3001
 

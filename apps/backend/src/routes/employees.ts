@@ -1,11 +1,12 @@
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { authMiddleware, requireRole } from '../middleware/auth'
+import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
 
 export const employeesRouter = new Hono()
 
-employeesRouter.use('*', authMiddleware, requireRole('admin'))
+employeesRouter.use('*', authMiddleware, requireAccess, requireRole('admin'))
 
 employeesRouter.get('/', async (c) => {
   const supabase = supabaseAdmin

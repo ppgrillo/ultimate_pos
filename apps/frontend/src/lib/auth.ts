@@ -64,6 +64,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
             token.id = user.id
             token.storeId = user.store_id
             token.role = user.role
+            token.hasAccess = user.has_access
             token.accessToken = (user as any).access_token
           }
           if (account.provider === 'google') {
@@ -77,6 +78,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
                 token.id = data.profile_id
                 token.storeId = data.store_id
                 token.role = data.role
+                token.hasAccess = data.has_access
                 token.accessToken = data.access_token
               }
             } catch {
@@ -91,6 +93,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           session.user.id = token.id as string ?? token.sub ?? ''
           session.user.storeId = token.storeId as string
           session.user.role = token.role as string
+          session.user.hasAccess = Boolean(token.hasAccess)
           ;(session.user as any).accessToken = token.accessToken as string
         }
         return session
