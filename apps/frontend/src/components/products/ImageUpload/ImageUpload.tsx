@@ -90,8 +90,10 @@ export function ImageUpload({ value, onChange, className, uploadLabel = 'Upload 
       ) : preview ? (
         <>
           <img
-            src={proxyImageUrl(preview) ?? ''}
+            src={proxyImageUrl(preview, 400) ?? ''}
             alt="Product preview"
+            loading="lazy"
+            decoding="async"
             className="max-h-[200px] rounded-lg object-contain"
           />
           <button

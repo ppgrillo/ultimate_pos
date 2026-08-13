@@ -15,7 +15,7 @@ import { BulkImageUpload } from '@/components/products/BulkImageUpload'
 import { formatCurrency } from '@/lib/utils'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery, useToggleProductPinMutation } from '@/store/api'
+import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery, useToggleProductPinMutation, usePrefetch } from '@/store/api'
 
 interface ProductRow {
   id: string
@@ -38,8 +38,10 @@ function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
     <>
       {showImg ? (
         <img
-          src={proxyImageUrl(imageUrl) ?? undefined}
+          src={proxyImageUrl(imageUrl, 64) ?? undefined}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="h-9 w-9 rounded-lg object-cover bg-surface-container-high shrink-0"
           onError={() => setError(true)}
         />
@@ -49,6 +51,21 @@ function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
         </div>
       )}
     </>
+  )
+}
+
+function EditProductLink({ id }: { id: string }) {
+  const prefetchProduct = usePrefetch('getProductById')
+  return (
+    <Link
+      href={`/products/${id}/edit`}
+      onMouseEnter={() => prefetchProduct(id)}
+      onFocus={() => prefetchProduct(id)}
+    >
+      <Button variant="ghost" size="sm">
+        <Pencil className="h-4 w-4" />
+      </Button>
+    </Link>
   )
 }
 
@@ -297,13 +314,7 @@ export default function ProductsPage() {
       id: 'actions',
       header: '',
       enableSorting: false,
-      cell: ({ row }) => (
-        <Link href={`/products/${row.original.id}/edit`}>
-          <Button variant="ghost" size="sm">
-            <Pencil className="h-4 w-4" />
-          </Button>
-        </Link>
-      ),
+      cell: ({ row }) => <EditProductLink id={row.original.id} />,
     },
   ]
 

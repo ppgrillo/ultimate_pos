@@ -26,12 +26,14 @@ export function BillingGate({ children }: { children: React.ReactNode }) {
   const sessionHasAccess = useAppSelector((state) => state.auth.user?.has_access ?? false)
   const {
     data,
-    isLoading,
+    isError,
     refetch,
   } = useGetBillingStatusQuery(undefined, {
     skip: sessionHasAccess,
-    refetchOnMountOrArgChange: true,
-    pollingInterval: 15000,
+    // Re-validate when the tab regains focus (cheap DB read now, was a Stripe round-trip).
+    refetchOnFocus: true,
+    // Background daily re-check while the dashboard is open (cheap DB read).
+    pollingInterval: 86400000,
   })
   const [createCheckout, { isLoading: isCreating }] = useCreateCheckoutSessionMutation()
   const [createPortal, { isLoading: isPortalLoading }] = useCreatePortalSessionMutation()
@@ -61,15 +63,19 @@ export function BillingGate({ children }: { children: React.ReactNode }) {
 
   if (sessionHasAccess) return <>{children}</>
 
-  if (isLoading) {
+  // Fail-open: never lock the app behind a failed status check (e.g. network down).
+  if (isError) return <>{children}</>
+
+  // Strict gate: block with a loading state until the server confirms access.
+  if (!data) {
     return (
-      <div className="flex h-[70vh] items-center justify-center">
+      <div role="status" aria-label="Cargando acceso" className="flex min-h-[75vh] items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     )
   }
 
-  if (data?.hasAccess) return <>{children}</>
+  if (data.hasAccess) return <>{children}</>
 
   const needsPaymentMethod = data?.status === 'past_due' || data?.status === 'unpaid'
 

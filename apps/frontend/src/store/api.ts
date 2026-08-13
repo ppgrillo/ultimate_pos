@@ -850,6 +850,7 @@ export const api = createApi({
 
 export const {
   useGetProductsQuery,
+  usePrefetch,
   useGetProductByIdQuery,
   useCreateProductMutation,
   useUpdateProductMutation,

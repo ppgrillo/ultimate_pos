@@ -35,7 +35,26 @@ vi.mock('lucide-react', async () => {
 function setupStatus({ hasAccess = false, status = 'inactive' } = {}) {
   mocks.useGetBillingStatusQuery.mockReturnValue({
     data: { hasAccess, status, currentPeriodEnd: null },
-    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  })
+}
+
+function setupLoading() {
+  mocks.useGetBillingStatusQuery.mockReturnValue({
+    data: undefined,
+    isError: false,
+    isFetching: true,
+    refetch: vi.fn(),
+  })
+}
+
+function setupError() {
+  mocks.useGetBillingStatusQuery.mockReturnValue({
+    data: undefined,
+    isError: true,
+    isFetching: false,
     refetch: vi.fn(),
   })
 }
@@ -79,6 +98,52 @@ describe('BillingGate', () => {
     )
 
     expect(screen.getByText('Dashboard content')).toBeInTheDocument()
+  })
+
+  it('shows a loading state (strict gate) while the status is still loading', () => {
+    setupLoading()
+
+    render(
+      <BillingGate>
+        <p>Dashboard content</p>
+      </BillingGate>,
+    )
+
+    expect(screen.getByRole('status', { name: 'Cargando acceso' })).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard content')).not.toBeInTheDocument()
+    expect(screen.queryByText('Activa tu suscripción')).not.toBeInTheDocument()
+  })
+
+  it('uses standard re-check options (no per-mount refetch, focus + 24h polling)', () => {
+    mocks.useAppSelector.mockReturnValue(false)
+    setupStatus({ hasAccess: false, status: 'inactive' })
+
+    render(
+      <BillingGate>
+        <p>Dashboard content</p>
+      </BillingGate>,
+    )
+
+    const [, options] = mocks.useGetBillingStatusQuery.mock.calls[0]
+    expect(options).toMatchObject({
+      skip: false,
+      refetchOnFocus: true,
+      pollingInterval: 86400000,
+    })
+    expect(options.refetchOnMountOrArgChange).toBeUndefined()
+  })
+
+  it('renders children (fail-open) when the status request errors', () => {
+    setupError()
+
+    render(
+      <BillingGate>
+        <p>Dashboard content</p>
+      </BillingGate>,
+    )
+
+    expect(screen.getByText('Dashboard content')).toBeInTheDocument()
+    expect(screen.queryByText('Activa tu suscripción')).not.toBeInTheDocument()
   })
 
   it('renders the paywall when there is no access', () => {

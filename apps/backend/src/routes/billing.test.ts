@@ -4,10 +4,11 @@ import { errorHandler } from '../middleware/error'
 
 const USER_ID = '11111111-1111-1111-1111-111111111111'
 
-const { fromMock, getBillingInfoMock, syncMock, stripeMock } = vi.hoisted(() => {
+const { fromMock, getBillingInfoMock, syncMock, getPlanPriceMock, stripeMock } = vi.hoisted(() => {
   const fromMock = vi.fn()
   const getBillingInfoMock = vi.fn()
   const syncMock = vi.fn()
+  const getPlanPriceMock = vi.fn()
   const stripeMock = {
     checkout: { sessions: { create: vi.fn() } },
     billingPortal: { sessions: { create: vi.fn() } },
@@ -15,7 +16,7 @@ const { fromMock, getBillingInfoMock, syncMock, stripeMock } = vi.hoisted(() => 
     subscriptions: { list: vi.fn(), retrieve: vi.fn() },
     prices: { retrieve: vi.fn() },
   }
-  return { fromMock, getBillingInfoMock, syncMock, stripeMock }
+  return { fromMock, getBillingInfoMock, syncMock, getPlanPriceMock, stripeMock }
 })
 
 vi.mock('../lib/supabase/admin', () => ({
@@ -38,6 +39,7 @@ vi.mock('../lib/billing', () => ({
 
 vi.mock('../services/stripe', () => ({
   getStripe: () => stripeMock,
+  getPlanPrice: getPlanPriceMock,
   STRIPE_PRICE_ID: 'price_123',
   STRIPE_WEBHOOK_SECRET: 'whsec_test',
   FRONTEND_URL: 'http://localhost:3000',
@@ -65,7 +67,12 @@ describe('billing routes', () => {
   })
 
   describe('GET /status', () => {
-    it('returns access info', async () => {
+    beforeEach(() => {
+      getPlanPriceMock.mockReset()
+      getPlanPriceMock.mockResolvedValue({ amount: 30000, currency: 'mxn' })
+    })
+
+    it('returns access info without hitting Stripe', async () => {
       getBillingInfoMock.mockResolvedValue({
         hasAccess: false,
         status: 'inactive',
@@ -73,8 +80,7 @@ describe('billing routes', () => {
         currentPeriodEnd: null,
         cancelAtPeriodEnd: false,
       })
-      fromMock.mockImplementation(() => billingQuery({ data: null, error: null }))
-      stripeMock.prices.retrieve.mockResolvedValue({ unit_amount: 30000, currency: 'mxn' })
+      fromMock.mockImplementation(() => billingQuery({ data: { plan_amount: 30000, plan_currency: 'mxn' }, error: null }))
 
       const res = await app.fetch(new Request('http://localhost/billing/status'))
       expect(res.status).toBe(200)
@@ -89,42 +95,50 @@ describe('billing routes', () => {
         priceId: 'price_123',
       })
       expect(getBillingInfoMock).toHaveBeenCalledWith(USER_ID)
+      expect(getPlanPriceMock).not.toHaveBeenCalled()
+      expect(stripeMock.subscriptions.retrieve).not.toHaveBeenCalled()
+      expect(stripeMock.prices.retrieve).not.toHaveBeenCalled()
     })
 
-    it('enriches status with the Stripe plan when a subscription exists', async () => {
+    it('returns the stored plan when one has been synced', async () => {
       getBillingInfoMock.mockResolvedValue({
         hasAccess: true,
         status: 'active',
-        currentPeriodStart: null,
+        currentPeriodStart: '2026-08-13T00:00:00.000Z',
         currentPeriodEnd: '2026-09-13T00:00:00.000Z',
         cancelAtPeriodEnd: false,
       })
-      fromMock.mockImplementation((table: string) => {
-        if (table === 'billing') {
-          return billingQuery({ data: { stripe_subscription_id: 'sub_123' }, error: null })
-        }
-        return billingQuery({ data: null, error: null })
-      })
-      stripeMock.subscriptions.retrieve.mockResolvedValue({
-        cancel_at_period_end: true,
-        items: {
-          data: [
-            {
-              current_period_start: 1754150400,
-              current_period_end: 1756742400,
-              price: { unit_amount: 100, currency: 'mxn' },
-            },
-          ],
-        },
-      })
+      fromMock.mockImplementation(() => billingQuery({ data: { plan_amount: 100, plan_currency: 'mxn' }, error: null }))
 
       const res = await app.fetch(new Request('http://localhost/billing/status'))
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.plan).toEqual({ amount: 100, currency: 'mxn' })
-      expect(body.cancelAtPeriodEnd).toBe(true)
-      expect(body.currentPeriodStart).toBe(new Date(1754150400 * 1000).toISOString())
-      expect(body.currentPeriodEnd).toBe(new Date(1756742400 * 1000).toISOString())
+      expect(body.cancelAtPeriodEnd).toBe(false)
+      expect(body.currentPeriodStart).toBe('2026-08-13T00:00:00.000Z')
+      expect(body.currentPeriodEnd).toBe('2026-09-13T00:00:00.000Z')
+      expect(getPlanPriceMock).not.toHaveBeenCalled()
+      expect(stripeMock.subscriptions.retrieve).not.toHaveBeenCalled()
+      expect(stripeMock.prices.retrieve).not.toHaveBeenCalled()
+    })
+
+    it('pulls the plan price from Stripe (via cached getPlanPrice) when none is stored', async () => {
+      getBillingInfoMock.mockResolvedValue({
+        hasAccess: false,
+        status: 'inactive',
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      })
+      fromMock.mockImplementation(() => billingQuery({ data: null, error: null }))
+
+      const res = await app.fetch(new Request('http://localhost/billing/status'))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.plan).toEqual({ amount: 30000, currency: 'mxn' })
+      expect(getPlanPriceMock).toHaveBeenCalled()
+      expect(stripeMock.subscriptions.retrieve).not.toHaveBeenCalled()
+      expect(stripeMock.prices.retrieve).not.toHaveBeenCalled()
     })
   })
 

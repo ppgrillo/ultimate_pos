@@ -3,6 +3,7 @@
 import { Pin, PinOff, Pencil } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import Link from 'next/link'
+import { usePrefetch } from '@/store/api'
 
 interface ProductMobileCardProps {
   id: string
@@ -21,6 +22,8 @@ export function ProductMobileCard({
   id, name, price, category, isActive,
   pinned, selected, onToggle, onPinToggle, selectionMode,
 }: ProductMobileCardProps) {
+  const prefetchProduct = usePrefetch('getProductById')
+
   return (
     <div
       className={cn(
@@ -72,6 +75,8 @@ export function ProductMobileCard({
 
       <Link
         href={`/products/${id}/edit`}
+        onMouseEnter={() => prefetchProduct(id)}
+        onFocus={() => prefetchProduct(id)}
         onClick={(e) => e.stopPropagation()}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
         title="Edit product"

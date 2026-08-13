@@ -73,6 +73,8 @@ export interface SubscriptionSyncInput {
   currentPeriodStart: string | null
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean
+  planAmount: number | null
+  planCurrency: string | null
 }
 
 export async function upsertBillingRecord(input: SubscriptionSyncInput) {
@@ -85,6 +87,8 @@ export async function upsertBillingRecord(input: SubscriptionSyncInput) {
       current_period_start: input.currentPeriodStart,
       current_period_end: input.currentPeriodEnd,
       cancel_at_period_end: input.cancelAtPeriodEnd,
+      plan_amount: input.planAmount,
+      plan_currency: input.planCurrency,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'profile_id' },
@@ -131,6 +135,8 @@ export async function syncSubscriptionToBilling(
       ? new Date(item.current_period_end * 1000).toISOString()
       : null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+    planAmount: item?.price?.unit_amount ?? null,
+    planCurrency: item?.price?.currency ?? null,
   })
 
   return profileId
