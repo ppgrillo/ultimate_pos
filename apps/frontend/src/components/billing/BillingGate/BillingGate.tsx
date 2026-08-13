@@ -73,6 +73,15 @@ export function BillingGate({ children }: { children: React.ReactNode }) {
 
   const needsPaymentMethod = data?.status === 'past_due' || data?.status === 'unpaid'
 
+  const planAmount = data?.plan?.amount
+  const planLabel = planAmount != null
+    ? new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: (data?.plan?.currency ?? 'MXN').toUpperCase(),
+        maximumFractionDigits: 2,
+      }).format(planAmount / 100)
+    : null
+
   return (
     <div className="flex min-h-[75vh] items-center justify-center p-6">
       <div className="w-full max-w-md">
@@ -93,8 +102,8 @@ export function BillingGate({ children }: { children: React.ReactNode }) {
           </p>
 
           <div className="mt-6 flex items-baseline gap-2">
-            <span className="text-4xl font-heading font-bold text-on-surface">$100</span>
-            <span className="text-sm font-semibold text-on-surface-variant">MXN / mes</span>
+            <span className="text-4xl font-heading font-bold text-on-surface">{planLabel ?? '$—'}</span>
+            <span className="text-sm font-semibold text-on-surface-variant">/ mes</span>
           </div>
 
           <ul className="mt-6 space-y-3">
@@ -117,12 +126,6 @@ export function BillingGate({ children }: { children: React.ReactNode }) {
             >
               {needsPaymentMethod ? 'Actualizar método de pago' : 'Suscribirme ahora'}
             </Button>
-
-            <p className="text-center text-xs text-on-surface-variant">
-              Acceso anticipado: usa el código{' '}
-              <span className="font-bold text-primary">OVEJA90</span> al pagar y obtén un 90% de
-              descuento.
-            </p>
           </div>
 
           {(needsPaymentMethod || data?.status === 'canceled') && (

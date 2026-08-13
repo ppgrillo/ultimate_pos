@@ -6,7 +6,9 @@ export type BillingStatus = 'inactive' | 'trialing' | 'active' | 'past_due' | 'c
 export interface BillingInfo {
   hasAccess: boolean
   status: BillingStatus
+  currentPeriodStart: string | null
   currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
 }
 
 const ACTIVE_STATUSES: BillingStatus[] = ['active', 'trialing', 'past_due']
@@ -14,11 +16,19 @@ const ACTIVE_STATUSES: BillingStatus[] = ['active', 'trialing', 'past_due']
 export async function getBillingInfo(profileId: string): Promise<BillingInfo> {
   const { data } = await supabaseAdmin
     .from('billing')
-    .select('status, current_period_end')
+    .select('status, current_period_start, current_period_end, cancel_at_period_end')
     .eq('profile_id', profileId)
     .maybeSingle()
 
-  if (!data) return { hasAccess: false, status: 'inactive', currentPeriodEnd: null }
+  if (!data) {
+    return {
+      hasAccess: false,
+      status: 'inactive',
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    }
+  }
 
   const status = data.status as BillingStatus
   const periodEnd = data.current_period_end ? new Date(data.current_period_end).getTime() : null
@@ -26,7 +36,13 @@ export async function getBillingInfo(profileId: string): Promise<BillingInfo> {
 
   const hasAccess = ACTIVE_STATUSES.includes(status) && notExpired
 
-  return { hasAccess, status, currentPeriodEnd: data.current_period_end ?? null }
+  return {
+    hasAccess,
+    status,
+    currentPeriodStart: data.current_period_start ?? null,
+    currentPeriodEnd: data.current_period_end ?? null,
+    cancelAtPeriodEnd: data.cancel_at_period_end ?? false,
+  }
 }
 
 export function mapStripeStatus(status: Stripe.Subscription.Status): BillingStatus {

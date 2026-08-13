@@ -12,7 +12,8 @@ const { fromMock, getBillingInfoMock, syncMock, stripeMock } = vi.hoisted(() => 
     checkout: { sessions: { create: vi.fn() } },
     billingPortal: { sessions: { create: vi.fn() } },
     customers: { list: vi.fn() },
-    subscriptions: { list: vi.fn() },
+    subscriptions: { list: vi.fn(), retrieve: vi.fn() },
+    prices: { retrieve: vi.fn() },
   }
   return { fromMock, getBillingInfoMock, syncMock, stripeMock }
 })
@@ -65,18 +66,70 @@ describe('billing routes', () => {
 
   describe('GET /status', () => {
     it('returns access info', async () => {
-      getBillingInfoMock.mockResolvedValue({ hasAccess: false, status: 'inactive', currentPeriodEnd: null })
+      getBillingInfoMock.mockResolvedValue({
+        hasAccess: false,
+        status: 'inactive',
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      })
+      fromMock.mockImplementation(() => billingQuery({ data: null, error: null }))
+      stripeMock.prices.retrieve.mockResolvedValue({ unit_amount: 30000, currency: 'mxn' })
 
       const res = await app.fetch(new Request('http://localhost/billing/status'))
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body).toEqual({ hasAccess: false, status: 'inactive', currentPeriodEnd: null })
+      expect(body).toEqual({
+        hasAccess: false,
+        status: 'inactive',
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+        plan: { amount: 30000, currency: 'mxn' },
+        priceId: 'price_123',
+      })
       expect(getBillingInfoMock).toHaveBeenCalledWith(USER_ID)
+    })
+
+    it('enriches status with the Stripe plan when a subscription exists', async () => {
+      getBillingInfoMock.mockResolvedValue({
+        hasAccess: true,
+        status: 'active',
+        currentPeriodStart: null,
+        currentPeriodEnd: '2026-09-13T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+      })
+      fromMock.mockImplementation((table: string) => {
+        if (table === 'billing') {
+          return billingQuery({ data: { stripe_subscription_id: 'sub_123' }, error: null })
+        }
+        return billingQuery({ data: null, error: null })
+      })
+      stripeMock.subscriptions.retrieve.mockResolvedValue({
+        cancel_at_period_end: true,
+        items: {
+          data: [
+            {
+              current_period_start: 1754150400,
+              current_period_end: 1756742400,
+              price: { unit_amount: 100, currency: 'mxn' },
+            },
+          ],
+        },
+      })
+
+      const res = await app.fetch(new Request('http://localhost/billing/status'))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.plan).toEqual({ amount: 100, currency: 'mxn' })
+      expect(body.cancelAtPeriodEnd).toBe(true)
+      expect(body.currentPeriodStart).toBe(new Date(1754150400 * 1000).toISOString())
+      expect(body.currentPeriodEnd).toBe(new Date(1756742400 * 1000).toISOString())
     })
   })
 
   describe('POST /checkout', () => {
-    it('creates a checkout session with promotion codes when user has no access', async () => {
+    it('creates a checkout session when user has no access', async () => {
       getBillingInfoMock.mockResolvedValue({ hasAccess: false, status: 'inactive', currentPeriodEnd: null })
       fromMock.mockImplementation((table: string) => {
         if (table === 'billing') {
@@ -101,7 +154,7 @@ describe('billing routes', () => {
       const call = stripeMock.checkout.sessions.create.mock.calls[0][0]
       expect(call.mode).toBe('subscription')
       expect(call.line_items).toEqual([{ price: 'price_123', quantity: 1 }])
-      expect(call.allow_promotion_codes).toBe(true)
+      expect(call.allow_promotion_codes).toBeUndefined()
       expect(call.client_reference_id).toBe(USER_ID)
       expect(call.subscription_data.metadata.profile_id).toBe(USER_ID)
       expect(call.success_url).toBe('http://localhost:3000/dashboard?checkout=success')

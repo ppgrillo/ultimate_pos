@@ -125,7 +125,11 @@ export interface ProductUpsertInput {
 export interface BillingStatusInfo {
   hasAccess: boolean
   status: 'inactive' | 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid'
+  currentPeriodStart: string | null
   currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  plan: { amount: number | null; currency: string } | null
+  priceId: string | null
 }
 
 export interface OrderCreateInput {

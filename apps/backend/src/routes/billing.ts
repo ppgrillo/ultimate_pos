@@ -54,7 +54,6 @@ billingRouter.post('/checkout', async (c) => {
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-    allow_promotion_codes: true,
     client_reference_id: userId,
     ...(customerId
       ? { customer: customerId }
@@ -72,7 +71,50 @@ billingRouter.post('/checkout', async (c) => {
 
 billingRouter.get('/status', async (c) => {
   const userId = c.get('userId')
-  return c.json(await getBillingInfo(userId))
+  const info = await getBillingInfo(userId)
+
+  const { data: billing } = await supabaseAdmin
+    .from('billing')
+    .select('stripe_subscription_id')
+    .eq('profile_id', userId)
+    .maybeSingle()
+
+  let plan: { amount: number | null; currency: string } | null = null
+  let result = info
+
+  if (billing?.stripe_subscription_id) {
+    try {
+      const subscription = await getStripe().subscriptions.retrieve(billing.stripe_subscription_id)
+      const item = subscription.items.data[0]
+      plan = item?.price ? { amount: item.price.unit_amount ?? null, currency: item.price.currency } : null
+      result = {
+        hasAccess: info.hasAccess,
+        status: info.status,
+        currentPeriodStart: item?.current_period_start
+          ? new Date(item.current_period_start * 1000).toISOString()
+          : info.currentPeriodStart,
+        currentPeriodEnd: item?.current_period_end
+          ? new Date(item.current_period_end * 1000).toISOString()
+          : info.currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end ?? info.cancelAtPeriodEnd,
+      }
+    } catch (err) {
+      console.warn(
+        `[billing] Failed to fetch Stripe subscription ${billing.stripe_subscription_id}: ${(err as Error).message}`,
+      )
+    }
+  }
+
+  if (!plan && STRIPE_PRICE_ID) {
+    try {
+      const price = await getStripe().prices.retrieve(STRIPE_PRICE_ID)
+      plan = { amount: price.unit_amount ?? null, currency: price.currency }
+    } catch (err) {
+      console.warn(`[billing] Failed to fetch configured price ${STRIPE_PRICE_ID}: ${(err as Error).message}`)
+    }
+  }
+
+  return c.json({ ...result, plan, priceId: STRIPE_PRICE_ID })
 })
 
 billingRouter.post('/portal', async (c) => {

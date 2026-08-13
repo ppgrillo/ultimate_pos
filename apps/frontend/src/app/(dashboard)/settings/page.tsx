@@ -15,6 +15,7 @@ import { api } from '@/lib/api/client'
 import { getActiveCardProvider } from '@/lib/card-payments'
 import type { CardPaymentProviderName } from '@ultimate-pos/shared'
 import { SelfCheckoutSettings } from './SelfCheckoutSettings'
+import { SubscriptionStatus } from '@/components/billing/SubscriptionStatus'
 import type { KitchenWorkflowConfig, KitchenWorkflowStepStatus } from '@ultimate-pos/shared'
 import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
 import { setStore } from '@/store/slices/storeSlice'
@@ -432,6 +433,7 @@ export default function SettingsPage() {
           <TabsTrigger value="store">Store</TabsTrigger>
           <TabsTrigger value="checkout">Checkout</TabsTrigger>
           <TabsTrigger value="business">Business</TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
           <TabsTrigger value="self-checkout">Self-Checkout</TabsTrigger>
         </TabsList>
@@ -1257,6 +1259,11 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+        <TabsContent value="billing">
+          <div className="space-y-4">
+            <SubscriptionStatus />
           </div>
         </TabsContent>
         <TabsContent value="loyalty">
