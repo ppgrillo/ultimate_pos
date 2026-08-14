@@ -2,6 +2,7 @@
 
 import { Smartphone, MessageCircle } from 'lucide-react'
 import { useState } from 'react'
+import { openWhatsApp, toAbsoluteUrl } from '@/lib/wallet'
 
 interface WalletQRProps {
   applePassUrl?: string
@@ -15,33 +16,7 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
 
   if (!passId && !applePassUrl && !googleSaveUrl) return null
 
-  const toAbsoluteUrl = (url?: string) => {
-    if (!url) return url
-    if (url.startsWith('http://') || url.startsWith('https://')) return url
-    return `${typeof window !== 'undefined' ? window.location.origin : ''}${url}`
-  }
-
   const appleUrl = toAbsoluteUrl(applePassUrl)
-
-  const buildWhatsAppMessage = () => {
-    const lines: string[] = []
-    lines.push('Your digital loyalty card is ready! Add it to your wallet:')
-    lines.push('')
-    if (googleSaveUrl) lines.push('Google Wallet: ' + googleSaveUrl)
-    if (appleUrl) lines.push('Apple Wallet: ' + appleUrl)
-    lines.push('')
-    lines.push('Open the link on your phone to add it.')
-    return lines.join('\n')
-  }
-
-  const openWhatsApp = () => {
-    const msg = encodeURIComponent(buildWhatsAppMessage())
-    const phone = customerPhone?.replace(/\D/g, '')
-    const url = phone
-      ? `https://wa.me/${phone}?text=${msg}`
-      : `https://wa.me/?text=${msg}`
-    window.open(url, '_blank')
-  }
 
   return (
     <div className="rounded-xl bg-surface-container/40 border border-outline-variant/60 p-4">
@@ -51,11 +26,11 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
           <span className="text-sm font-bold text-on-surface">Digital Wallet</span>
         </div>
         <button
-          onClick={openWhatsApp}
+          onClick={() => openWhatsApp({ googleSaveUrl, appleUrl, phone: customerPhone })}
           className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
         >
           <MessageCircle className="h-4 w-4" />
-          Send via WhatsApp
+          Enviar por WhatsApp
         </button>
       </div>
 

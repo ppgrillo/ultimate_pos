@@ -4,22 +4,27 @@ import { useState } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
-import { useCreateCustomerMutation } from '@/store/api'
+import { useCreateCustomerMutation, useEnrollCustomerMutation } from '@/store/api'
 import { PhoneInput } from '@/components/ui/PhoneInput'
 import type { CustomerWithLoyalty } from '@/store/slices/customersSlice'
 
 interface QuickCustomerFormProps {
-  onCreated?: (customer: CustomerWithLoyalty) => void
+  onCreated?: (customer: CustomerWithLoyalty, passId?: string) => void
 }
 
 export function QuickCustomerForm({ onCreated }: QuickCustomerFormProps) {
   const dispatch = useAppDispatch()
   const [createCustomer, { isLoading, error }] = useCreateCustomerMutation()
+  const [enrollCustomer] = useEnrollCustomerMutation()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [phoneError, setPhoneError] = useState<string | undefined>()
   const [tags, setTags] = useState('')
+
+  const hasLoyalty = useAppSelector(
+    (state) => state.storeConfig.currentStore?.settings?.hasLoyalty ?? false,
+  )
 
   const interestsConfig = useAppSelector(
     (state) => state.storeConfig.currentStore?.settings?.registrationInterestsConfig,
@@ -55,12 +60,29 @@ export function QuickCustomerForm({ onCreated }: QuickCustomerFormProps) {
         social_handles: {},
       }).unwrap()
 
-      dispatch(setSelectedCustomer(customer))
+      let passId: string | undefined
+      let loyalty: { tier?: string; points?: number } | undefined
+
+      if (hasLoyalty) {
+        try {
+          const result = await enrollCustomer({ customer_id: customer.id }).unwrap()
+          passId = result.pass?.id
+          loyalty = { tier: result.card.tier, points: result.card.points }
+        } catch {
+          // Enrolling is best-effort — customer creation still succeeds
+        }
+      }
+
+      const customerWithLoyalty: CustomerWithLoyalty = loyalty
+        ? { ...customer, loyalty }
+        : customer
+
+      dispatch(setSelectedCustomer(customerWithLoyalty))
       dispatch(setCustomer({
-        id: customer.id,
-        name: customer.name,
-        tier: customer.loyalty?.tier,
-        points: customer.loyalty?.points,
+        id: customerWithLoyalty.id,
+        name: customerWithLoyalty.name,
+        tier: customerWithLoyalty.loyalty?.tier,
+        points: customerWithLoyalty.loyalty?.points,
       }))
 
       setName('')
@@ -68,7 +90,7 @@ export function QuickCustomerForm({ onCreated }: QuickCustomerFormProps) {
       setPhone('')
       setPhoneError(undefined)
       setTags('')
-      onCreated?.(customer)
+      onCreated?.(customerWithLoyalty, passId)
     } catch {
       // error is surfaced below via RTK Query `error`
     }

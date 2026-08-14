@@ -6,9 +6,10 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
-import { useGetCustomersQuery, useGetCustomerSummaryQuery } from '@/store/api'
+import { useGetCustomersQuery, useGetCustomerSummaryQuery, useGetLoyaltyCardQuery, useGetGoogleWalletSaveUrlQuery } from '@/store/api'
 import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
 import { QuickCustomerRegister } from '@/components/pos/QuickCustomerRegister'
+import { SendWhatsAppButton } from '@/components/pos/SendWhatsAppButton'
 import type { CustomerWithLoyalty } from '@/store/api'
 
 export function RightPanelCustomer() {
@@ -27,6 +28,11 @@ export function RightPanelCustomer() {
   const { data: customerSummary, isFetching: isLoadingSummary } = useGetCustomerSummaryQuery(selectedCustomer?.id || '', {
     skip: !selectedCustomer?.id,
   })
+  const selectedCustomerId = selectedCustomer?.id ?? ''
+  const { data: loyaltyCard } = useGetLoyaltyCardQuery(selectedCustomerId, { skip: !selectedCustomerId })
+  const passId = loyaltyCard?.digital_passes?.id
+  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', { skip: !passId })
+  const googleSaveUrl = googleWalletData?.jwtUrl
   const customers: CustomerWithLoyalty[] = queryCustomers.length > 0 ? queryCustomers : sliceCustomers
 
   useEffect(() => {
@@ -162,17 +168,24 @@ export function RightPanelCustomer() {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-              <div className="flex items-center gap-1">
-                <Star className="h-3 w-3 text-primary" />
-                <span className="font-label font-bold">{selectedCustomer.loyalty?.points || 0} Points</span>
+              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                <div className="flex items-center gap-1">
+                  <Star className="h-3 w-3 text-primary" />
+                  <span className="font-label font-bold">{selectedCustomer.loyalty?.points || 0} Points</span>
+                </div>
+                <span className="text-outline-variant">·</span>
+                <div className="flex items-center gap-1">
+                  <Heart className="h-3 w-3 text-secondary" />
+                  <span>{selectedCustomer.total_visits} visits</span>
+                </div>
               </div>
-              <span className="text-outline-variant">·</span>
-              <div className="flex items-center gap-1">
-                <Heart className="h-3 w-3 text-secondary" />
-                <span>{selectedCustomer.total_visits} visits</span>
-              </div>
-            </div>
+
+              <SendWhatsAppButton
+                applePassUrl={passId ? `/api/wallet/apple/${passId}/download` : undefined}
+                googleSaveUrl={googleSaveUrl}
+                customerPhone={selectedCustomer.phone ?? undefined}
+                className="w-full"
+              />
 
             <div
               className={cn(

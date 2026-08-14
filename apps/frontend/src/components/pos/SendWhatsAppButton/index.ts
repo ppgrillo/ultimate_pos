@@ -1,0 +1,1 @@
+export { SendWhatsAppButton } from './SendWhatsAppButton'

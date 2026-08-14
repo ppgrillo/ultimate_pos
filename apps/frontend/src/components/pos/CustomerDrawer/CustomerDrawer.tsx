@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Star, Calendar, GripHorizontal, Search, UserPlus } from 'lucide-react'
+import { X, Star, Calendar, GripHorizontal, Search, UserPlus, UserX } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCustomerDrawerOpen } from '@/store/slices/posSlice'
 import { setSelectedCustomer, clearSelectedCustomer } from '@/store/slices/customersSlice'
 import { setCustomer } from '@/store/slices/cartSlice'
-import { useGetCustomersQuery } from '@/store/api'
+import { useGetCustomersQuery, useGetLoyaltyCardQuery, useGetGoogleWalletSaveUrlQuery } from '@/store/api'
 import { formatCurrency } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { AddCustomerModal } from '@/components/pos/AddCustomerModal'
+import { SendWhatsAppButton } from '@/components/pos/SendWhatsAppButton'
 import type { CustomerWithLoyalty } from '@/store/slices/customersSlice'
 
 export function CustomerDrawer() {
@@ -25,6 +26,16 @@ export function CustomerDrawer() {
     { skip: !shouldSearch },
   )
   const searchResults = searchResult?.data || []
+
+  const selectedCustomerId = selectedCustomer?.id ?? ''
+  const { data: loyaltyCard } = useGetLoyaltyCardQuery(selectedCustomerId, {
+    skip: !selectedCustomerId || !open,
+  })
+  const passId = loyaltyCard?.digital_passes?.id
+  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
+    skip: !passId,
+  })
+  const googleSaveUrl = googleWalletData?.jwtUrl
 
   useEffect(() => {
     if (!open) {
@@ -46,7 +57,13 @@ export function CustomerDrawer() {
 
   const handleClose = () => {
     dispatch(setCustomerDrawerOpen(false))
+    setSearchQuery('')
+  }
+
+  const handleClearCustomer = () => {
     dispatch(clearSelectedCustomer())
+    dispatch(setCustomer(null))
+    dispatch(setCustomerDrawerOpen(false))
     setSearchQuery('')
   }
 
@@ -79,8 +96,21 @@ export function CustomerDrawer() {
                   Add
                 </button>
               )}
+              {selectedCustomer && (
+                <button
+                  onClick={handleClearCustomer}
+                  title="Remove customer"
+                  aria-label="Remove customer"
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-red-500/10 px-2.5 text-xs font-label font-bold text-red-400 hover:bg-red-500/20 transition-colors"
+                >
+                  <UserX className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
               <button
                 onClick={handleClose}
+                title="Close"
+                aria-label="Close"
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
               >
                 <X className="h-4 w-4" />
@@ -189,6 +219,12 @@ export function CustomerDrawer() {
                 <span className="rounded-full bg-surface-container-high px-3 py-0.5 text-xs font-label font-bold text-on-surface-variant">
                   {selectedCustomer.total_visits} visits
                 </span>
+                <SendWhatsAppButton
+                  iconOnly
+                  applePassUrl={passId ? `/api/wallet/apple/${passId}/download` : undefined}
+                  googleSaveUrl={googleSaveUrl}
+                  customerPhone={selectedCustomer.phone ?? undefined}
+                />
               </div>
             </div>
 
@@ -206,7 +242,10 @@ export function CustomerDrawer() {
             </div>
 
             <button
-              onClick={() => dispatch(clearSelectedCustomer())}
+              onClick={() => {
+                dispatch(clearSelectedCustomer())
+                dispatch(setCustomer(null))
+              }}
               className="w-full rounded-lg border border-outline-variant py-2.5 text-sm font-label font-bold text-on-surface hover:bg-surface-container-high transition-colors"
             >
               Search for another customer
