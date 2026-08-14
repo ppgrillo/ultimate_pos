@@ -14,6 +14,14 @@ import { useRouter } from 'next/navigation'
 import { useCreateCustomerMutation, useGetCustomerStatsQuery, useGetCustomersQuery, useUpdateCustomerMutation } from '@/store/api'
 import type { CustomerWithLoyalty } from '@/store/api'
 
+const SOCIAL_PLATFORMS: { key: string; label: string; placeholder: string }[] = [
+  { key: 'instagram', label: 'Instagram', placeholder: '@usuario' },
+  { key: 'tiktok', label: 'TikTok', placeholder: '@usuario' },
+  { key: 'facebook', label: 'Facebook', placeholder: 'facebook.com/usuario' },
+  { key: 'twitter', label: 'X (Twitter)', placeholder: '@usuario' },
+  { key: 'website', label: 'Website', placeholder: 'https://...' },
+]
+
 export default function CustomersPage() {
   const router = useRouter()
   const preferenceFields = useAppSelector((s) => s.storeConfig.currentStore?.settings?.preferenceFields ?? [])
@@ -35,7 +43,7 @@ export default function CustomersPage() {
     source: '',
     preferred_contact: '',
     preferences: '{}' as string,
-    social_handles: '{}' as string,
+    socialHandles: { instagram: '', tiktok: '', facebook: '', twitter: '', website: '' } as Record<string, string>,
     birthday: '',
   })
 
@@ -85,7 +93,7 @@ export default function CustomersPage() {
   }
 
   const resetForm = () => {
-    setForm({ name: '', email: '', phone: '', notes: '', tags: '', source: '', preferred_contact: '', preferences: '{}', social_handles: '{}', birthday: '' })
+    setForm({ name: '', email: '', phone: '', notes: '', tags: '', source: '', preferred_contact: '', preferences: '{}', socialHandles: { instagram: '', tiktok: '', facebook: '', twitter: '', website: '' }, birthday: '' })
     setEditCustomer(null)
   }
 
@@ -106,10 +114,10 @@ export default function CustomersPage() {
       payload.preferences = prefs
     } catch { /* keep default */ }
 
-    try {
-      const handles = JSON.parse(form.social_handles)
-      payload.social_handles = handles
-    } catch { /* keep default */ }
+    const handles = Object.fromEntries(
+      Object.entries(form.socialHandles).filter(([, v]) => v.trim()),
+    )
+    payload.social_handles = handles
 
     if (editCustomer) {
       await updateCustomer({ id: editCustomer.id, body: payload }).unwrap()
@@ -486,78 +494,106 @@ export default function CustomersPage() {
             <ModalDescription>{editCustomer ? 'Update customer information.' : 'Add a new customer to your database.'}</ModalDescription>
           </ModalHeader>
           <div className="space-y-4 px-6 py-4">
-            <Input
-              label="Name *"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Full name"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Contact</p>
               <Input
-                label="Email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="email@example.com"
+                label="Name *"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Full name"
               />
-              <PhoneInput
-                label="Phone"
-                value={form.phone}
-                onChange={(v) => setForm({ ...form, phone: v })}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Source</label>
-                <select
-                  value={form.source}
-                  onChange={(e) => setForm({ ...form, source: e.target.value })}
-                  className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                >
-                  <option value="">Select source...</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="facebook">Facebook</option>
-                  <option value="google">Google</option>
-                  <option value="referral">Referral</option>
-                  <option value="walk-in">Walk-in</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Preferred Contact</label>
-                <select
-                  value={form.preferred_contact}
-                  onChange={(e) => setForm({ ...form, preferred_contact: e.target.value })}
-                  className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-                >
-                  <option value="">Select...</option>
-                  <option value="sms">SMS</option>
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="dm">DM</option>
-                  <option value="call">Call</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@example.com"
+                />
+                <PhoneInput
+                  label="Phone"
+                  value={form.phone}
+                  onChange={(v) => setForm({ ...form, phone: v })}
+                />
               </div>
             </div>
-            <Input
-              label="Birthday"
-              type="date"
-              value={form.birthday}
-              onChange={(e) => setForm({ ...form, birthday: e.target.value })}
-            />
-            <div>
-              <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Tags <span className="text-on-surface-variant/50">(comma separated)</span></label>
-              <input
-                value={form.tags}
-                onChange={(e) => setForm({ ...form, tags: e.target.value })}
-                placeholder="VIP, frequent, streetwear..."
-                className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+
+            <div className="border-t border-outline-variant/50 pt-4 space-y-4">
+              <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Details</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Source</label>
+                  <select
+                    value={form.source}
+                    onChange={(e) => setForm({ ...form, source: e.target.value })}
+                    className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  >
+                    <option value="">Select source...</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="facebook">Facebook</option>
+                    <option value="google">Google</option>
+                    <option value="referral">Referral</option>
+                    <option value="walk-in">Walk-in</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Preferred Contact</label>
+                  <select
+                    value={form.preferred_contact}
+                    onChange={(e) => setForm({ ...form, preferred_contact: e.target.value })}
+                    className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  >
+                    <option value="">Select...</option>
+                    <option value="sms">SMS</option>
+                    <option value="email">Email</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="dm">DM</option>
+                    <option value="call">Call</option>
+                  </select>
+                </div>
+              </div>
+              <Input
+                label="Birthday"
+                type="date"
+                value={form.birthday}
+                onChange={(e) => setForm({ ...form, birthday: e.target.value })}
               />
             </div>
 
-            {preferenceFields.length > 0 && (
+            <div className="border-t border-outline-variant/50 pt-4 space-y-4">
+              <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Marketing</p>
               <div>
-                <label className="block text-xs font-label font-bold text-on-surface-variant mb-2">Preferences</label>
+                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Tags <span className="text-on-surface-variant/50">(comma separated)</span></label>
+                <input
+                  value={form.tags}
+                  onChange={(e) => setForm({ ...form, tags: e.target.value })}
+                  placeholder="VIP, frequent, streetwear..."
+                  className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Social Handles</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {SOCIAL_PLATFORMS.map((platform) => (
+                    <div key={platform.key}>
+                      <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">{platform.label}</label>
+                      <input
+                        value={form.socialHandles[platform.key] || ''}
+                        onChange={(e) => setForm({ ...form, socialHandles: { ...form.socialHandles, [platform.key]: e.target.value } })}
+                        placeholder={platform.placeholder}
+                        className="h-9 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {preferenceFields.length > 0 && (
+              <div className="border-t border-outline-variant/50 pt-4 space-y-4">
+                <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Preferences</p>
                 <div className="space-y-3 rounded-xl bg-surface-container/50 border border-outline-variant/50 p-4">
                   {preferenceFields.map((field) => (
                     <div key={field.key}>
@@ -645,26 +681,18 @@ export default function CustomersPage() {
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Social Handles <span className="text-on-surface-variant/50">(JSON)</span></label>
-              <textarea
-                value={form.social_handles}
-                onChange={(e) => setForm({ ...form, social_handles: e.target.value })}
-                placeholder='{"instagram": "@user", "tiktok": "@user"}'
-                rows={2}
-                className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Notes</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Any notes about this customer..."
-                rows={3}
-                className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-              />
+            <div className="border-t border-outline-variant/50 pt-4 space-y-4">
+              <p className="text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant">Notes</p>
+              <div>
+                <label className="block text-xs font-label font-bold text-on-surface-variant mb-1.5">Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Any notes about this customer..."
+                  rows={3}
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                />
+              </div>
             </div>
           </div>
           <ModalFooter>

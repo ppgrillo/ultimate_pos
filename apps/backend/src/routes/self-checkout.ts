@@ -108,11 +108,15 @@ selfCheckoutRouter.post('/customers', async (c) => {
   const storeId = c.get('storeId')
 
   const body = await c.req.json()
-  const { name, email, phone } = body
+  const { name, email, phone, tags } = body
 
   if (!name || typeof name !== 'string' || !name.trim()) {
     throw badRequest('Customer name is required')
   }
+
+  const customerTags = Array.isArray(tags)
+    ? [...new Set(['self-checkout', ...tags.map((t: string) => t.trim()).filter(Boolean)])]
+    : ['self-checkout']
 
   const { data, error } = await supabaseAdmin
     .from('customers')
@@ -122,7 +126,7 @@ selfCheckoutRouter.post('/customers', async (c) => {
       email: email?.trim() || null,
       phone: phone?.trim() || null,
       source: 'self-checkout',
-      tags: ['self-checkout'],
+      tags: customerTags,
     })
     .select()
     .single()

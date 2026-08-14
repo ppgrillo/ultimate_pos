@@ -8,6 +8,7 @@ import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
 import { useGetCustomersQuery, useGetCustomerSummaryQuery } from '@/store/api'
 import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
+import { QuickCustomerRegister } from '@/components/pos/QuickCustomerRegister'
 import type { CustomerWithLoyalty } from '@/store/api'
 
 export function RightPanelCustomer() {
@@ -107,6 +108,8 @@ export function RightPanelCustomer() {
           onClose={() => setScannerOpen(false)}
           variant="popover"
         />
+
+        {!selectedCustomer && <QuickCustomerRegister className="border-b-0" />}
 
         {!selectedCustomer ? (
           <div className="space-y-0.5 pb-1">

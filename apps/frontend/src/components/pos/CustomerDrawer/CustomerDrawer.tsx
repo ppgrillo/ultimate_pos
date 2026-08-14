@@ -9,6 +9,7 @@ import { setCustomer } from '@/store/slices/cartSlice'
 import { useGetCustomersQuery } from '@/store/api'
 import { formatCurrency } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { AddCustomerModal } from '@/components/pos/AddCustomerModal'
 import type { CustomerWithLoyalty } from '@/store/slices/customersSlice'
 
 export function CustomerDrawer() {
@@ -16,6 +17,7 @@ export function CustomerDrawer() {
   const open = useAppSelector((s) => s.pos.customerDrawerOpen)
   const selectedCustomer = useAppSelector((s) => s.customers.selectedCustomer)
   const [searchQuery, setSearchQuery] = useState('')
+  const [addModalOpen, setAddModalOpen] = useState(false)
 
   const shouldSearch = open && !selectedCustomer && searchQuery.trim().length >= 2
   const { data: searchResult, isFetching: searching } = useGetCustomersQuery(
@@ -67,12 +69,23 @@ export function CustomerDrawer() {
             <h2 className="font-headline font-bold text-lg text-on-surface">
               {selectedCustomer ? 'Customer Profile' : 'Find Customer'}
             </h2>
-            <button
-              onClick={handleClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {!selectedCustomer && (
+                <button
+                  onClick={() => setAddModalOpen(true)}
+                  className="flex h-8 items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 text-xs font-label font-bold text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              )}
+              <button
+                onClick={handleClose}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -201,6 +214,12 @@ export function CustomerDrawer() {
           </div>
         )}
       </div>
+
+      <AddCustomerModal
+        open={addModalOpen}
+        onOpenChange={setAddModalOpen}
+        onCreated={() => dispatch(setCustomerDrawerOpen(false))}
+      />
     </div>
   )
 }

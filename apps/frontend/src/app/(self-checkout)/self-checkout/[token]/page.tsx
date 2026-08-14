@@ -19,6 +19,7 @@ import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/s
 // LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
+import { PhoneInput } from '@/components/ui/PhoneInput'
 import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse, CardPaymentProviderName } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
@@ -117,7 +118,13 @@ export default function SelfCheckoutPage() {
   const [registerName, setRegisterName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
+  const [registerTags, setRegisterTags] = useState('')
   const [registeringCustomer, setRegisteringCustomer] = useState(false)
+  const [interestsConfig, setInterestsConfig] = useState<{
+    enabled?: boolean
+    fieldLabel?: string
+    placeholder?: string
+  } | undefined>(undefined)
   const [qrExpanded, setQrExpanded] = useState(true)
   const [formExpanded, setFormExpanded] = useState(false)
   const [cameraExpanded, setCameraExpanded] = useState(true)
@@ -204,6 +211,11 @@ export default function SelfCheckoutPage() {
       setPointsPerCurrency((settings?.pointsPerCurrency as number) ?? 10)
       setSpecialInstructionsEnabled((settings?.specialInstructionsEnabled as boolean) ?? true)
       setPromoPin((settings?.promoPin as string) ?? '')
+      setInterestsConfig(settings?.registrationInterestsConfig as {
+        enabled?: boolean
+        fieldLabel?: string
+        placeholder?: string
+      } | undefined)
       setProducts(productsRes.data)
       setCategories(categoriesRes.data)
       setPromotions(promosRes.data || [])
@@ -313,12 +325,18 @@ export default function SelfCheckoutPage() {
 
     setRegisteringCustomer(true)
     try {
+      const tags = registerTags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)
+
       const res = await apiFetch<{ data: Customer }>('/customers', {
         method: 'POST',
         body: JSON.stringify({
           name: registerName.trim(),
           email: registerEmail.trim() || undefined,
           phone: registerPhone.trim() || undefined,
+          tags: tags.length > 0 ? tags : undefined,
         }),
       })
 
@@ -333,13 +351,14 @@ export default function SelfCheckoutPage() {
       setRegisterName('')
       setRegisterEmail('')
       setRegisterPhone('')
+      setRegisterTags('')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error registering customer'
       setErrorMsg(msg)
     } finally {
       setRegisteringCustomer(false)
     }
-  }, [registerEmail, registerName, registerPhone, apiFetch])
+  }, [registerEmail, registerName, registerPhone, registerTags, apiFetch])
 
   // ─── Customer search → profile ──────────────────────────────────────────
   const handleSelectSearchResult = useCallback(async (customer: Customer) => {
@@ -1147,7 +1166,10 @@ export default function SelfCheckoutPage() {
                     className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                    Email
+                  </label>
                   <input
                     type="email"
                     value={registerEmail}
@@ -1155,14 +1177,32 @@ export default function SelfCheckoutPage() {
                     placeholder="Email"
                     className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   />
-                  <input
-                    type="tel"
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                    Teléfono
+                  </label>
+                  <PhoneInput
                     value={registerPhone}
-                    onChange={(e) => setRegisterPhone(e.target.value)}
-                    placeholder="Teléfono"
-                    className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    onChange={setRegisterPhone}
+                    placeholder="55 1234 5678"
+                    defaultCountry="MX"
                   />
                 </div>
+                {(interestsConfig?.enabled ?? true) && (
+                  <div>
+                    <label className="mb-1 block text-[11px] font-label font-bold uppercase tracking-wider text-on-surface-variant">
+                      {interestsConfig?.fieldLabel || 'Categorías de interés'} <span className="font-normal normal-case text-on-surface-variant/60">(opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={registerTags}
+                      onChange={(e) => setRegisterTags(e.target.value)}
+                      placeholder={interestsConfig?.placeholder || 'ropa, electrónica, hogar, mascotas...'}
+                      className="h-9 w-full rounded-xl border border-outline-variant bg-background px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={!registerName.trim() || registeringCustomer}
@@ -1730,14 +1770,22 @@ export default function SelfCheckoutPage() {
                           placeholder="Email"
                           className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         />
-                        <input
-                          type="tel"
+                        <PhoneInput
                           value={registerPhone}
-                          onChange={(e) => setRegisterPhone(e.target.value)}
-                          placeholder="Teléfono"
-                          className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          onChange={setRegisterPhone}
+                          placeholder="55 1234 5678"
+                          defaultCountry="MX"
                         />
                       </div>
+                      {(interestsConfig?.enabled ?? true) && (
+                        <input
+                          type="text"
+                          value={registerTags}
+                          onChange={(e) => setRegisterTags(e.target.value)}
+                          placeholder={interestsConfig?.placeholder || 'ropa, electrónica, hogar, mascotas...'}
+                          className="h-10 w-full rounded-xl border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        />
+                      )}
                       <button
                         type="submit"
                         disabled={!registerName.trim() || registeringCustomer}
