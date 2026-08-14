@@ -21,7 +21,7 @@ interface CreatedCustomer {
 export function AddCustomerModal({ open, onOpenChange, onCreated }: AddCustomerModalProps) {
   const [created, setCreated] = useState<CreatedCustomer | null>(null)
   const passId = created?.passId
-  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
+  const { data: googleWalletData, isLoading: googleLoading } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
     skip: !open || !passId,
   })
   const googleSaveUrl = googleWalletData?.jwtUrl
@@ -80,6 +80,7 @@ export function AddCustomerModal({ open, onOpenChange, onCreated }: AddCustomerM
                   googleSaveUrl={googleSaveUrl}
                   customerPhone={created.customer.phone ?? undefined}
                   className="w-full"
+                  loading={googleLoading}
                 />
               )}
 

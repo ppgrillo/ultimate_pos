@@ -31,7 +31,7 @@ export function RightPanelCustomer() {
   const selectedCustomerId = selectedCustomer?.id ?? ''
   const { data: loyaltyCard } = useGetLoyaltyCardQuery(selectedCustomerId, { skip: !selectedCustomerId })
   const passId = loyaltyCard?.digital_passes?.id
-  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', { skip: !passId })
+  const { data: googleWalletData, isLoading: googleLoading } = useGetGoogleWalletSaveUrlQuery(passId ?? '', { skip: !passId })
   const googleSaveUrl = googleWalletData?.jwtUrl
   const customers: CustomerWithLoyalty[] = queryCustomers.length > 0 ? queryCustomers : sliceCustomers
 
@@ -185,6 +185,7 @@ export function RightPanelCustomer() {
                 googleSaveUrl={googleSaveUrl}
                 customerPhone={selectedCustomer.phone ?? undefined}
                 className="w-full"
+                loading={googleLoading}
               />
 
             <div

@@ -1,6 +1,6 @@
 'use client'
 
-import { Smartphone, MessageCircle } from 'lucide-react'
+import { Loader2, Smartphone, MessageCircle } from 'lucide-react'
 import { useState } from 'react'
 import { openWhatsApp, toAbsoluteUrl } from '@/lib/wallet'
 
@@ -9,12 +9,13 @@ interface WalletQRProps {
   googleSaveUrl?: string
   passId?: string
   customerPhone?: string
+  loading?: boolean
 }
 
-export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }: WalletQRProps) {
+export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone, loading }: WalletQRProps) {
   const [showQR, setShowQR] = useState<'google' | 'apple' | null>(null)
 
-  if (!passId && !applePassUrl && !googleSaveUrl) return null
+  if (!loading && !passId && !applePassUrl && !googleSaveUrl) return null
 
   const appleUrl = toAbsoluteUrl(applePassUrl)
 
@@ -25,13 +26,24 @@ export function WalletQR({ applePassUrl, googleSaveUrl, passId, customerPhone }:
           <Smartphone className="h-4 w-4 text-primary" />
           <span className="text-sm font-bold text-on-surface">Digital Wallet</span>
         </div>
-        <button
-          onClick={() => openWhatsApp({ googleSaveUrl, appleUrl, phone: customerPhone })}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
-        >
-          <MessageCircle className="h-4 w-4" />
-          Enviar por WhatsApp
-        </button>
+        {loading ? (
+          <button
+            disabled
+            title="Generando tarjeta de Google Wallet…"
+            className="flex items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface-variant cursor-wait"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Preparando tarjeta…
+          </button>
+        ) : (
+          <button
+            onClick={() => openWhatsApp({ googleSaveUrl, appleUrl, phone: customerPhone })}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Enviar por WhatsApp
+          </button>
+        )}
       </div>
 
       {showQR === 'google' && googleSaveUrl && (

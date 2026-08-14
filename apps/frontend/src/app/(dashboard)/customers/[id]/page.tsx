@@ -62,7 +62,7 @@ export default function CustomerDetailPage() {
   // Wallet pass ID comes from the joined digital_passes row
   const passId = loyaltyCard?.digital_passes?.id ?? null
   const applePassUrl = passId ? `/api/wallet/apple/${passId}/download` : undefined
-  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
+  const { data: googleWalletData, isLoading: googleLoading } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
     skip: tab !== 'loyalty' || !passId,
   })
   const googleSaveUrl = googleWalletData?.jwtUrl
@@ -429,6 +429,7 @@ export default function CustomerDetailPage() {
                       applePassUrl={applePassUrl}
                       googleSaveUrl={googleSaveUrl}
                       customerPhone={customer.phone ?? undefined}
+                      loading={googleLoading}
                     />
                   </CardContent>
                 </Card>

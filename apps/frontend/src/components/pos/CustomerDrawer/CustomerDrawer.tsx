@@ -32,7 +32,7 @@ export function CustomerDrawer() {
     skip: !selectedCustomerId || !open,
   })
   const passId = loyaltyCard?.digital_passes?.id
-  const { data: googleWalletData } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
+  const { data: googleWalletData, isLoading: googleLoading } = useGetGoogleWalletSaveUrlQuery(passId ?? '', {
     skip: !passId,
   })
   const googleSaveUrl = googleWalletData?.jwtUrl
@@ -224,6 +224,7 @@ export function CustomerDrawer() {
                   applePassUrl={passId ? `/api/wallet/apple/${passId}/download` : undefined}
                   googleSaveUrl={googleSaveUrl}
                   customerPhone={selectedCustomer.phone ?? undefined}
+                  loading={googleLoading}
                 />
               </div>
             </div>

@@ -52,4 +52,18 @@ describe('SendWhatsAppButton', () => {
     expect(url.startsWith('https://wa.me/?text=')).toBe(true)
     openSpy.mockRestore()
   })
+
+  it('is disabled and shows a spinner while loading the Google Wallet link', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const user = userEvent.setup()
+    render(<SendWhatsAppButton applePassUrl="/api/wallet/apple/p1/download" loading />)
+
+    const btn = screen.getByRole('button', { name: 'Preparando tarjeta de fidelidad' })
+    expect(btn).toBeDisabled()
+    expect(screen.getByText('Preparando tarjeta…')).toBeInTheDocument()
+
+    await user.click(btn).catch(() => {})
+    expect(openSpy).not.toHaveBeenCalled()
+    openSpy.mockRestore()
+  })
 })
