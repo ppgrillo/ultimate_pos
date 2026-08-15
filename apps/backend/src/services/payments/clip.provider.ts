@@ -227,7 +227,7 @@ class ClipProvider implements PaymentProvider {
       id: d.serial_number || d.serial || d.name || '',
       name: d.name || d.serial_number || d.serial || '',
       model: d.model,
-      operatingMode: d.status,
+      operating_mode: d.status,
     })).filter((t) => t.id)
   }
 

@@ -112,7 +112,7 @@ describe('mercadoPagoProvider', () => {
     const result = await mercadoPagoProvider.listTerminals!(CREDENTIALS)
 
     expect(mpService.listTerminals).toHaveBeenCalledWith('test_access_token_123')
-    expect(result).toEqual([{ id: 'TERM_001', name: 'Point Smart', model: 'Point Smart 2', operatingMode: 'PDV' }])
+    expect(result).toEqual([{ id: 'TERM_001', name: 'Point Smart', model: 'Point Smart 2', operating_mode: 'PDV' }])
   })
 
   it('setupTerminal delegates to mpService.setPdvMode', async () => {

@@ -63,7 +63,7 @@ class MercadoPagoProvider implements PaymentProvider {
       id: t.id,
       name: t.name,
       model: t.model,
-      operatingMode: t.operating_mode,
+      operating_mode: t.operating_mode,
     }))
   }
 

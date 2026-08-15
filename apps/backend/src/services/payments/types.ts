@@ -29,7 +29,7 @@ export interface PaymentTerminal {
   id: string
   name: string
   model?: string
-  operatingMode?: string
+  operating_mode?: string
 }
 
 export interface CardProviderCredentials {

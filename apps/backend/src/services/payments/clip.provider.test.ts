@@ -260,8 +260,8 @@ describe('clipProvider', () => {
       const result = await clipProvider.listTerminals!(CREDENTIALS)
 
       expect(result).toEqual([
-        { id: 'CLIP-SER-001', name: 'PinPad 1', model: 'Clip PinPad', operatingMode: 'ACTIVE' },
-        { id: 'CLIP-SER-002', name: 'PinPad 2', model: undefined, operatingMode: 'INACTIVE' },
+        { id: 'CLIP-SER-001', name: 'PinPad 1', model: 'Clip PinPad', operating_mode: 'ACTIVE' },
+        { id: 'CLIP-SER-002', name: 'PinPad 2', model: undefined, operating_mode: 'INACTIVE' },
       ])
 
       const [url, opts] = mockFetch.mock.calls[0]
