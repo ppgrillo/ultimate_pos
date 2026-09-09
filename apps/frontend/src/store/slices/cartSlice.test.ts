@@ -1,4 +1,4 @@
-import cartReducer, { addItem, removeItem, updateQuantity, type CartState } from './cartSlice'
+import cartReducer, { addItem, removeItem, updateQuantity, setAutoPromotions, type CartState } from './cartSlice'
 
 const baseState: CartState = {
   items: [],
@@ -15,6 +15,9 @@ const baseState: CartState = {
   redeemed_points: 0,
   appliedPromotions: [],
   promoDiscount: 0,
+  redeemed_reward_id: null,
+  redeemed_reward_data: null,
+  autoPromotions: true,
 }
 
 describe('cartSlice identity', () => {
@@ -104,5 +107,64 @@ describe('cartSlice identity', () => {
     }))
 
     expect(removed.items).toHaveLength(0)
+  })
+})
+
+describe('cartSlice autoPromotions', () => {
+  it('starts enabled by default', () => {
+    expect(baseState.autoPromotions).toBe(true)
+  })
+
+  it('restores full prices when auto promotions are paused', () => {
+    const withPromo = cartReducer(baseState, addItem({
+      product_id: 'soda',
+      name: 'Soda',
+      price: 4,
+      original_price: 5,
+      quantity: 2,
+      variant_label: '',
+      modifiers: [],
+      notes: null,
+      category_id: null,
+    }))
+
+    const paused = cartReducer(withPromo, setAutoPromotions(false))
+    expect(paused.autoPromotions).toBe(false)
+    expect(paused.items[0]?.price).toBe(5)
+  })
+
+  it('clears applied promotions when paused', () => {
+    const withPromos: CartState = {
+      ...baseState,
+      appliedPromotions: [{ promotion_id: 'p1', name: 'Combo', discount_amount: 2 }],
+      promoDiscount: 2,
+    }
+    const paused = cartReducer(withPromos, setAutoPromotions(false))
+    expect(paused.appliedPromotions).toHaveLength(0)
+    expect(paused.promoDiscount).toBe(0)
+  })
+
+  it('keeps items untouched when re-enabled', () => {
+    const state1 = cartReducer(baseState, addItem({
+      product_id: 'soda',
+      name: 'Soda',
+      price: 4,
+      original_price: 5,
+      quantity: 2,
+      variant_label: '',
+      modifiers: [],
+      notes: null,
+      category_id: null,
+    }))
+    const paused = cartReducer(state1, setAutoPromotions(false))
+    const reEnabled = cartReducer(paused, setAutoPromotions(true))
+    expect(reEnabled.autoPromotions).toBe(true)
+    expect(reEnabled.items[0]?.price).toBe(5)
+  })
+
+  it('resets to enabled on clearCart', () => {
+    const paused = cartReducer({ ...baseState, autoPromotions: false }, setAutoPromotions(false))
+    const cleared = cartReducer(paused, { type: 'cart/clearCart' })
+    expect((cleared as CartState).autoPromotions).toBe(true)
   })
 })

@@ -21,7 +21,7 @@ import type { Product } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 import { useCartPromotions } from '@/hooks/useCartPromotions'
 import { usePromotions } from '@/hooks/usePromotions'
-import { getSalePrice } from '@/lib/utils'
+import { getSalePrice, hasPromoConditions } from '@/lib/utils'
 
 export default function PosPage() {
   useCartPromotions()
@@ -34,6 +34,7 @@ export default function PosPage() {
   const selectedCategory = useAppSelector((s) => s.pos.selectedCategory)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const quickSaleOpen = useAppSelector((s) => s.pos.quickSaleOpen)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
   const { getPromotionForProduct } = usePromotions()
@@ -57,8 +58,8 @@ export default function PosPage() {
       dispatch(setCustomizeProductId(product.id))
       return
     }
-    const promo = getPromotionForProduct(product)
-    const price = promo ? getSalePrice(product.price, promo.discount_type, promo.discount_value) : product.price
+    const promo = autoPromotions ? getPromotionForProduct(product) : undefined
+    const price = promo && !hasPromoConditions(promo) ? getSalePrice(product.price, promo.discount_type, promo.discount_value) : product.price
     dispatch(addItem({
       product_id: product.id,
       name: product.name,
@@ -70,7 +71,7 @@ export default function PosPage() {
       notes: null,
       category_id: product.category_id,
     }))
-  }, [dispatch, getPromotionForProduct])
+  }, [dispatch, getPromotionForProduct, autoPromotions])
 
   const customizeModal = <CustomizeProduct />
 
@@ -131,7 +132,7 @@ export default function PosPage() {
                     product={product}
                     onAdd={handleAdd}
                     variant="dense"
-                    activePromotion={getPromotionForProduct(product)}
+                    activePromotion={autoPromotions ? getPromotionForProduct(product) : undefined}
                   />
                 ))}
               </div>

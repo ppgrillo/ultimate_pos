@@ -9,6 +9,7 @@ import type { PromotionValidationResponse } from '@ultimate-pos/shared'
 export function useCartPromotions() {
   const dispatch = useAppDispatch()
   const items = useAppSelector((s) => s.cart.items)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
   const storeId = useAppSelector((s) => s.auth.user?.store_id)
   // appliedPromotions read intentionally removed to avoid re-fetch loops; we only dispatch updates
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -27,6 +28,13 @@ export function useCartPromotions() {
         hadPromosRef.current = false
         dispatch(setAppliedPromotions({ promotions: [], totalDiscount: 0 }))
       }
+      return
+    }
+
+    // When auto promotions are paused for this sale, keep them cleared.
+    if (!autoPromotions) {
+      hadPromosRef.current = false
+      dispatch(clearAutoPromotions())
       return
     }
 
@@ -69,7 +77,7 @@ export function useCartPromotions() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [items, storeId, dispatch])
+  }, [items, autoPromotions, storeId, dispatch])
 
   useEffect(() => {
     if (!storeId) {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { X, Minus, Plus, ShoppingCart } from 'lucide-react'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
-import { formatCurrency, getSalePrice } from '@/lib/utils'
+import { formatCurrency, getSalePrice, hasPromoConditions } from '@/lib/utils'
 import type { Product, Promotion } from '@ultimate-pos/shared'
 
 export interface CustomizeResult {
@@ -36,7 +36,7 @@ export function CustomizeProduct({
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
 
-  const basePrice = promotion
+  const basePrice = promotion && !hasPromoConditions(promotion)
     ? getSalePrice(product.price, promotion.discount_type, promotion.discount_value)
     : product.price
 

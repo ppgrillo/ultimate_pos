@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
 import { useParams } from 'next/navigation'
 import { api, setApiToken } from '@/lib/api/client'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, hasPromoConditions } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { PosSearchBar } from '@/components/pos/PosSearchBar'
 import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
@@ -15,6 +15,7 @@ import { MPPointPayment } from '@/components/pos/MPPointPayment'
 import { getActiveCardProvider, cardProviderDisplayName } from '@/lib/card-payments'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
+import { AutoPromoToggle } from '@/components/pos/AutoPromoToggle'
 import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/self-checkout/CustomizeProduct'
 // LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
@@ -103,6 +104,7 @@ export default function SelfCheckoutPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [appliedPromotions, setAppliedPromotions] = useState<PromotionValidationResponse['applied_promotions']>([])
   const [promoDiscount, setPromoDiscount] = useState(0)
+  const [autoPromotions, setAutoPromotions] = useState(true)
   const promoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ─── Promo modal ──────────────────────────────────────────────────────────
@@ -487,6 +489,7 @@ export default function SelfCheckoutPage() {
     let bestPromo: Promotion | null = null
     let bestDiscount = 0
     for (const promo of activePromotions) {
+      if ((promo.min_quantity ?? 0) > 0 || (promo.min_subtotal ?? 0) > 0) continue
       if (promo.target_type === 'product') {
         if (!promo.target_ids?.includes(product.id)) continue
       } else if (promo.target_type === 'category') {
@@ -516,6 +519,11 @@ export default function SelfCheckoutPage() {
       setPromoDiscount(0)
       return
     }
+    if (!autoPromotions) {
+      setAppliedPromotions([])
+      setPromoDiscount(0)
+      return
+    }
     promoTimerRef.current = setTimeout(async () => {
       try {
         const validationItems = cartItems.map((item) => ({
@@ -536,7 +544,7 @@ export default function SelfCheckoutPage() {
       }
     }, 300)
     return () => { if (promoTimerRef.current) clearTimeout(promoTimerRef.current) }
-  }, [cartItems, apiFetch])
+  }, [cartItems, autoPromotions, apiFetch])
 
   // ─── Cart mutations ───────────────────────────────────────────────────────
   function handleAdd(product: Product) {
@@ -548,8 +556,8 @@ export default function SelfCheckoutPage() {
       setCustomizeProduct(product)
       return
     }
-    const promo = getPromotionForProduct(product)
-    const salePrice = promo
+    const promo = autoPromotions ? getPromotionForProduct(product) : undefined
+    const salePrice = promo && !hasPromoConditions(promo)
       ? promo.discount_type === 'percentage'
         ? Math.round(product.price * (1 - promo.discount_value / 100) * 100) / 100
         : Math.max(0, Math.round((product.price - promo.discount_value) * 100) / 100)
@@ -639,8 +647,20 @@ export default function SelfCheckoutPage() {
     setDiscountLabel('')
     setAppliedPromotions([])
     setPromoDiscount(0)
+    setAutoPromotions(true)
     setRedeemedRewardId(null)
     setRedeemedRewardData(null)
+  }
+
+  function handleToggleAutoPromotions(enabled: boolean) {
+    setAutoPromotions(enabled)
+    if (!enabled) {
+      setAppliedPromotions([])
+      setPromoDiscount(0)
+      setCartItems((prev) =>
+        prev.map((i) => (i.price < i.original_price ? { ...i, price: i.original_price } : i)),
+      )
+    }
   }
 
   function handleResetAll() {
@@ -649,6 +669,7 @@ export default function SelfCheckoutPage() {
     setDiscountLabel('')
     setAppliedPromotions([])
     setPromoDiscount(0)
+    setAutoPromotions(true)
     setShowPromo(false)
     setPromoInput('')
     setCustomerProfile(null)
@@ -1069,7 +1090,7 @@ export default function SelfCheckoutPage() {
                   product={product}
                   onAdd={handleAdd}
                   variant="dense"
-                  activePromotion={getPromotionForProduct(product)}
+                  activePromotion={autoPromotions ? getPromotionForProduct(product) : null}
                 />
               ))}
             </div>
@@ -1623,6 +1644,12 @@ export default function SelfCheckoutPage() {
         {/* Footer buttons */}
         <div className="shrink-0 border-t border-outline-variant/50 p-3 space-y-2">
           <div className="flex gap-2">
+            <AutoPromoToggle
+              enabled={autoPromotions}
+              onChange={handleToggleAutoPromotions}
+              promoPin={promoPin || undefined}
+              title="Promos automáticas"
+            />
             <button
               onClick={() => {
                 if (promoPin) {
@@ -2100,7 +2127,7 @@ export default function SelfCheckoutPage() {
       {customizeProduct && (
         <SelfCheckoutCustomizeProduct
           product={customizeProduct}
-          promotion={getPromotionForProduct(customizeProduct)}
+          promotion={autoPromotions ? getPromotionForProduct(customizeProduct) : null}
           specialInstructionsEnabled={specialInstructionsEnabled}
           onConfirm={handleCustomizeConfirm}
           onClose={() => setCustomizeProduct(null)}

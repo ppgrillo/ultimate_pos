@@ -14,7 +14,7 @@ import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
+import { clearCart, setOrderType, setTable, setAutoPromotions } from '@/store/slices/cartSlice'
 import { setActiveView, setKitchenNotice, setSearchQuery, setSelectedCategory } from '@/store/slices/posSlice'
 import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setQuickSaleOpen } from '@/store/slices/posSlice'
@@ -24,6 +24,7 @@ import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/
 import { LayoutPanelTop, ShoppingBag, Search, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Check, PaymentMethod, ProductCategory } from '@ultimate-pos/shared'
+import { AutoPromoToggle } from '@/components/pos/AutoPromoToggle'
 
 interface PosDesktopLayoutProps {
   categories: ProductCategory[]
@@ -60,6 +61,7 @@ export function PosDesktopLayout({
   const redeemed_points = useAppSelector((s) => s.cart.redeemed_points)
   const appliedPromotions = useAppSelector((s) => s.cart.appliedPromotions)
   const promoDiscount = useAppSelector((s) => s.cart.promoDiscount)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
   const redeemed_reward_id = useAppSelector((s) => s.cart.redeemed_reward_id)
   const redeemed_reward_data = useAppSelector((s) => s.cart.redeemed_reward_data)
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
@@ -450,9 +452,17 @@ export function PosDesktopLayout({
         )}
 
          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-           <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1">
-             Order Summary ({count} {count === 1 ? 'item' : 'items'})
-           </h3>
+           <div className="flex items-center justify-between pr-1">
+             <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant px-1">
+               Order Summary ({count} {count === 1 ? 'item' : 'items'})
+             </h3>
+             <AutoPromoToggle
+               enabled={autoPromotions}
+               onChange={(v) => dispatch(setAutoPromotions(v))}
+               promoPin={settings?.promoPin}
+               title="Promos automáticas"
+             />
+           </div>
           {items.map((item, index) => (
             <CartItemRow
               key={`${item.product_id}-${index}`}

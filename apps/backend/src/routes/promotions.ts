@@ -10,6 +10,7 @@ import {
   computeCartPromotionDiscounts,
   isCartPromotionEligible,
   isPromotionInDateWindow,
+  computeConditionalProductPromotionDiscounts,
 } from '../lib/promotion-rules'
 
 export const promotionsRouter = new Hono()
@@ -70,8 +71,9 @@ promotionsRouter.get('/all', async (c) => {
 })
 
 // ── POST /validate — compute cart-level promo discounts ──
-// Product/category promos are applied at add-time (baked into cart prices).
-// This endpoint only returns cart-level promos (min_subtotal, min_quantity).
+// Unconditional product/category promos are applied at add-time (baked into cart prices).
+// This endpoint returns cart-level promos (min_subtotal, min_quantity) AND product/category
+// promos that carry min_quantity / min_subtotal conditions (evaluated against matching items).
 promotionsRouter.post('/validate', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
@@ -86,14 +88,31 @@ promotionsRouter.post('/validate', async (c) => {
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .eq('target_type', 'cart')
+    .in('target_type', ['cart', 'product', 'category'])
     .order('priority', { ascending: false })
 
   if (error) throw badRequest(error.message)
 
   const now = new Date()
+  const cartPromos = (promos || []).filter((p) => p.target_type === 'cart')
+  const conditionalTargetedPromos = (promos || []).filter((p) => p.target_type === 'product' || p.target_type === 'category')
+
+  const targetedLines = items.map((i) => ({
+    product_id: i.product_id,
+    quantity: i.quantity,
+    price: i.price,
+    category_id: i.category_id ?? null,
+  }))
+
   const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0)
-  const { appliedPromotions, totalDiscount } = computeCartPromotionDiscounts(promos || [], subtotal, totalQuantity, now)
+  const { appliedPromotions: cartApplied, totalDiscount: cartDiscount } =
+    computeCartPromotionDiscounts(cartPromos, subtotal, totalQuantity, now)
+
+  const { appliedPromotions: targetedApplied, totalDiscount: targetedDiscount } =
+    computeConditionalProductPromotionDiscounts(conditionalTargetedPromos, targetedLines, now)
+
+  const appliedPromotions = [...cartApplied, ...targetedApplied]
+  const totalDiscount = Math.round((cartDiscount + targetedDiscount) * 100) / 100
 
   if (c.req.query('debug') === '1') {
     return c.json({
@@ -111,7 +130,9 @@ promotionsRouter.post('/validate', async (c) => {
           starts_at: p.starts_at,
           ends_at: p.ends_at,
           inDateWindow: isPromotionInDateWindow(p, now),
-          eligible: isCartPromotionEligible(p, subtotal, totalQuantity, now),
+          eligible: p.target_type === 'cart'
+            ? isCartPromotionEligible(p, subtotal, totalQuantity, now)
+            : computeConditionalProductPromotionDiscounts([p], targetedLines, now).appliedPromotions.length > 0,
         })),
       },
     })

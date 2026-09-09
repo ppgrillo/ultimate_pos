@@ -64,6 +64,7 @@ export function usePromotions(): UsePromotionsResult {
     let bestDiscount = 0
 
     for (const promo of activePromotions) {
+      if ((promo.min_quantity ?? 0) > 0 || (promo.min_subtotal ?? 0) > 0) continue
       if (promo.target_type === 'product') {
         if (!promo.target_ids?.includes(product.id)) continue
       } else if (promo.target_type === 'category') {

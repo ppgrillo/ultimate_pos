@@ -3,6 +3,8 @@
 import { Menu, ShoppingBag, Scan, Users, Calculator } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView, setCartOpen, setScannerOpen, setCustomerDrawerOpen, setQuickSaleOpen } from '@/store/slices/posSlice'
+import { setAutoPromotions } from '@/store/slices/cartSlice'
+import { AutoPromoToggle } from '@/components/pos/AutoPromoToggle'
 import { cn } from '@/lib/utils'
 
 interface PosHeaderProps {
@@ -16,6 +18,8 @@ export function PosHeader({ onMenuClick }: PosHeaderProps) {
   const cartOpen = useAppSelector((s) => s.pos.cartOpen)
   const scannerOpen = useAppSelector((s) => s.pos.scannerOpen)
   const customerDrawerOpen = useAppSelector((s) => s.pos.customerDrawerOpen)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
+  const promoPin = useAppSelector((s) => s.storeConfig.currentStore?.settings?.promoPin)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
 
   return (
@@ -60,6 +64,13 @@ export function PosHeader({ onMenuClick }: PosHeaderProps) {
         >
           <Users className="h-5 w-5" />
         </button>
+
+        <AutoPromoToggle
+          enabled={autoPromotions}
+          onChange={(v) => dispatch(setAutoPromotions(v))}
+          promoPin={promoPin}
+          title="Promos automáticas"
+        />
 
         <button
           onClick={() => {

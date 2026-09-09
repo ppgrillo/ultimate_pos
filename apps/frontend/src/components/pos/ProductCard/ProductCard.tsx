@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import { Plus, ShoppingCart, Star } from 'lucide-react'
-import { cn, formatCurrency, getSalePrice } from '@/lib/utils'
+import { cn, formatCurrency, getSalePrice, hasPromoConditions } from '@/lib/utils'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { ExpandableText } from '@/components/ui'
-import { PromotionBadge } from '@/components/promotions'
 import type { Product, Promotion } from '@ultimate-pos/shared'
 
 interface ProductCardProps {
@@ -18,8 +17,9 @@ interface ProductCardProps {
 export function ProductCard({ product, onAdd, variant = 'compact', activePromotion }: ProductCardProps) {
   const [imgError, setImgError] = useState(false)
   const showImg = product.image_url && !imgError
-  const salePrice = activePromotion ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value) : null
-  const badgeText = activePromotion?.badge_text || (activePromotion?.discount_type === 'percentage' ? `-${activePromotion.discount_value}%` : null)
+  const salePrice = activePromotion && !hasPromoConditions(activePromotion)
+    ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value)
+    : null
 
   if (variant === 'dense') {
     // Entire card is clickable for faster POS interactions. Add button still works and stops propagation.
@@ -40,11 +40,6 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
           {product.pinned && (
             <div className="absolute top-1.5 left-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#fbbf24] shadow-sm">
               <Star className="h-3 w-3 fill-white text-white" />
-            </div>
-          )}
-          {badgeText && (
-            <div className="absolute top-1.5 right-1.5 z-10">
-              <PromotionBadge text={badgeText} />
             </div>
           )}
           {showImg ? (
@@ -109,11 +104,6 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
               <ShoppingCart className="h-8 w-8 text-on-surface-variant/30" />
             </div>
           )}
-          {badgeText && (
-            <div className="absolute top-2 right-2 z-10">
-              <PromotionBadge text={badgeText} />
-            </div>
-          )}
         </div>
         <div className="p-3 flex flex-col flex-1">
           <div className="flex-1">
@@ -169,11 +159,6 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
               className="h-full w-full object-cover"
               onError={() => setImgError(true)}
             />
-          </div>
-        )}
-        {badgeText && (
-          <div className="absolute -top-1.5 -right-1.5 z-10">
-            <PromotionBadge text={badgeText} />
           </div>
         )}
       </div>

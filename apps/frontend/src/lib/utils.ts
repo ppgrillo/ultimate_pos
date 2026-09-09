@@ -30,4 +30,12 @@ export function getSalePrice(
   return Math.max(0, Math.round((price - discountValue) * 100) / 100)
 }
 
+export function hasPromoConditions(promotion: {
+  min_quantity?: number | null
+  min_subtotal?: number | null
+}): boolean {
+  return (promotion.min_quantity != null && promotion.min_quantity > 0)
+    || (promotion.min_subtotal != null && promotion.min_subtotal > 0)
+}
+
 

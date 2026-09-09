@@ -25,6 +25,8 @@ import {
   getBestProductPromotion,
   calculatePromotionDiscount,
   computeCartPromotionDiscounts,
+  computeConditionalProductPromotionDiscounts,
+  hasPromotionalConditions,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 import { createRedemption, revertRedemption } from '../services/rewards.service'
@@ -394,9 +396,36 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     .eq('target_type', 'cart')
 
   const {
-    appliedPromotions: validatedCartPromotions,
-    totalDiscount: validatedPromoDiscount,
+    appliedPromotions: cartPromotions,
+    totalDiscount: cartPromoDiscount,
   } = computeCartPromotionDiscounts(activeCartPromos || [], subtotal, totalQuantity, now)
+
+  // ── Product/category promos with min_quantity / min_subtotal conditions ──
+  // These are cart-gated: evaluated against the matching line items, not baked per-item.
+  const { data: activeTargetedPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, name, badge_text, target_type, target_ids, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, starts_at, ends_at, is_active')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('target_type', ['product', 'category'])
+
+  const matchingItems = orderItems.map((item) => {
+    const product = item.product_id ? productMap.get(item.product_id) : null
+    return {
+      product_id: item.product_id,
+      category_id: product?.category_id ?? null,
+      quantity: item.quantity,
+      price: item.unit_price,
+    }
+  })
+
+  const {
+    appliedPromotions: targetedPromotions,
+    totalDiscount: targetedPromoDiscount,
+  } = computeConditionalProductPromotionDiscounts(activeTargetedPromos || [], matchingItems, now)
+
+  const validatedCartPromotions = [...cartPromotions, ...targetedPromotions]
+  const validatedPromoDiscount = Math.round((cartPromoDiscount + targetedPromoDiscount) * 100) / 100
 
   const discount = input.discount || 0
   const promoDiscount = validatedPromoDiscount
@@ -489,12 +518,14 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   }
 
-  // 2. Product/category promos — resolve from active promos matching ordered items
+  // 2. Unconditional product/category promos — resolve from active promos matching ordered items
+  // Conditional promos (min_quantity/min_subtotal) are already counted above, only when actually applied.
   const orderProductIds = orderItems.map((i) => i.product_id)
   const catIdSet = new Set((products || []).map((p) => p.category_id).filter(Boolean))
 
   for (const promo of validProductCategoryPromos) {
     if (!promo.target_ids || !Array.isArray(promo.target_ids)) continue
+    if (hasPromotionalConditions(promo)) continue
 
     if (promo.target_type === 'product') {
       const matched = orderProductIds.some((pid) => promo.target_ids.includes(pid))

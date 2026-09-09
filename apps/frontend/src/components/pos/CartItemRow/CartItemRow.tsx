@@ -54,15 +54,13 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
         {item.variant_label && (
           <p className="text-xs text-on-surface-variant truncate mt-0.5">{item.variant_label}</p>
         )}
-        <div className="flex items-center gap-2 mt-1">
-          <p className="font-headline font-bold text-primary text-sm">{formatCurrency(item.price)}</p>
-          {itemPoints > 0 && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-              <Star className="h-2.5 w-2.5 fill-primary" />
-              {itemPoints}
-            </span>
-          )}
-        </div>
+        <p className="font-headline font-bold text-primary text-sm mt-0.5">{formatCurrency(item.price)}</p>
+        {itemPoints > 0 && (
+          <span className="inline-flex w-fit items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 mt-0.5 text-[10px] font-semibold text-primary">
+            <Star className="h-2.5 w-2.5 fill-primary" />
+            {itemPoints}
+          </span>
+        )}
       </div>
       {editable ? (
         <div className="flex items-center gap-1">

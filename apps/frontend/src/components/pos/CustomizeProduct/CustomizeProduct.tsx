@@ -7,7 +7,7 @@ import { setCustomizeProductId } from '@/store/slices/posSlice'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { addItem, clearRewardItems, setRedeemedReward } from '@/store/slices/cartSlice'
 import { ExpandableText } from '@/components/ui'
-import { formatCurrency, getSalePrice } from '@/lib/utils'
+import { formatCurrency, getSalePrice, hasPromoConditions } from '@/lib/utils'
 import { useGetProductsQuery } from '@/store/api'
 import { usePromotions } from '@/hooks/usePromotions'
 
@@ -25,15 +25,16 @@ export function CustomizeProduct() {
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
   const specialInstructionsEnabled = useAppSelector((s) => s.storeConfig.currentStore?.settings?.specialInstructionsEnabled ?? true)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
   const { getPromotionForProduct } = usePromotions()
 
   const redeemedRewardData = useAppSelector((s) => s.cart.redeemed_reward_data)
   const isRewardProduct = !!(redeemedRewardData?.product_id && redeemedRewardData.product_id === productId)
 
-  const activePromotion = product ? getPromotionForProduct(product) : null
+  const activePromotion = product && autoPromotions ? getPromotionForProduct(product) : null
   const basePrice = isRewardProduct
     ? 0
-    : activePromotion && product
+    : activePromotion && product && !hasPromoConditions(activePromotion)
       ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value)
       : product?.price ?? 0
 

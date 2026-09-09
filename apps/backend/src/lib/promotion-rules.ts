@@ -60,6 +60,11 @@ export function isPromotionActive(promotion: PromotionLike, now = new Date()): b
     && isPromotionInDateWindow(promotion, now)
 }
 
+export function hasPromotionalConditions(promotion: PromotionLike): boolean {
+  return (promotion.min_quantity != null && promotion.min_quantity > 0)
+    || (promotion.min_subtotal != null && promotion.min_subtotal > 0)
+}
+
 export function isCartPromotionEligible(
   promotion: PromotionLike,
   subtotal: number,
@@ -132,6 +137,63 @@ export function computeCartPromotionDiscounts(
   }
 }
 
+export interface PromotionTargetLine {
+  product_id: string | null
+  category_id: string | null
+  quantity: number
+  price: number
+}
+
+export function computeConditionalProductPromotionDiscounts(
+  promotions: PromotionLike[],
+  items: PromotionTargetLine[],
+  now = new Date(),
+): { appliedPromotions: CartPromotionResult[]; totalDiscount: number } {
+  const appliedPromotions: CartPromotionResult[] = []
+  let totalDiscount = 0
+
+  for (const promo of promotions) {
+    if (promo.target_type !== 'product' && promo.target_type !== 'category') continue
+    if (!hasPromotionalConditions(promo)) continue
+    if (!isPromotionActive(promo, now)) continue
+
+    const targetIds = promo.target_ids
+    if (!targetIds || targetIds.length === 0) continue
+
+    const matchingLines = items.filter((item) => {
+      if (!item.product_id) return false
+      if (promo.target_type === 'product') return targetIds.includes(item.product_id)
+      return item.category_id != null && targetIds.includes(item.category_id)
+    })
+
+    const matchingQty = matchingLines.reduce((sum, item) => sum + item.quantity, 0)
+    const matchingSubtotal = Math.round(matchingLines.reduce((sum, item) => sum + item.price * item.quantity, 0) * 100) / 100
+
+    if (matchingQty <= 0) continue
+    if (promo.min_quantity != null && promo.min_quantity > 0 && matchingQty < promo.min_quantity) continue
+    if (promo.min_subtotal != null && promo.min_subtotal > 0 && matchingSubtotal < promo.min_subtotal) continue
+
+    const discountAmount = Math.round(calculatePromotionDiscount(promo, matchingSubtotal) * 100) / 100
+    if (discountAmount <= 0) continue
+    if (!promo.id || !promo.name) continue
+
+    appliedPromotions.push({
+      promotion_id: promo.id,
+      name: promo.name,
+      discount_amount: discountAmount,
+      badge_text: promo.badge_text ?? null,
+      discount_type: String(promo.discount_type ?? ''),
+      discount_value: promo.discount_value ?? 0,
+    })
+    totalDiscount += discountAmount
+  }
+
+  return {
+    appliedPromotions,
+    totalDiscount: Math.round(totalDiscount * 100) / 100,
+  }
+}
+
 export function getBestProductPromotion(
   product: PromotionTargetProduct,
   promotions: PromotionLike[],
@@ -143,6 +205,7 @@ export function getBestProductPromotion(
   for (const promotion of promotions) {
     if (!isPromotionActive(promotion, now)) continue
     if (promotion.target_type !== 'product' && promotion.target_type !== 'category') continue
+    if (hasPromotionalConditions(promotion)) continue
 
     const targetIds = promotion.target_ids
     if (!targetIds || targetIds.length === 0) continue

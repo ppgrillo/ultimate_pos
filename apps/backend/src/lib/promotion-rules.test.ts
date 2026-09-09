@@ -4,7 +4,9 @@ import {
   isPromotionActive,
   calculatePromotionDiscount,
   computeCartPromotionDiscounts,
+  computeConditionalProductPromotionDiscounts,
   getBestProductPromotion,
+  hasPromotionalConditions,
 } from './promotion-rules'
 
 describe('promotion-rules', () => {
@@ -110,5 +112,134 @@ describe('promotion-rules', () => {
     )
 
     expect(best?.id).toBe('promo-b')
+  })
+
+  it('ignores product/category promos with conditions when picking the per-item best promo', () => {
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    const product = { id: 'prod-1', category_id: 'cat-1', price: 100 }
+
+    const best = getBestProductPromotion(
+      product,
+      [
+        {
+          id: 'promo-conditional',
+          name: '3 products = 10% off',
+          target_type: 'product',
+          target_ids: ['prod-1'],
+          is_active: true,
+          discount_type: 'percentage',
+          discount_value: 10,
+          min_quantity: 3,
+        },
+        {
+          id: 'promo-unconditional',
+          name: '5% off',
+          target_type: 'product',
+          target_ids: ['prod-1'],
+          is_active: true,
+          discount_type: 'percentage',
+          discount_value: 5,
+        },
+      ],
+      now,
+    )
+
+    expect(best?.id).toBe('promo-unconditional')
+  })
+
+  it('marks promotions with min_quantity / min_subtotal as conditional', () => {
+    expect(hasPromotionalConditions({ min_quantity: 3 })).toBe(true)
+    expect(hasPromotionalConditions({ min_subtotal: 50 })).toBe(true)
+    expect(hasPromotionalConditions({ min_quantity: 0, min_subtotal: 0 })).toBe(false)
+    expect(hasPromotionalConditions({})).toBe(false)
+  })
+
+  it('applies a product promo with min_quantity only when enough matching items are in the cart', () => {
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    const promo = {
+      id: 'ttt',
+      name: '3 products = 10% off',
+      target_type: 'product',
+      target_ids: ['prod-1', 'prod-2'],
+      is_active: true,
+      discount_type: 'percentage',
+      discount_value: 10,
+      min_quantity: 3,
+      starts_at: '2026-07-20T18:12:00.000Z',
+      ends_at: '2026-07-30T18:12:00.000Z',
+    }
+
+    const lines = [
+      { product_id: 'prod-1', category_id: null, quantity: 2, price: 100 },
+      { product_id: 'prod-2', category_id: null, quantity: 1, price: 200 },
+    ]
+
+    expect(computeConditionalProductPromotionDiscounts([promo], lines, now)).toEqual({
+      appliedPromotions: [
+        {
+          promotion_id: 'ttt',
+          name: '3 products = 10% off',
+          discount_amount: 40,
+          badge_text: null,
+          discount_type: 'percentage',
+          discount_value: 10,
+        },
+      ],
+      totalDiscount: 40,
+    })
+
+    // Only 2 matching items in cart → not eligible
+    const below = [
+      { product_id: 'prod-1', category_id: null, quantity: 2, price: 100 },
+    ]
+    expect(computeConditionalProductPromotionDiscounts([promo], below, now)).toEqual({
+      appliedPromotions: [],
+      totalDiscount: 0,
+    })
+
+    // Non-matching products never count towards the quantity
+    const mixed = [
+      { product_id: 'prod-1', category_id: null, quantity: 2, price: 100 },
+      { product_id: 'other', category_id: null, quantity: 1, price: 999 },
+    ]
+    expect(computeConditionalProductPromotionDiscounts([promo], mixed, now)).toEqual({
+      appliedPromotions: [],
+      totalDiscount: 0,
+    })
+  })
+
+  it('applies a category promo with min_subtotal against matching items subtotal', () => {
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    const promo = {
+      id: 'cat-promo',
+      name: 'Category spend threshold',
+      target_type: 'category',
+      target_ids: ['cat-1'],
+      is_active: true,
+      discount_type: 'percentage',
+      discount_value: 10,
+      min_subtotal: 300,
+      starts_at: '2026-07-20T18:12:00.000Z',
+      ends_at: '2026-07-30T18:12:00.000Z',
+    }
+
+    const lines = [
+      { product_id: 'prod-1', category_id: 'cat-1', quantity: 3, price: 100 },
+      { product_id: 'prod-2', category_id: 'cat-2', quantity: 5, price: 100 },
+    ]
+
+    expect(computeConditionalProductPromotionDiscounts([promo], lines, now)).toEqual({
+      appliedPromotions: [
+        {
+          promotion_id: 'cat-promo',
+          name: 'Category spend threshold',
+          discount_amount: 30,
+          badge_text: null,
+          discount_type: 'percentage',
+          discount_value: 10,
+        },
+      ],
+      totalDiscount: 30,
+    })
   })
 })

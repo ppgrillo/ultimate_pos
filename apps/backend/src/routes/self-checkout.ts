@@ -7,8 +7,10 @@ import { decryptSettings } from '../lib/settings'
 import {
   isPromotionActive,
   computeCartPromotionDiscounts,
+  computeConditionalProductPromotionDiscounts,
   getBestProductPromotion,
   calculatePromotionDiscount,
+  hasPromotionalConditions,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 import { getAvailableRewards, createRedemption, revertRedemption } from '../services/rewards.service'
@@ -202,14 +204,31 @@ selfCheckoutRouter.post('/promotions/validate', async (c) => {
     .select('*')
     .eq('store_id', storeId)
     .eq('is_active', true)
-    .eq('target_type', 'cart')
+    .in('target_type', ['cart', 'product', 'category'])
     .order('priority', { ascending: false })
 
   if (error) throw badRequest(error.message)
 
   const now = new Date()
   const totalQuantity = items.reduce((sum, i) => sum + i.quantity, 0)
-  const { appliedPromotions, totalDiscount } = computeCartPromotionDiscounts(promos || [], subtotal, totalQuantity, now)
+  const cartPromos = (promos || []).filter((p) => p.target_type === 'cart')
+  const conditionalTargetedPromos = (promos || []).filter((p) => p.target_type === 'product' || p.target_type === 'category')
+
+  const targetedLines = items.map((i) => ({
+    product_id: i.product_id,
+    quantity: i.quantity,
+    price: i.price,
+    category_id: i.category_id ?? null,
+  }))
+
+  const { appliedPromotions: cartApplied, totalDiscount: cartDiscount } =
+    computeCartPromotionDiscounts(cartPromos, subtotal, totalQuantity, now)
+
+  const { appliedPromotions: targetedApplied, totalDiscount: targetedDiscount } =
+    computeConditionalProductPromotionDiscounts(conditionalTargetedPromos, targetedLines, now)
+
+  const appliedPromotions = [...cartApplied, ...targetedApplied]
+  const totalDiscount = Math.round((cartDiscount + targetedDiscount) * 100) / 100
 
   return c.json({
     data: {
@@ -343,9 +362,35 @@ selfCheckoutRouter.post('/orders', async (c) => {
     .eq('target_type', 'cart')
 
   const {
-    appliedPromotions: validatedCartPromotions,
-    totalDiscount: validatedPromoDiscount,
+    appliedPromotions: cartPromotions,
+    totalDiscount: cartPromoDiscount,
   } = computeCartPromotionDiscounts(activeCartPromos || [], subtotal, totalQuantity, now)
+
+  // ── Product/category promos with min_quantity / min_subtotal conditions ──
+  const { data: activeTargetedPromos } = await supabaseAdmin
+    .from('promotions')
+    .select('id, name, badge_text, target_type, target_ids, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, starts_at, ends_at, is_active')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('target_type', ['product', 'category'])
+
+  const matchingItems = orderItems.map((item) => {
+    const product = item.product_id ? productMap.get(item.product_id) : null
+    return {
+      product_id: item.product_id,
+      category_id: product?.category_id ?? null,
+      quantity: item.quantity,
+      price: item.unit_price,
+    }
+  })
+
+  const {
+    appliedPromotions: targetedPromotions,
+    totalDiscount: targetedPromoDiscount,
+  } = computeConditionalProductPromotionDiscounts(activeTargetedPromos || [], matchingItems, now)
+
+  const validatedCartPromotions = [...cartPromotions, ...targetedPromotions]
+  const validatedPromoDiscount = Math.round((cartPromoDiscount + targetedPromoDiscount) * 100) / 100
 
   const disc = discount || 0
   const promoDisc = validatedPromoDiscount
@@ -441,7 +486,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
       if (p.promotion_id) allPromoIds.push(p.promotion_id)
     }
   }
-  // 2. Product/category promos — resolve from active promos matching ordered items
+  // 2. Unconditional product/category promos — resolve from active promos matching ordered items
+  // Conditional promos (min_quantity/min_subtotal) are already counted in validatedCartPromotions above, only when actually applied.
   const orderProductIds = orderItems.map((i: Record<string, unknown>) => i.product_id as string)
   const { data: productsWithCategory } = await supabaseAdmin
     .from('products')
@@ -450,6 +496,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
   const catIdSet = new Set((productsWithCategory || []).map((p) => p.category_id).filter(Boolean))
   for (const promo of validProductCategoryPromos) {
     if (!promo.target_ids || !Array.isArray(promo.target_ids)) continue
+    if (hasPromotionalConditions(promo)) continue
     if (promo.target_type === 'product') {
       if (orderProductIds.some((pid) => promo.target_ids.includes(pid))) allPromoIds.push(promo.id)
     } else if (promo.target_type === 'category') {

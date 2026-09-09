@@ -7,6 +7,7 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { CategoryChips } from '@/components/pos/CategoryChips'
 import { PosSearchBar } from '@/components/pos/PosSearchBar'
 import { usePromotions } from '@/hooks/usePromotions'
+import { hasPromoConditions } from '@/lib/utils'
 import type { Product, Promotion } from '@ultimate-pos/shared'
 import { useGetProductsQuery, useGetCategoriesQuery } from '@/store/api'
 
@@ -22,6 +23,7 @@ export function PosMenu() {
   const { selectedCategory, searchQuery } = useAppSelector((s) => s.pos)
   const sliceProducts = useAppSelector((s) => s.products.items)
   const sliceCategories = useAppSelector((s) => s.products.categories)
+  const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
   const { data: queryProducts = [], isLoading: productsLoading } = useGetProductsQuery()
   const { data: queryCategories = [] } = useGetCategoriesQuery()
   const products = sliceProducts.length > 0 ? sliceProducts : queryProducts
@@ -50,8 +52,8 @@ export function PosMenu() {
       dispatch(setCustomizeProductId(product.id))
       return
     }
-    const promo = getPromotionForProduct(product)
-    const price = promo ? getSalePrice(product, promo) : product.price
+    const promo = autoPromotions ? getPromotionForProduct(product) : undefined
+    const price = promo && !hasPromoConditions(promo) ? getSalePrice(product, promo) : product.price
     dispatch(addItem({
       product_id: product.id,
       name: product.name,
@@ -98,7 +100,7 @@ export function PosMenu() {
               product={product}
               onAdd={handleAdd}
               variant="dense"
-              activePromotion={getPromotionForProduct(product)}
+              activePromotion={autoPromotions ? getPromotionForProduct(product) : undefined}
             />
           ))}
         </div>

@@ -58,6 +58,7 @@ export interface CartState {
     discount_type?: 'percentage' | 'fixed' | null
     product_id?: string
   } | null
+  autoPromotions: boolean
 }
 
 const initialState: CartState = {
@@ -77,6 +78,7 @@ const initialState: CartState = {
   promoDiscount: 0,
   redeemed_reward_id: null,
   redeemed_reward_data: null,
+  autoPromotions: true,
 }
 
 const cartSlice = createSlice({
@@ -186,6 +188,17 @@ const cartSlice = createSlice({
       state.appliedPromotions = action.payload.promotions
       state.promoDiscount = action.payload.totalDiscount
     },
+    setAutoPromotions(state, action: PayloadAction<boolean>) {
+      const enabled = action.payload
+      state.autoPromotions = enabled
+      state.appliedPromotions = []
+      state.promoDiscount = 0
+      if (!enabled) {
+        state.items = state.items.map((item) =>
+          item.price < item.original_price ? { ...item, price: item.original_price } : item,
+        )
+      }
+    },
     clearCart() {
       return initialState
     },
@@ -205,5 +218,6 @@ export const {
   setDiscount, setNotes, clearCart,
   setRedeemedPoints, setAppliedPromotions, clearAutoPromotions,
   setRedeemedReward, clearRewardItems,
+  setAutoPromotions,
 } = cartSlice.actions
 export default cartSlice.reducer
