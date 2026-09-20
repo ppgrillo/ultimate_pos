@@ -38,4 +38,15 @@ export function hasPromoConditions(promotion: {
     || (promotion.min_subtotal != null && promotion.min_subtotal > 0)
 }
 
+export function residualPromoDiscount(
+  appliedPromotions: Array<{ discount_amount?: number | null }>,
+  promoDiscount: number,
+): number {
+  const applied = (appliedPromotions ?? []).reduce(
+    (sum, p) => sum + (Number(p.discount_amount) || 0),
+    0,
+  )
+  return Math.max(0, Math.round((promoDiscount - applied) * 100) / 100)
+}
+
 

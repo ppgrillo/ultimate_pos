@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/Modal'
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, residualPromoDiscount } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 import { Clock, Table2, User, Receipt, DollarSign, Gift } from 'lucide-react'
@@ -145,10 +145,10 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
             )}
 
             {/* Legacy/stacked promo_discount value (backend field) */}
-            {displayOrder.promo_discount > 0 && (
+            {residualPromoDiscount(displayOrder.applied_promotions, Number(displayOrder.promo_discount ?? 0)) > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-on-surface-variant">Promo Discount</span>
-                <span className="font-label font-bold text-secondary">-{formatCurrency(displayOrder.promo_discount)}</span>
+                <span className="font-label font-bold text-secondary">-{formatCurrency(residualPromoDiscount(displayOrder.applied_promotions, Number(displayOrder.promo_discount ?? 0)))}</span>
               </div>
             )}
 

@@ -7,6 +7,10 @@ import {
   computeConditionalProductPromotionDiscounts,
   getBestProductPromotion,
   hasPromotionalConditions,
+  buildMatchingPromoLines,
+  sumOriginalSubtotal,
+  PROMOTION_FIELDS,
+  PROMOTION_FIELDS_CSV,
 } from './promotion-rules'
 
 describe('promotion-rules', () => {
@@ -241,5 +245,209 @@ describe('promotion-rules', () => {
       ],
       totalDiscount: 30,
     })
+  })
+
+  it('keeps the literal SELECT aligned with the PROMOTION_FIELDS list', () => {
+    const csvFields = PROMOTION_FIELDS_CSV.split(',').map((f) => f.trim())
+    expect(csvFields).toEqual([...PROMOTION_FIELDS])
+  })
+
+  it('keeps min_quantity and min_subtotal in the shared promo field list used by order saves', () => {
+    // Regression guard: orders.ts / self-checkout.ts read promotions with
+    // PROMOTION_FIELDS_CSV. If these two columns ever drop out of the SELECT,
+    // getBestProductPromotion stops seeing conditional promos as conditional,
+    // bakes the discount into the unit price AND re-applies it as a cart promo
+    // -> the order is double discounted.
+    expect(PROMOTION_FIELDS).toContain('min_quantity')
+    expect(PROMOTION_FIELDS).toContain('min_subtotal')
+    expect(PROMOTION_FIELDS_CSV).toContain('min_quantity')
+    expect(PROMOTION_FIELDS_CSV).toContain('min_subtotal')
+  })
+
+  it('skips conditional product promos when picking the per-item best promo even without an unconditional alternative', () => {
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    const product = { id: 'prod-1', category_id: 'cat-1', price: 350 }
+
+    const best = getBestProductPromotion(
+      product,
+      [
+        {
+          id: 'promo-conditional',
+          name: '3 products = 10% off',
+          target_type: 'product',
+          target_ids: ['prod-1'],
+          is_active: true,
+          discount_type: 'percentage',
+          discount_value: 10,
+          min_quantity: 3,
+        },
+      ],
+      now,
+    )
+
+    expect(best).toBeNull()
+  })
+
+  it('does not double-discount a conditional product promo at order save', () => {
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    const product = { id: 'prod-1', category_id: 'cat-1', price: 350 }
+
+    // Simulates a conditional promo row exactly as the backend queries it:
+    // only the columns in PROMOTION_FIELDS are present after a Supabase select.
+    const promoRow = {
+      id: 'p-cond',
+      name: '3 products = 10% off',
+      badge_text: '10% off',
+      target_type: 'product',
+      target_ids: ['prod-1'],
+      discount_type: 'percentage',
+      discount_value: 10,
+      min_quantity: 3,
+      min_subtotal: 0,
+      current_uses: 0,
+      max_uses: null,
+      priority: 0,
+      starts_at: '2026-07-20T18:12:00.000Z',
+      ends_at: '2026-07-30T18:12:00.000Z',
+      is_active: true,
+    }
+
+    // Step 1 — order route pricing: conditional promos must NOT bake the unit price.
+    const best = getBestProductPromotion(product, [promoRow], now)
+    expect(best).toBeNull()
+    const expectedPromotionalPrice = best ? product.price - calculatePromotionDiscount(best, product.price) : product.price
+    const unitPrice = Math.min(350, expectedPromotionalPrice)
+    expect(unitPrice).toBe(350)
+
+    // Step 2 — the SAME conditional promo is applied once, against the full price.
+    const matchingItems = [{ product_id: 'prod-1', category_id: 'cat-1', quantity: 3, price: unitPrice }]
+    const { appliedPromotions, totalDiscount } = computeConditionalProductPromotionDiscounts([promoRow], matchingItems, now)
+
+    expect(appliedPromotions).toHaveLength(1)
+    expect(appliedPromotions[0].promotion_id).toBe('p-cond')
+    expect(totalDiscount).toBe(105)
+
+    // Reported bug scenario: if the price had been baked, the promo would fire
+    // on the discounted base and a second discount would leak into the total.
+    expect(unitPrice * 3 - totalDiscount).toBe(945)
+  })
+
+  it('treats rows shaped like the real promotion SELECT the same as hand-written promo rows', () => {
+    const promo = {
+      id: 'p',
+      name: '3 prod',
+      badge_text: null,
+      target_type: 'product' as const,
+      target_ids: ['x'],
+      discount_type: 'percentage' as const,
+      discount_value: 10,
+      min_quantity: 2,
+      min_subtotal: null,
+      current_uses: 0,
+      max_uses: null,
+      priority: 0,
+      starts_at: null,
+      ends_at: null,
+      is_active: true,
+    }
+    const row = Object.fromEntries(PROMOTION_FIELDS.map((f) => [f, (promo as Record<string, unknown>)[f]]))
+
+    expect(hasPromotionalConditions(row)).toBe(true)
+  })
+
+  it('evaluates conditional promos on the FULL catalog price, not the baked unit price', () => {
+    // Product priced $350 baked to $315 by an unrelated unconditional promo.
+    // The conditional 10% must still be computed on $350 (what the client
+    // validates with, via original_price) — otherwise the saved order would
+    // under-discount vs. what was shown at the register.
+    const productMap = new Map([['prod-1', { id: 'prod-1', category_id: 'cat-1', price: 350 }]])
+    const orderItems = [
+      { product_id: 'prod-1', quantity: 3, unit_price: 315 },
+    ]
+
+    const lines = buildMatchingPromoLines(orderItems, productMap)
+    expect(lines[0].price).toBe(350)
+
+    const promoRow = {
+      id: 'p-cond',
+      name: '3 products = 10% off',
+      badge_text: null,
+      target_type: 'product' as const,
+      target_ids: ['prod-1'],
+      discount_type: 'percentage' as const,
+      discount_value: 10,
+      min_quantity: 3,
+      min_subtotal: 0,
+      current_uses: 0,
+      max_uses: null,
+      priority: 0,
+      starts_at: '2026-07-20T18:12:00.000Z',
+      ends_at: '2026-07-30T18:12:00.000Z',
+      is_active: true,
+    }
+
+    const { totalDiscount } = computeConditionalProductPromotionDiscounts([promoRow], lines, new Date('2026-07-24T20:00:00.000Z'))
+    expect(totalDiscount).toBe(105)
+  })
+
+  it('buildMatchingPromoLines falls back to unit_price for custom items', () => {
+    const productMap = new Map([[ 'prod-1', { id: 'prod-1', category_id: 'cat-1', price: 350 } ]])
+    const lines = buildMatchingPromoLines(
+      [
+        { product_id: 'prod-1', quantity: 2, unit_price: 315 },
+        { product_id: null, quantity: 1, unit_price: 25 },
+      ],
+      productMap,
+    )
+
+    expect(lines).toEqual([
+      { product_id: 'prod-1', category_id: 'cat-1', quantity: 2, price: 350 },
+      { product_id: null, category_id: null, quantity: 1, price: 25 },
+    ])
+  })
+
+  it('sumOriginalSubtotal uses catalog prices for products and unit prices for custom items', () => {
+    const productMap = new Map([[ 'prod-1', { id: 'prod-1', price: 350 } ]])
+    const subtotal = sumOriginalSubtotal(
+      [
+        { product_id: 'prod-1', quantity: 3, unit_price: 315 },
+        { product_id: null, quantity: 2, unit_price: 25 },
+      ],
+      productMap,
+    )
+
+    expect(subtotal).toBe(1050 + 50)
+  })
+
+  it('keeps cart-promo and conditional-promo gating on the full-price subtotal (same base as the client)', () => {
+    const productMap = new Map([[ 'prod-1', { id: 'prod-1', category_id: 'cat-1', price: 350 } ]])
+    const orderItems = [
+      { product_id: 'prod-1', quantity: 3, unit_price: 315 }, // baked by unconditional 10%
+      { product_id: null, quantity: 1, unit_price: 50 },
+    ]
+    const fullSubtotal = sumOriginalSubtotal(orderItems, productMap) // 1050 + 50
+
+    const cartPromo = {
+      id: 'cart-1',
+      name: '$100 off orders over $1000',
+      badge_text: null,
+      target_type: 'cart' as const,
+      discount_type: 'fixed' as const,
+      discount_value: 100,
+      min_quantity: 0,
+      min_subtotal: 1000,
+      current_uses: 0,
+      max_uses: null,
+      priority: 0,
+      starts_at: '2026-07-20T18:12:00.000Z',
+      ends_at: '2026-07-30T18:12:00.000Z',
+      is_active: true,
+    }
+
+    const now = new Date('2026-07-24T20:00:00.000Z')
+    // Threshold reached on the full subtotal (1100) even though the baked
+    // subtotal (945 + 50 = 995) is below it — matches what the register shows.
+    const { appliedPromotions } = computeCartPromotionDiscounts([cartPromo], fullSubtotal, 4, now)
+    expect(appliedPromotions.map((p) => p.promotion_id)).toEqual(['cart-1'])
   })
 })

@@ -5,6 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const protectedPaths = [
   '/dashboard',
   '/analytics',
+  '/simulaciones',
   '/pos',
   '/pos-kitchen',
   '/products',
@@ -71,6 +72,7 @@ export const config = {
     '/api/:path*',
     '/dashboard/:path*',
     '/analytics/:path*',
+    '/simulaciones/:path*',
     '/pos/:path*',
     '/pos-kitchen/:path*',
     '/products/:path*',

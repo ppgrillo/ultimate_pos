@@ -1,5 +1,39 @@
 import type { PromotionDiscountType } from '@ultimate-pos/shared'
 
+/**
+ * Columns the backend must fetch when reading promotions for order pricing.
+ * `min_quantity` / `min_subtotal` are REQUIRED: without them conditional
+ * promos are treated as unconditional by `getBestProductPromotion`, which
+ * bakes the discount into the unit price AND re-applies it as a cart promo
+ * — a double discount persisted to the order. Keep every promo SELECT in
+ * orders.ts / self-checkout.ts on `PROMOTION_FIELDS_CSV` so fields can't
+ * silently drift.
+ */
+export const PROMOTION_FIELDS = [
+  'id',
+  'name',
+  'badge_text',
+  'target_type',
+  'target_ids',
+  'discount_type',
+  'discount_value',
+  'min_quantity',
+  'min_subtotal',
+  'current_uses',
+  'max_uses',
+  'priority',
+  'starts_at',
+  'ends_at',
+  'is_active',
+] as const
+
+/**
+ * Literal string on purpose: the generated Supabase client parses `select`
+ * column lists from the literal type. Keep it identical to `PROMOTION_FIELDS`
+ * (tested) or the routes lose typed rows AND risk dropping condition fields.
+ */
+export const PROMOTION_FIELDS_CSV = 'id, name, badge_text, target_type, target_ids, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, priority, starts_at, ends_at, is_active' as const
+
 type PromotionLike = {
   id?: string | null
   name?: string | null
@@ -142,6 +176,46 @@ export interface PromotionTargetLine {
   category_id: string | null
   quantity: number
   price: number
+}
+
+/**
+ * Builds the matching lines used to evaluate conditional product/category
+ * promos at order save.
+ *
+ * The `price` for a known product must be the FULL catalog price (like the
+ * client's `original_price` sent to /promotions/validate). Using the baked
+ * `unit_price` here would shrink the discount base whenever an item ALSO has
+ * an unconditional promo stacked, so the saved order would under-discount
+ * vs. what was shown at the register.
+ */
+export function buildMatchingPromoLines(
+  orderItems: Array<{ product_id: string | null; quantity: number; unit_price: number }>,
+  productMap: ReadonlyMap<string, { id: string; category_id: string | null; price: number }>,
+): PromotionTargetLine[] {
+  return orderItems.map((item) => {
+    const product = item.product_id ? productMap.get(item.product_id) : null
+    return {
+      product_id: item.product_id,
+      category_id: product?.category_id ?? null,
+      quantity: item.quantity,
+      price: product ? Number(product.price) : item.unit_price,
+    }
+  })
+}
+
+/**
+ * Full-price cart subtotal (catalog prices) used for cart-promo gating and
+ * as the percentage base — mirrors what the client validates against
+ * (`original_price`, not the baked `unit_price`).
+ */
+export function sumOriginalSubtotal(
+  orderItems: Array<{ product_id: string | null; quantity: number; unit_price: number }>,
+  productMap: ReadonlyMap<string, { id: string; price: number }>,
+): number {
+  return orderItems.reduce((sum, item) => {
+    const product = item.product_id ? productMap.get(item.product_id) : null
+    return sum + (product ? Number(product.price) : item.unit_price) * item.quantity
+  }, 0)
 }
 
 export function computeConditionalProductPromotionDiscounts(

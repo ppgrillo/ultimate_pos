@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
-import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut, Tag, BarChart3, Gift, ContactRound, Receipt } from 'lucide-react'
+import { X, LayoutDashboard, ShoppingCart, ClipboardList, Package, Users, Settings, LogOut, Tag, BarChart3, Gift, ContactRound, Receipt, Calculator } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { closeDrawer } from '@/store/slices/uiSlice'
 import { cn } from '@/lib/utils'
@@ -35,6 +35,7 @@ export function MobileDrawer() {
     { href: '/rewards', label: 'Rewards', icon: Gift },
     { href: '/expenses', label: 'Expenses', icon: Receipt },
     { href: '/customers', label: 'Customers', icon: ContactRound },
+    { href: '/simulaciones', label: 'Simulations', icon: Calculator },
     { href: '/employees', label: 'Employees', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },
   ]

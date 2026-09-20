@@ -20,6 +20,7 @@ import {
   BarChart3,
   Gift,
   Receipt,
+  Calculator,
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
@@ -48,6 +49,7 @@ export function Sidebar() {
     { href: '/rewards', label: 'Rewards', icon: Gift },
     { href: '/expenses', label: 'Expenses', icon: Receipt },
     { href: '/customers', label: 'Customers', icon: ContactRound },
+    { href: '/simulaciones', label: 'Simulations', icon: Calculator },
     { href: '/employees', label: 'Employees', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },
   ]

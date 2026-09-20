@@ -11,6 +11,9 @@ import {
   getBestProductPromotion,
   calculatePromotionDiscount,
   hasPromotionalConditions,
+  buildMatchingPromoLines,
+  sumOriginalSubtotal,
+  PROMOTION_FIELDS_CSV,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
 import { getAvailableRewards, createRedemption, revertRedemption } from '../services/rewards.service'
@@ -305,7 +308,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
 
   const { data: activeProductCategoryPromos } = await supabaseAdmin
     .from('promotions')
-    .select('id, name, target_type, target_ids, discount_type, discount_value, priority, starts_at, ends_at, is_active, current_uses, max_uses')
+    .select(PROMOTION_FIELDS_CSV)
     .eq('store_id', storeId)
     .eq('is_active', true)
     .in('target_type', ['product', 'category'])
@@ -356,7 +359,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
   const totalQuantity = items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0)
   const { data: activeCartPromos } = await supabaseAdmin
     .from('promotions')
-    .select('id, name, badge_text, target_type, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, starts_at, ends_at, is_active')
+    .select(PROMOTION_FIELDS_CSV)
     .eq('store_id', storeId)
     .eq('is_active', true)
     .eq('target_type', 'cart')
@@ -364,25 +367,17 @@ selfCheckoutRouter.post('/orders', async (c) => {
   const {
     appliedPromotions: cartPromotions,
     totalDiscount: cartPromoDiscount,
-  } = computeCartPromotionDiscounts(activeCartPromos || [], subtotal, totalQuantity, now)
+  } = computeCartPromotionDiscounts(activeCartPromos || [], sumOriginalSubtotal(orderItems, productMap), totalQuantity, now)
 
   // ── Product/category promos with min_quantity / min_subtotal conditions ──
   const { data: activeTargetedPromos } = await supabaseAdmin
     .from('promotions')
-    .select('id, name, badge_text, target_type, target_ids, discount_type, discount_value, min_quantity, min_subtotal, current_uses, max_uses, starts_at, ends_at, is_active')
+    .select(PROMOTION_FIELDS_CSV)
     .eq('store_id', storeId)
     .eq('is_active', true)
     .in('target_type', ['product', 'category'])
 
-  const matchingItems = orderItems.map((item) => {
-    const product = item.product_id ? productMap.get(item.product_id) : null
-    return {
-      product_id: item.product_id,
-      category_id: product?.category_id ?? null,
-      quantity: item.quantity,
-      price: item.unit_price,
-    }
-  })
+  const matchingItems = buildMatchingPromoLines(orderItems, productMap)
 
   const {
     appliedPromotions: targetedPromotions,
