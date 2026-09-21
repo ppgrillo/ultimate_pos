@@ -46,3 +46,9 @@ export {
   EXPENSE_TYPE_LABELS,
 } from './expense'
 export type { Expense, ExpenseType } from './expense'
+export type {
+  Supplier,
+  SupplierStats,
+  SupplierWithStats,
+  SupplierInput,
+} from './supplier'

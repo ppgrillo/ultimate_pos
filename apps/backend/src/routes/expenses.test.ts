@@ -135,6 +135,21 @@ describe('expenses routes', () => {
     expect(body.data[0].id).toBe('exp-1')
   })
 
+  it('GET / supports filtering by supplier_id', async () => {
+    const query = listQuery({ data: [EXPENSE], error: null })
+    queueFromCalls([{ table: 'expenses', value: query }])
+
+    const res = await app.fetch(new Request('http://localhost/expenses?supplier=33333333-3333-3333-3333-333333333333', {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    expect(query.eq).toHaveBeenCalledWith('supplier_id', '33333333-3333-3333-3333-333333333333')
+
+    const body = await res.json()
+    expect(body.data).toHaveLength(1)
+  })
+
   it('GET /summary splits operating and inventory totals', async () => {
     queueFromCalls([
       {
@@ -181,6 +196,35 @@ describe('expenses routes', () => {
     const body = await res.json()
     expect(body.data.id).toBe('exp-1')
     expect(query.insert).toHaveBeenCalledWith(expect.objectContaining({ store_id: STORE_ID, created_by: USER_ID }))
+  })
+
+  it('POST / persists supplier_id and delivery_days', async () => {
+    const withSupplier = { ...EXPENSE, supplier_id: '33333333-3333-3333-3333-333333333333', delivery_days: 3 }
+    const query = mutationQuery({ data: withSupplier, error: null })
+    queueFromCalls([{ table: 'expenses', value: query }])
+
+    const res = await app.fetch(new Request('http://localhost/expenses', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'inventory',
+        category: 'Merchandise',
+        description: 'T-shirts from supplier',
+        amount: 1200,
+        expense_date: '2026-07-01',
+        supplier_id: '33333333-3333-3333-3333-333333333333',
+        delivery_days: 3,
+      }),
+    }))
+
+    expect(res.status).toBe(201)
+    expect(query.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplier_id: '33333333-3333-3333-3333-333333333333',
+        delivery_days: 3,
+        store_id: STORE_ID,
+      }),
+    )
   })
 
   it('POST / rejects non-admin employees with 401', async () => {

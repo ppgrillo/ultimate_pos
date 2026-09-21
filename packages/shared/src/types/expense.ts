@@ -9,6 +9,8 @@ export interface Expense {
   amount: number
   expense_date: string
   receipt_url: string | null
+  supplier_id: string | null
+  delivery_days: number | null
   created_by: string | null
   created_at: string
   updated_at: string

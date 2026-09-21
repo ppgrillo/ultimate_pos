@@ -17,6 +17,7 @@ import {
   useUpdateExpenseMutation,
   useUploadReceiptMutation,
   useDeleteReceiptMutation,
+  useGetSuppliersQuery,
 } from '@/store/api'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { cn } from '@/lib/utils'
@@ -34,6 +35,8 @@ interface FormState {
   amount: string
   expense_date: string
   receipt_url: string
+  supplier_id: string
+  delivery_days: string
 }
 
 function emptyForm(type: ExpenseType = 'operating'): FormState {
@@ -44,6 +47,8 @@ function emptyForm(type: ExpenseType = 'operating'): FormState {
     amount: '',
     expense_date: '',
     receipt_url: '',
+    supplier_id: '',
+    delivery_days: '',
   }
 }
 
@@ -58,6 +63,8 @@ export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { data: suppliers = [] } = useGetSuppliersQuery({ search: '' })
+  const activeSuppliers = suppliers.filter((s) => s.is_active)
 
   const categories = EXPENSE_CATEGORIES[form.type]
   const editing = Boolean(expense)
@@ -129,6 +136,8 @@ export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
         amount,
         expense_date: form.expense_date || undefined,
         receipt_url: form.receipt_url || null,
+        supplier_id: form.supplier_id || null,
+        delivery_days: form.delivery_days === '' ? null : Math.max(0, parseInt(form.delivery_days, 10)),
       }
       if (editing && expense) {
         await updateExpense({ id: expense.id, body }).unwrap()
@@ -239,6 +248,34 @@ export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
               label="Date"
               value={form.expense_date}
               onChange={(value) => setForm((prev) => ({ ...prev, expense_date: value }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-[1fr_140px] gap-3">
+            <div className="space-y-1">
+              <label htmlFor="expense-supplier" className="block text-sm font-bold text-on-surface-variant">
+                Supplier (optional)
+              </label>
+              <select
+                id="expense-supplier"
+                className="flex h-10 w-full rounded-lg border bg-surface-container px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary border-outline-variant"
+                value={form.supplier_id}
+                onChange={(e) => setForm((prev) => ({ ...prev, supplier_id: e.target.value }))}
+              >
+                <option value="">No supplier</option>
+                {activeSuppliers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <Input
+              label="Delivery days"
+              type="number"
+              min={0}
+              step="1"
+              placeholder="—"
+              value={form.delivery_days}
+              onChange={(e) => setForm((prev) => ({ ...prev, delivery_days: e.target.value }))}
             />
           </div>
 

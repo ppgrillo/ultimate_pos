@@ -20,6 +20,8 @@ import type {
   ScanLoyaltyResult,
   Expense,
   ExpenseType,
+  SupplierInput,
+  SupplierWithStats,
   CardPaymentProviderName,
 } from '@ultimate-pos/shared'
 
@@ -103,6 +105,8 @@ export interface ExpenseInput {
   amount: number
   expense_date?: string
   receipt_url?: string | null
+  supplier_id?: string | null
+  delivery_days?: number | null
 }
 
 export interface ProductUpsertInput {
@@ -199,7 +203,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Analytics', 'Billing'],
+  tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Supplier', 'Analytics', 'Billing'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
       query: () => '/products',
@@ -710,7 +714,7 @@ export const api = createApi({
     }),
 
     // ── Expense endpoints ──
-    getExpenses: builder.query<Expense[], { from?: string; to?: string; type?: ExpenseType | ''; category?: string }>({
+    getExpenses: builder.query<Expense[], { from?: string; to?: string; type?: ExpenseType | ''; category?: string; supplier?: string }>({
       query: (params) => ({
         url: '/expenses',
         params: {
@@ -718,6 +722,7 @@ export const api = createApi({
           ...(params.to ? { to: params.to } : {}),
           ...(params.type ? { type: params.type } : {}),
           ...(params.category ? { category: params.category } : {}),
+          ...(params.supplier ? { supplier: params.supplier } : {}),
         },
       }),
       transformResponse: (response: { data: Expense[] }) => response.data,
@@ -788,6 +793,64 @@ export const api = createApi({
         method: 'DELETE',
         body: { url },
       }),
+    }),
+
+    // ── Supplier endpoints ──
+    getSuppliers: builder.query<SupplierWithStats[], { search?: string } | void>({
+      query: (params) => ({
+        url: '/suppliers',
+        params: params?.search ? { search: params.search } : undefined,
+      }),
+      transformResponse: (response: { data: SupplierWithStats[] }) => response.data,
+      providesTags: (result) =>
+        result
+          ? [{ type: 'Supplier' as const, id: 'LIST' }, ...result.map((item) => ({ type: 'Supplier' as const, id: item.id }))]
+          : [{ type: 'Supplier' as const, id: 'LIST' }],
+    }),
+    getSupplierById: builder.query<SupplierWithStats, string>({
+      query: (id) => `/suppliers/${id}`,
+      transformResponse: (response: { data: SupplierWithStats }) => response.data,
+      providesTags: (_result, _error, id) => [{ type: 'Supplier', id }],
+    }),
+    getSupplierExpenses: builder.query<Expense[], { id: string; from?: string; to?: string }>({
+      query: ({ id, from, to }) => ({
+        url: `/suppliers/${id}/expenses`,
+        params: {
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+        },
+      }),
+      transformResponse: (response: { data: Expense[] }) => response.data,
+      providesTags: (_result, _error, { id }) => [{ type: 'Supplier', id: `expenses-${id}` }],
+    }),
+    createSupplier: builder.mutation<SupplierWithStats, SupplierInput>({
+      query: (body) => ({
+        url: '/suppliers',
+        method: 'POST',
+        body,
+      }),
+      transformResponse: (response: { data: SupplierWithStats }) => response.data,
+      invalidatesTags: [{ type: 'Supplier', id: 'LIST' }, { type: 'Expense', id: 'LIST' }],
+    }),
+    updateSupplier: builder.mutation<SupplierWithStats, { id: string; body: SupplierInput }>({
+      query: ({ id, body }) => ({
+        url: `/suppliers/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: (response: { data: SupplierWithStats }) => response.data,
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'Supplier', id }, { type: 'Supplier', id: 'LIST' }],
+    }),
+    deleteSupplier: builder.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `/suppliers/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: 'Supplier', id },
+        { type: 'Supplier', id: 'LIST' },
+        { type: 'Expense', id: 'LIST' },
+      ],
     }),
 
     // ── Analytics endpoints ──
@@ -918,6 +981,12 @@ export const {
   useDeleteExpenseMutation,
   useUploadReceiptMutation,
   useDeleteReceiptMutation,
+  useGetSuppliersQuery,
+  useGetSupplierByIdQuery,
+  useGetSupplierExpensesQuery,
+  useCreateSupplierMutation,
+  useUpdateSupplierMutation,
+  useDeleteSupplierMutation,
   useGetBillingStatusQuery,
   useCreateCheckoutSessionMutation,
   useCreatePortalSessionMutation,

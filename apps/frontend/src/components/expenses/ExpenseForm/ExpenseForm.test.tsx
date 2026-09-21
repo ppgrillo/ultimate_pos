@@ -6,6 +6,10 @@ const createExpense = vi.fn(() => ({ unwrap: () => Promise.resolve({ id: 'e1' })
 const updateExpense = vi.fn(() => ({ unwrap: () => Promise.resolve({ id: 'e1' }) }))
 const uploadReceipt = vi.fn(() => ({ unwrap: () => Promise.resolve({ url: 'https://cdn.test/receipts/r1.jpg' }) }))
 const deleteReceipt = vi.fn(() => ({ unwrap: () => Promise.resolve({ success: true }) }))
+const getSuppliers = { data: [
+  { id: 's1', store_id: 'store-1', name: 'Distribuidora Norte', contact_name: null, phone: null, email: null, website: null, address: null, notes: null, is_active: true, created_at: '', updated_at: '' },
+  { id: 's2', store_id: 'store-1', name: 'Inactive Vendor', contact_name: null, phone: null, email: null, website: null, address: null, notes: null, is_active: false, created_at: '', updated_at: '' },
+], isLoading: false }
 
 vi.mock('@/store/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/store/api')>()
@@ -15,6 +19,7 @@ vi.mock('@/store/api', async (importOriginal) => {
     useUpdateExpenseMutation: () => [updateExpense, { isLoading: false }],
     useUploadReceiptMutation: () => [uploadReceipt, { isLoading: false }],
     useDeleteReceiptMutation: () => [deleteReceipt, { isLoading: false }],
+    useGetSuppliersQuery: () => getSuppliers,
   }
 })
 
@@ -83,6 +88,33 @@ describe('ExpenseForm', () => {
       )
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('links an expense to a supplier with delivery days', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await user.selectOptions(screen.getByLabelText('Supplier (optional)'), 's1')
+    await user.type(screen.getByLabelText('Delivery days'), '3')
+    await user.type(screen.getByLabelText('Description'), '100 t-shirts')
+    await user.type(screen.getByLabelText('Amount'), '500')
+    await user.click(screen.getByRole('button', { name: 'Save Expense' }))
+
+    await waitFor(() => {
+      expect(createExpense).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supplier_id: 's1',
+          delivery_days: 3,
+        }),
+      )
+    })
+  })
+
+  it('only lists active suppliers in the select', () => {
+    renderForm()
+    const options = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(options).toContain('Distribuidora Norte')
+    expect(options).not.toContain('Inactive Vendor')
   })
 
   it('uploads and attaches a receipt', async () => {

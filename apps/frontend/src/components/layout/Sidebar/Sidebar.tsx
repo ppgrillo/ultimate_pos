@@ -21,6 +21,7 @@ import {
   Gift,
   Receipt,
   Calculator,
+  Truck,
 } from 'lucide-react'
 import { useSidebar } from './SidebarContext'
 
@@ -48,6 +49,7 @@ export function Sidebar() {
     { href: '/promotions', label: 'Promotions', icon: Tag },
     { href: '/rewards', label: 'Rewards', icon: Gift },
     { href: '/expenses', label: 'Expenses', icon: Receipt },
+    { href: '/suppliers', label: 'Suppliers', icon: Truck },
     { href: '/customers', label: 'Customers', icon: ContactRound },
     { href: '/simulaciones', label: 'Simulations', icon: Calculator },
     { href: '/employees', label: 'Employees', icon: Users },

@@ -22,6 +22,8 @@ const expenseSchema = z.object({
   amount: z.number().positive(),
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   receipt_url: z.string().url().nullable().optional(),
+  supplier_id: z.string().uuid().nullable().optional(),
+  delivery_days: z.number().int().min(0).nullable().optional(),
 })
 
 function todayKey(): string {
@@ -39,6 +41,7 @@ expensesRouter.get('/', async (c) => {
   const to = c.req.query('to')
   const type = c.req.query('type')
   const category = c.req.query('category')
+  const supplier = c.req.query('supplier')
   const limit = Math.min(Number(c.req.query('limit')) || 100, 500)
   const offset = Math.max(Number(c.req.query('offset')) || 0, 0)
 
@@ -51,6 +54,7 @@ expensesRouter.get('/', async (c) => {
   if (to) query = query.lte('expense_date', to)
   if (type === 'operating' || type === 'inventory') query = query.eq('type', type)
   if (category) query = query.eq('category', category)
+  if (supplier) query = query.eq('supplier_id', supplier)
 
   const { data, error } = await query
     .order('expense_date', { ascending: false })
@@ -110,6 +114,8 @@ expensesRouter.post('/', requireRole('admin'), zValidator('json', expenseSchema)
       store_id: storeId,
       expense_date: input.expense_date || todayKey(),
       receipt_url: input.receipt_url ?? null,
+      supplier_id: input.supplier_id ?? null,
+      delivery_days: input.delivery_days ?? null,
       created_by: userId,
     })
     .select()
@@ -131,6 +137,8 @@ expensesRouter.put('/:id', requireRole('admin'), zValidator('json', expenseSchem
       ...input,
       expense_date: input.expense_date || todayKey(),
       receipt_url: input.receipt_url ?? null,
+      supplier_id: input.supplier_id ?? null,
+      delivery_days: input.delivery_days ?? null,
     })
     .eq('id', id)
     .select()

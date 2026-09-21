@@ -23,6 +23,7 @@ import { analyticsRouter } from './routes/analytics'
 import { checksRouter } from './routes/checks'
 import { rewardsRouter } from './routes/rewards'
 import { expensesRouter } from './routes/expenses'
+import { suppliersRouter } from './routes/suppliers'
 import { billingRouter } from './routes/billing'
 import { stripeWebhookRouter } from './routes/stripe-webhook'
 
@@ -53,6 +54,7 @@ app.route('/analytics', analyticsRouter)
 app.route('/checks', checksRouter)
 app.route('/rewards', rewardsRouter)
 app.route('/expenses', expensesRouter)
+app.route('/suppliers', suppliersRouter)
 app.route('/billing', billingRouter)
 app.route('/webhooks', stripeWebhookRouter)
 

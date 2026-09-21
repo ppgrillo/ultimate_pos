@@ -6,6 +6,7 @@ import {
   useGetExpensesQuery,
   useGetExpenseSummaryQuery,
   useDeleteExpenseMutation,
+  useGetSuppliersQuery,
 } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -53,9 +54,11 @@ export default function ExpensesPage() {
   const [to, setTo] = useState(todayKey())
   const [type, setType] = useState<ExpenseType | ''>('')
   const [category, setCategory] = useState('')
+  const [supplier, setSupplier] = useState('')
 
-  const { data: expenses = [], isLoading } = useGetExpensesQuery({ from, to, type, category })
+  const { data: expenses = [], isLoading } = useGetExpensesQuery({ from, to, type, category, supplier })
   const { data: summary } = useGetExpenseSummaryQuery({ from, to })
+  const { data: suppliers = [] } = useGetSuppliersQuery({ search: '' })
   const [deleteExpense] = useDeleteExpenseMutation()
 
   const [showForm, setShowForm] = useState(false)
@@ -78,6 +81,7 @@ export default function ExpensesPage() {
 
   const operatingTotal = summary?.operatingTotal ?? 0
   const inventoryTotal = summary?.inventoryTotal ?? 0
+  const supplierName = (id?: string | null) => suppliers.find((s) => s.id === id)?.name ?? null
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -114,7 +118,7 @@ export default function ExpensesPage() {
 
       {/* Filters */}
       <div className="rounded-xl border border-outline-variant/50 bg-surface-container/30 p-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <DateField label="From" value={from} onChange={setFrom} />
           <DateField label="To" value={to} onChange={setTo} />
           <div>
@@ -132,6 +136,15 @@ export default function ExpensesPage() {
               <option value="">All categories</option>
               {filterCategories.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-on-surface mb-1.5">Supplier</label>
+            <select className={inputClass} value={supplier} onChange={(e) => setSupplier(e.target.value)}>
+              <option value="">All suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
           </div>
@@ -163,6 +176,7 @@ export default function ExpensesPage() {
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3">Supplier</th>
                   <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3 text-right">Amount</th>
                   <th className="px-4 py-3 text-right">Receipt</th>
@@ -179,6 +193,7 @@ export default function ExpensesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 font-bold text-on-surface">{expense.category}</td>
+                    {renderSupplierCell(expense.supplier_id, supplierName(expense.supplier_id))}
                     <td className="px-4 py-3 text-on-surface-variant max-w-[220px] truncate">{expense.description}</td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-on-surface">{formatCurrency(expense.amount)}</td>
                     <td className="px-4 py-3 text-right">{renderReceipt(expense)}</td>
@@ -213,6 +228,10 @@ export default function ExpensesPage() {
                       <span className="text-xs text-on-surface-variant">{formatDate(expense.expense_date)}</span>
                     </div>
                     <p className="mt-2 font-bold text-on-surface">{expense.category}</p>
+                    {(() => {
+                      const name = supplierName(expense.supplier_id)
+                      return name ? <p className="text-xs text-primary font-bold mt-0.5">Supplier · {name}</p> : null
+                    })()}
                     <p className="text-xs text-on-surface-variant mt-0.5">{expense.description}</p>
                   </div>
                   <div className="text-right shrink-0">
@@ -277,6 +296,17 @@ function renderReceipt(expense: Expense) {
       <Receipt className="h-3.5 w-3.5" />
       Receipt
     </a>
+  )
+}
+
+function renderSupplierCell(id: string | null | undefined, name: string | null) {
+  if (!id || !name) return <td className="px-4 py-3 text-on-surface-variant/40">—</td>
+  return (
+    <td className="px-4 py-3">
+      <a href={`/suppliers?highlight=${id}`} className="text-primary font-bold hover:underline whitespace-nowrap">
+        {name}
+      </a>
+    </td>
   )
 }
 
