@@ -16,6 +16,7 @@ import {
   PROMOTION_FIELDS_CSV,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import { recordCustomerOrderStat, unrecordCustomerOrderStat } from '../lib/order-stats'
 import { getAvailableRewards, createRedemption, revertRedemption } from '../services/rewards.service'
 import { orderBus } from '../events'
 import {
@@ -673,6 +674,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .update({ status: 'failed' })
       .eq('order_id', order.id)
 
+    unrecordCustomerOrderStat(supabaseAdmin, order.id)
+
     throw badRequest(`Payment error: ${payErr?.message || 'Could not connect to terminal'}`)
   }
 
@@ -740,6 +743,14 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
             if (loyaltyResult) {
               loyaltyData = loyaltyResult
             }
+            const { data: paidOrder } = await supabaseAdmin
+              .from('orders')
+              .select('customer_id, total')
+              .eq('id', orderId)
+              .single()
+            if (paidOrder?.customer_id) {
+              recordCustomerOrderStat(supabaseAdmin, orderId, paidOrder.customer_id, Number(paidOrder.total || 0))
+            }
           } else if (['canceled', 'expired', 'failed'].includes(status)) {
             await revertPromotionUsageIfNeeded(
               orderId,
@@ -760,6 +771,7 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
               .eq('order_id', orderId)
             const { reverseMpLoyalty } = await import('../routes/orders')
             await reverseMpLoyalty(supabaseAdmin, orderId).catch(() => {})
+            unrecordCustomerOrderStat(supabaseAdmin, orderId)
           } else {
             updates.status = 'pending'
             updates.payment_status = 'unpaid'

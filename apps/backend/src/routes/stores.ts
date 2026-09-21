@@ -122,12 +122,6 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
   const { settings } = body
   if (!settings || typeof settings !== 'object') throw badRequest('Invalid settings')
 
-  const { data: current } = await supabaseAdmin
-    .from('stores')
-    .select('settings, tax_rate')
-    .eq('id', storeId)
-    .single()
-
   const incoming = { ...settings }
   if ((incoming as Record<string, unknown>).kitchenWorkflow) {
     (incoming as Record<string, unknown>).kitchenWorkflow = resolveKitchenWorkflow(
@@ -139,34 +133,44 @@ storesRouter.put('/settings', requireRole('admin'), async (c) => {
   delete (incoming as any).name
 
   const encrypted = encryptSettings(incoming)
-  const merged = { ...(current?.settings as Record<string, unknown> ?? {}), ...encrypted }
 
-  const updateData: Record<string, unknown> = { settings: merged }
+  // Atomic merge inside the DB: row lock (SELECT FOR UPDATE) + recursive
+  // deep-merge + empty-string protection. Also writes updated_at and audit trail.
+  const { data: merged, error } = await supabaseAdmin.rpc('upsert_store_settings', {
+    p_store_id: storeId,
+    p_updates: encrypted,
+    p_actor: c.get('userId') || null,
+  })
 
-  if (typeof settings.taxRate === 'number') {
-    updateData.tax_rate = settings.taxRate
+  if (error || merged == null) throw badRequest(error?.message || 'Failed to update settings')
+
+  // Column-backed fields (NOT part of settings JSON) are updated separately.
+  const updateData: Record<string, unknown> = {}
+  if (typeof settings.taxRate === 'number') updateData.tax_rate = settings.taxRate
+  if (typeof storeName === 'string' && storeName.trim()) updateData.name = storeName.trim()
+
+  let taxRate: number
+  if (Object.keys(updateData).length > 0) {
+    const { data: updated, error: colError } = await supabaseAdmin
+      .from('stores')
+      .update(updateData)
+      .eq('id', storeId)
+      .select('tax_rate')
+      .single()
+    if (colError) throw badRequest(colError.message)
+    taxRate = Number(updated?.tax_rate ?? 0)
+  } else {
+    const { data: current } = await supabaseAdmin.from('stores').select('tax_rate').eq('id', storeId).single()
+    taxRate = Number(current?.tax_rate ?? 0)
   }
 
-  if (typeof storeName === 'string' && storeName.trim()) {
-    updateData.name = storeName.trim()
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('stores')
-    .update(updateData)
-    .eq('id', storeId)
-    .select('*')
-    .single()
-
-  if (error) throw badRequest(error.message)
-
-  const safeSettings = { ...(data.settings as Record<string, unknown>) }
+  const safeSettings = { ...(merged as Record<string, unknown>) }
   delete safeSettings.mpPointAccessToken
   delete safeSettings.mpClientSecret
   delete safeSettings.clipApiKey
   delete safeSettings.clipApiSecret
 
-  return c.json({ settings: safeSettings, tax_rate: data.tax_rate })
+  return c.json({ settings: safeSettings, tax_rate: taxRate })
 })
 
 storesRouter.get('/terminals', requireRole('admin'), async (c) => {
@@ -338,14 +342,15 @@ storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => 
     token,
   }
 
-  stations.push(newStation)
-
-  const { error } = await supabaseAdmin
-    .from('stores')
-    .update({ settings: { ...currentSettings, selfCheckoutStations: stations } })
-    .eq('id', storeId)
+  // Atomic append under the stores row lock — no lost updates between concurrent admins.
+  const { data: addResult, error } = await supabaseAdmin.rpc('store_station_add', {
+    p_store_id: storeId,
+    p_station: newStation,
+    p_actor: c.get('userId') || null,
+  })
 
   if (error) throw badRequest(error.message)
+  if (!(addResult as { applied?: boolean } | null)?.applied) throw badRequest('Station id already exists')
 
   return c.json({ data: newStation }, 201)
 })
@@ -353,20 +358,6 @@ storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => 
 storesRouter.post('/self-checkout/stations/:id/token', requireRole('admin'), async (c) => {
   const storeId = c.get('storeId')
   const stationId = c.req.param('id')
-
-  const { data: store } = await supabaseAdmin
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
-    .single()
-
-  if (!store) throw notFound('Store not found')
-
-  const currentSettings = (store.settings as Record<string, unknown>) || {}
-  const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
-  const idx = stations.findIndex((s) => s.id === stationId)
-
-  if (idx === -1) throw notFound('Station not found')
 
   const token = await new SignJWT({
     station_id: stationId,
@@ -379,14 +370,16 @@ storesRouter.post('/self-checkout/stations/:id/token', requireRole('admin'), asy
     .setExpirationTime('1y')
     .sign(getJwtSecret())
 
-  stations[idx].token = token
-
-  const { error } = await supabaseAdmin
-    .from('stores')
-    .update({ settings: { ...currentSettings, selfCheckoutStations: stations } })
-    .eq('id', storeId)
+  // Atomic token rotation under the row lock.
+  const { data: rotateResult, error } = await supabaseAdmin.rpc('store_station_rotate_token', {
+    p_store_id: storeId,
+    p_station_id: stationId,
+    p_token: token,
+    p_actor: c.get('userId') || null,
+  })
 
   if (error) throw badRequest(error.message)
+  if (!(rotateResult as { applied?: boolean } | null)?.applied) throw notFound('Station not found')
 
   return c.json({ data: { id: stationId, token } })
 })
@@ -395,26 +388,15 @@ storesRouter.delete('/self-checkout/stations/:id', requireRole('admin'), async (
   const storeId = c.get('storeId')
   const stationId = c.req.param('id')
 
-  const { data: store } = await supabaseAdmin
-    .from('stores')
-    .select('settings')
-    .eq('id', storeId)
-    .single()
-
-  if (!store) throw notFound('Store not found')
-
-  const currentSettings = (store.settings as Record<string, unknown>) || {}
-  const stations = (currentSettings.selfCheckoutStations as SelfCheckoutStation[]) || []
-  const filtered = stations.filter((s) => s.id !== stationId)
-
-  if (filtered.length === stations.length) throw notFound('Station not found')
-
-  const { error } = await supabaseAdmin
-    .from('stores')
-    .update({ settings: { ...currentSettings, selfCheckoutStations: filtered } })
-    .eq('id', storeId)
+  // Atomic removal under the row lock.
+  const { data: removeResult, error } = await supabaseAdmin.rpc('store_station_remove', {
+    p_store_id: storeId,
+    p_station_id: stationId,
+    p_actor: c.get('userId') || null,
+  })
 
   if (error) throw badRequest(error.message)
+  if (!(removeResult as { applied?: boolean } | null)?.applied) throw notFound('Station not found')
 
   return c.json({ success: true })
 })

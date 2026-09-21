@@ -2,8 +2,8 @@ import 'dotenv/config'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
 import { errorHandler } from './middleware/error'
+import { requestLogger } from './middleware/request-log'
 import { authRouter } from './routes/auth'
 import { productsRouter } from './routes/products'
 import { categoriesRouter } from './routes/categories'
@@ -28,7 +28,7 @@ import { stripeWebhookRouter } from './routes/stripe-webhook'
 
 const app = new Hono()
 
-app.use('*', logger())
+app.use('*', requestLogger())
 app.use('*', cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000' }))
 app.onError(errorHandler)
 

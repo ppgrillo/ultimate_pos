@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const [pointsExpirationDays, setPointsExpirationDays] = useState(0)
   const [promoPin, setPromoPin] = useState('')
 
+  const hydrated = useRef(false)
   const [mounted, setMounted] = useState(false)
   const [registrationUrl, setRegistrationUrl] = useState('')
   const [copiedUrl, setCopiedUrl] = useState(false)
@@ -117,6 +118,9 @@ export default function SettingsPage() {
   const [syncGoogleWalletClass, { isLoading: syncingGoogleClass, isSuccess: googleClassSynced, isError: googleClassError }] = useSyncGoogleWalletClassMutation()
 
   useEffect(() => {
+    if (!settings) return
+    if (hydrated.current) return
+    hydrated.current = true
     setHasVariants(settings?.hasVariants ?? false)
     setHasLoyalty(settings?.hasLoyalty ?? false)
     setTrackInventory(settings?.trackInventory ?? false)
@@ -257,7 +261,7 @@ export default function SettingsPage() {
     }))
   }
 
-  const handleSave = async (overrides?: { mpPointTerminalId?: string; clipTerminalId?: string }) => {
+  const handleSave = async () => {
     try {
       await updateStoreSettings({
         address: businessAddress || undefined,
@@ -275,10 +279,10 @@ export default function SettingsPage() {
         kitchenWorkflow,
         acceptedPaymentMethods: enabledMethods,
         mpPointEnabled,
-        mpPointTerminalId: overrides?.mpPointTerminalId ?? mpPointTerminalId,
+        mpPointTerminalId,
         activeCardProvider,
         clipEnabled,
-        clipTerminalId: overrides?.clipTerminalId ?? clipTerminalId,
+        clipTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         ...(mpClientSecret ? { mpClientSecret } : {}),
         ...(clipApiKey ? { clipApiKey } : {}),
@@ -369,6 +373,30 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSelectTerminal = async (terminalId: string) => {
+    if (activeCardProvider === 'clip') {
+      setClipTerminalId(terminalId)
+    } else {
+      setMpPointTerminalId(terminalId)
+    }
+    setTerminals(null)
+    try {
+      const payload = activeCardProvider === 'clip'
+        ? { clipTerminalId: terminalId }
+        : { mpPointTerminalId: terminalId }
+      await updateStoreSettings(payload).unwrap()
+      const refreshed = await refetchStore()
+      if (refreshed.data) {
+        dispatch(setStore(refreshed.data))
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      setError(true)
+      setTimeout(() => setError(false), 3000)
+    }
+  }
+
   const handleCancelQueued = async () => {
     setCancellingMpOrder(true)
     setCancelMpMessage('')
@@ -422,7 +450,7 @@ export default function SettingsPage() {
               <Check className="h-4 w-4" /> Saved
             </span>
           )}
-          <Button onClick={() => handleSave()} disabled={!hasChanges || settingsLoading} isLoading={settingsLoading}>
+          <Button onClick={() => handleSave()} disabled={!hasChanges || settingsLoading || !settings} isLoading={settingsLoading}>
             <Save className="h-4 w-4 mr-2" />
             Save
           </Button>
@@ -1029,17 +1057,7 @@ export default function SettingsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  if (activeCardProvider === 'clip') {
-                                    setClipTerminalId(t.id)
-                                    setTerminals(null)
-                                    handleSave({ clipTerminalId: t.id })
-                                  } else {
-                                    setMpPointTerminalId(t.id)
-                                    setTerminals(null)
-                                    handleSave({ mpPointTerminalId: t.id })
-                                  }
-                                }}
+                                onClick={() => handleSelectTerminal(t.id)}
                               >
                                 Use
                               </Button>

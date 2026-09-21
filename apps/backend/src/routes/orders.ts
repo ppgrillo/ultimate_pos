@@ -32,6 +32,7 @@ import {
   PROMOTION_FIELDS_CSV,
 } from '../lib/promotion-rules'
 import { revertPromotionUsageIfNeeded } from '../lib/promotion-usage'
+import { recordCustomerOrderStat, unrecordCustomerOrderStat } from '../lib/order-stats'
 import { createRedemption, revertRedemption } from '../services/rewards.service'
 
 export const ordersRouter = new Hono()
@@ -631,7 +632,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
 
       await supabaseAdmin
         .from('orders')
-        .update({ status: 'cancelled', metadata: { mpError: detail } })
+        .update({ status: 'cancelled', metadata: { ...((order.metadata as Record<string, unknown>) || {}), mpError: detail } })
         .eq('id', order.id)
 
       await supabaseAdmin
@@ -645,8 +646,12 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     mpOrderId = payment.providerOrderId
 
     const provider = getActiveCardProvider(settings)
+    const baseMeta: Record<string, unknown> = {
+      ...((order.metadata as Record<string, unknown>) || {}),
+      ...(promotionUsageIds.length > 0 ? { promotionUsageIds, promotionUsageReverted: false } : {}),
+    }
     const metadata = buildPaymentMetadata(
-      promotionUsageIds.length > 0 ? { promotionUsageIds, promotionUsageReverted: false } : {},
+      baseMeta,
       provider,
       payment.providerOrderId,
       'created',
@@ -672,7 +677,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
             status: 'paid',
             payment_status: 'paid',
             metadata: buildPaymentMetadata(
-              {},
+              baseMeta,
               provider,
               payment.providerOrderId,
               'processed',
@@ -685,6 +690,9 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
           .update({ status: 'completed' })
           .eq('order_id', order.id)
         await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => {})
+        if (input.customer_id) {
+          recordCustomerOrderStat(supabaseAdmin, order.id, input.customer_id, total)
+        }
       } else if (isFailedCardStatus(early.status)) {
         await supabaseAdmin
           .from('orders')
@@ -692,7 +700,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
             status: 'cancelled',
             payment_status: 'unpaid',
             metadata: buildPaymentMetadata(
-              {},
+              { ...baseMeta, promotionUsageReverted: true },
               provider,
               payment.providerOrderId,
               early.status,
@@ -715,21 +723,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
   const isDeferredPayment = checkoutMode === 'order-first-pay-later' && !paymentMethod
 
   if (input.customer_id && !isCardPayment && !isDeferredPayment) {
-    const { data: cust } = await supabase
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', input.customer_id)
-      .single()
-
-    if (cust) {
-      await supabase
-        .from('customers')
-        .update({
-          total_visits: (cust.total_visits || 0) + 1,
-          total_spent: (Number(cust.total_spent) || 0) + total,
-        })
-        .eq('id', input.customer_id)
-    }
+    recordCustomerOrderStat(supabase, order.id, input.customer_id, total)
   }
 
   // ── Loyalty: process points earn/redeem ──
@@ -896,23 +890,9 @@ ordersRouter.post('/:id/pay', async (c) => {
       .eq('id', orderId)
   }
 
-  // Customer stats
-  if (order.customer_id) {
-    const { data: cust } = await supabase
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', order.customer_id)
-      .single()
-
-    if (cust) {
-      await supabase
-        .from('customers')
-        .update({
-          total_visits: (cust.total_visits || 0) + 1,
-          total_spent: (Number(cust.total_spent) || 0) + Number(order.total),
-        })
-        .eq('id', order.customer_id)
-    }
+  // Customer stats (idempotent ledger — recorded only when payment is confirmed)
+  if (order.customer_id && (!isCardFlow || providerOrderId)) {
+    recordCustomerOrderStat(supabase, orderId, order.customer_id, Number(order.total))
   }
 
   // Loyalty
@@ -1017,6 +997,8 @@ ordersRouter.post('/:id/cancel-mp', async (c) => {
 
   await revertRedemption(orderId).catch(() => {})
 
+  unrecordCustomerOrderStat(supabaseAdmin, orderId)
+
   return c.json({ success: true, meta: { mpOrderStatus: finalStatus } })
 })
 
@@ -1072,6 +1054,10 @@ ordersRouter.patch('/:id/status', async (c) => {
 
   const enriched = enrichOrder(data!)
 
+  if (newStatus === 'paid' && data?.customer_id) {
+    recordCustomerOrderStat(supabase, id, data.customer_id, Number(data.total || 0))
+  }
+
   if (newStatus === 'cancelled' || newStatus === 'refunded') {
     await revertPromotionUsageIfNeeded(
       id,
@@ -1102,20 +1088,7 @@ ordersRouter.patch('/:id/status', async (c) => {
     }
 
     if (data?.customer_id) {
-      const { data: cust } = await supabase
-        .from('customers')
-        .select('total_visits, total_spent')
-        .eq('id', data.customer_id)
-        .single()
-      if (cust) {
-        await supabase
-          .from('customers')
-          .update({
-            total_visits: Math.max(0, (cust.total_visits || 0) - 1),
-            total_spent: Math.max(0, (Number(cust.total_spent) || 0) - Number(data.total || 0)),
-          })
-          .eq('id', data.customer_id)
-      }
+      unrecordCustomerOrderStat(supabase, id)
     }
   }
 
@@ -1187,23 +1160,6 @@ export async function processMpLoyalty(
     syncWallets(card.id).catch(() => {})
 
     const pointsAfter = result?.new_balance ?? (pointsBefore + earnedPoints)
-
-    const { data: cust } = await supabase
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', order.customer_id)
-      .single()
-
-    if (cust) {
-      const total = subtotal - discount
-      await supabase
-        .from('customers')
-        .update({
-          total_visits: (cust.total_visits || 0) + 1,
-          total_spent: (Number(cust.total_spent) || 0) + total,
-        })
-        .eq('id', order.customer_id)
-    }
 
     return { pointsEarned: earnedPoints, pointsBefore, pointsAfter }
   }
@@ -1296,6 +1252,14 @@ async function clearStuckCardOrders(
           .update({ status: 'completed' })
           .eq('order_id', order.id)
         await processMpLoyalty(supabase, order.id, storeId).catch(() => {})
+        const { data: paidOrder } = await supabase
+          .from('orders')
+          .select('customer_id, total')
+          .eq('id', order.id)
+          .single()
+        if (paidOrder?.customer_id) {
+          recordCustomerOrderStat(supabase, order.id, paidOrder.customer_id, Number(paidOrder.total || 0))
+        }
         continue
       }
 
@@ -1324,6 +1288,7 @@ async function clearStuckCardOrders(
           .eq('order_id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
         await revertRedemption(order.id).catch(() => {})
+        unrecordCustomerOrderStat(supabase, order.id)
         continue
       }
 
@@ -1348,6 +1313,7 @@ async function clearStuckCardOrders(
           .eq('id', order.id)
         await reverseMpLoyalty(supabase, order.id).catch(() => {})
         await revertRedemption(order.id).catch(() => {})
+        unrecordCustomerOrderStat(supabase, order.id)
       }
     } catch {
     }

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../lib/supabase/admin'
 import { orderBus } from '../../events'
 import { revertPromotionUsageIfNeeded } from '../../lib/promotion-usage'
+import { recordCustomerOrderStat, unrecordCustomerOrderStat } from '../../lib/order-stats'
 import { buildPaymentMetadata } from './metadata'
 import { getCardPaymentOutcome, isTerminalCardStatus } from './status'
 import type { CardOrderStatus, CardPaymentProviderName } from './types'
@@ -102,39 +103,11 @@ export async function applyCardPaymentOutcome(
   }
 
   if (outcome.orderStatus === 'paid' && order.customer_id) {
-    const { data: cust } = await supabaseAdmin
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', order.customer_id)
-      .single()
-
-    if (cust) {
-      await supabaseAdmin
-        .from('customers')
-        .update({
-          total_visits: (cust.total_visits || 0) + 1,
-          total_spent: (Number(cust.total_spent) || 0) + Number(order.total),
-        })
-        .eq('id', order.customer_id)
-    }
+    recordCustomerOrderStat(supabaseAdmin, order.id, order.customer_id, Number(order.total))
   }
 
   if ((outcome.orderStatus === 'cancelled' || outcome.orderStatus === 'refunded') && order.customer_id) {
-    const { data: cust } = await supabaseAdmin
-      .from('customers')
-      .select('total_visits, total_spent')
-      .eq('id', order.customer_id)
-      .single()
-
-    if (cust) {
-      await supabaseAdmin
-        .from('customers')
-        .update({
-          total_visits: Math.max(0, (cust.total_visits || 0) - 1),
-          total_spent: Math.max(0, (Number(cust.total_spent) || 0) - Number(order.total)),
-        })
-        .eq('id', order.customer_id)
-    }
+    unrecordCustomerOrderStat(supabaseAdmin, order.id)
   }
 
   const { processMpLoyalty, reverseMpLoyalty } = await import('../../routes/orders')
