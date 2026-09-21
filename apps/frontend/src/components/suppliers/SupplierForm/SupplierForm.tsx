@@ -1,9 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { MessageCircle } from 'lucide-react'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { PhoneInput } from '@/components/ui/PhoneInput'
+import { openWhatsAppChat } from '@/lib/wallet'
 import type { Supplier, SupplierInput } from '@ultimate-pos/shared'
 import { useCreateSupplierMutation, useUpdateSupplierMutation } from '@/store/api'
 import { cn } from '@/lib/utils'
@@ -64,6 +67,9 @@ export function SupplierForm({ open, onOpenChange, supplier }: SupplierFormProps
   const [error, setError] = useState<string | null>(null)
 
   const editing = Boolean(supplier)
+
+  const canWhatsApp = form.phone.replace(/\D/g, '').length >= 8
+  const whatsAppMessage = `Hola ${(form.contact_name || form.name || 'proveedor').trim()}, quiero hacerte un pedido desde mi punto de venta.`
 
   const set = (key: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -166,14 +172,30 @@ export function SupplierForm({ open, onOpenChange, supplier }: SupplierFormProps
               placeholder="e.g. Ana Torres"
               className={inputClass}
             />
-            <Input
-              label="Phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => set('phone', e.target.value)}
-              placeholder="+52 555 123 4567"
-              className={inputClass}
-            />
+            <div className="space-y-2">
+              <PhoneInput
+                label="Phone"
+                value={form.phone}
+                onChange={(phone) => set('phone', phone)}
+                placeholder="555 123 4567"
+                defaultCountry="MX"
+              />
+              <button
+                type="button"
+                disabled={!canWhatsApp}
+                onClick={() => openWhatsAppChat(form.phone, whatsAppMessage)}
+                title={canWhatsApp ? 'Open WhatsApp chat' : 'Add a valid phone to send WhatsApp'}
+                className={cn(
+                  'flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors',
+                  canWhatsApp
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'cursor-not-allowed bg-surface-container-high text-on-surface-variant/60',
+                )}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Send WhatsApp
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

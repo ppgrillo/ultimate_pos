@@ -174,7 +174,9 @@ describe('suppliers routes', () => {
     }))
 
     expect(res.status).toBe(200)
-    expect(query.or).toHaveBeenCalledWith('name.ilike.%norte%,contact_name.ilike.%norte%')
+    expect(query.or).toHaveBeenCalledWith(
+      'name.ilike.%norte%,contact_name.ilike.%norte%,phone.ilike.%norte%,email.ilike.%norte%,website.ilike.%norte%,address.ilike.%norte%,notes.ilike.%norte%',
+    )
 
     const body = await res.json()
     expect(body.data).toHaveLength(1)

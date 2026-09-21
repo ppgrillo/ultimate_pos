@@ -71,6 +71,32 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* react-phone-number-input — vibrant neo-bento dark theme */
+  .rnpi.PhoneInput {
+    @apply h-10 w-full rounded-lg border border-outline-variant bg-surface-container text-sm transition-colors;
+    color-scheme: dark;
+  }
+  .rnpi.PhoneInput:focus-within {
+    @apply border-primary ring-2 ring-primary;
+  }
+  .rnpi-error.PhoneInput {
+    @apply border-error;
+  }
+  .rnpi .PhoneInputInput {
+    @apply h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-on-surface placeholder:text-on-surface-variant/40 font-mono outline-none;
+  }
+  .rnpi .PhoneInputCountry {
+    @apply pl-2;
+  }
+  .rnpi .PhoneInputCountryIcon {
+    --PhoneInputCountryFlag-height: 0.8em;
+    --PhoneInputCountryFlag-borderColor: rgba(255, 255, 255, 0.25);
+  }
+  .rnpi .PhoneInputCountrySelectArrow {
+    @apply border-on-surface-variant;
+    margin-right: 0.45em;
+  }
 }
 
 @keyframes scanLaser {

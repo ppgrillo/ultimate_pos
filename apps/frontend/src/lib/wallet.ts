@@ -32,3 +32,10 @@ export function openWhatsApp({ googleSaveUrl, appleUrl, phone }: OpenWhatsAppPar
     : `https://wa.me/?text=${message}`
   window.open(url, '_blank')
 }
+
+export function openWhatsAppChat(phone?: string | null, text?: string): void {
+  const digits = phone?.replace(/\D/g, '')
+  const query = text ? `?text=${encodeURIComponent(text)}` : ''
+  const url = digits ? `https://wa.me/${digits}${query}` : `https://wa.me/${query}`
+  window.open(url, '_blank')
+}

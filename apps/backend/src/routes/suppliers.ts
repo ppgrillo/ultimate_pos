@@ -91,7 +91,9 @@ suppliersRouter.get('/', async (c) => {
   let query = supabase.from('suppliers').select('*').eq('store_id', storeId)
   if (search) {
     const term = `%${search}%`
-    query = query.or(`name.ilike.${term},contact_name.ilike.${term}`)
+    query = query.or(
+      `name.ilike.${term},contact_name.ilike.${term},phone.ilike.${term},email.ilike.${term},website.ilike.${term},address.ilike.${term},notes.ilike.${term}`,
+    )
   }
 
   const { data, error } = await query.order('name')

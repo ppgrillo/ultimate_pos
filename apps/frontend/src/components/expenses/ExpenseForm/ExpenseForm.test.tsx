@@ -31,6 +31,21 @@ import { ExpenseForm } from './ExpenseForm'
 
 const onOpenChange = vi.fn()
 
+const EXPENSE = {
+  id: 'e1',
+  store_id: 'store-1',
+  type: 'operating',
+  category: 'Rent',
+  description: 'July office rent',
+  amount: 1200.5,
+  expense_date: '2026-07-15',
+  receipt_url: null,
+  supplier_id: 's1',
+  delivery_days: 3,
+  created_at: '2026-07-15T10:00:00.000Z',
+  updated_at: '2026-07-15T10:00:00.000Z',
+}
+
 function renderForm() {
   return render(<ExpenseForm open onOpenChange={onOpenChange} />)
 }
@@ -115,6 +130,38 @@ describe('ExpenseForm', () => {
     const options = screen.getAllByRole('option').map((o) => o.textContent)
     expect(options).toContain('Distribuidora Norte')
     expect(options).not.toContain('Inactive Vendor')
+  })
+
+  it('hydrates all fields when editing an expense', () => {
+    render(<ExpenseForm open onOpenChange={onOpenChange} expense={EXPENSE} />)
+
+    expect(screen.getByText('Edit Expense')).toBeInTheDocument()
+    expect(screen.getByLabelText('Description')).toHaveValue('July office rent')
+    expect(screen.getByLabelText('Amount')).toHaveValue(1200.5)
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-07-15')
+    expect(screen.getByLabelText('Supplier (optional)')).toHaveValue('s1')
+    expect(screen.getByLabelText('Delivery days')).toHaveValue(3)
+  })
+
+  it('updates the expense keeping supplier and delivery days', async () => {
+    const user = userEvent.setup()
+    render(<ExpenseForm open onOpenChange={onOpenChange} expense={EXPENSE} />)
+
+    await user.type(screen.getByLabelText('Description'), ' (updated)')
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => {
+      expect(updateExpense).toHaveBeenCalledWith({
+        id: 'e1',
+        body: expect.objectContaining({
+          description: 'July office rent (updated)',
+          amount: 1200.5,
+          supplier_id: 's1',
+          delivery_days: 3,
+        }),
+      })
+    })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it('uploads and attaches a receipt', async () => {

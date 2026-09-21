@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Pencil, Plus, Receipt, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react'
 import {
   useGetExpensesQuery,
   useGetExpenseSummaryQuery,
@@ -55,6 +55,7 @@ export default function ExpensesPage() {
   const [type, setType] = useState<ExpenseType | ''>('')
   const [category, setCategory] = useState('')
   const [supplier, setSupplier] = useState('')
+  const [q, setQ] = useState('')
 
   const { data: expenses = [], isLoading } = useGetExpensesQuery({ from, to, type, category, supplier })
   const { data: summary } = useGetExpenseSummaryQuery({ from, to })
@@ -82,6 +83,16 @@ export default function ExpensesPage() {
   const operatingTotal = summary?.operatingTotal ?? 0
   const inventoryTotal = summary?.inventoryTotal ?? 0
   const supplierName = (id?: string | null) => suppliers.find((s) => s.id === id)?.name ?? null
+
+  const term = q.trim().toLowerCase()
+  const filteredExpenses = term
+    ? expenses.filter((expense) => {
+        const sName = supplierName(expense.supplier_id)?.toLowerCase() ?? ''
+        return [expense.description, expense.category, TYPE_CHIP[expense.type].label, sName].some((v) =>
+          v.toLowerCase().includes(term),
+        )
+      })
+    : expenses
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -117,7 +128,16 @@ export default function ExpensesPage() {
       </div>
 
       {/* Filters */}
-      <div className="rounded-xl border border-outline-variant/50 bg-surface-container/30 p-4">
+      <div className="rounded-xl border border-outline-variant/50 bg-surface-container/30 p-4 space-y-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/50" />
+          <input
+            className={cn(inputClass, 'pl-9')}
+            placeholder="Search description, category, supplier…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <DateField label="From" value={from} onChange={setFrom} />
           <DateField label="To" value={to} onChange={setTo} />
@@ -156,14 +176,18 @@ export default function ExpensesPage() {
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
-      ) : expenses.length === 0 ? (
+      ) : filteredExpenses.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-container-high mb-4">
-            <Receipt className="h-8 w-8 text-on-surface-variant/30" />
+            <Search className="h-8 w-8 text-on-surface-variant/30" />
           </div>
-          <p className="text-sm font-headline font-bold text-on-surface">No expenses in this range</p>
+          <p className="text-sm font-headline font-bold text-on-surface">
+            {q.trim() ? 'No expenses match your search' : 'No expenses in this range'}
+          </p>
           <p className="text-xs text-on-surface-variant mt-1 max-w-xs">
-            Adjust the filters or record your first expense.
+            {q.trim()
+              ? 'Try a different word, or adjust the date/type/supplier filters.'
+              : 'Adjust the filters or record your first expense.'}
           </p>
         </div>
       ) : (
@@ -184,7 +208,7 @@ export default function ExpensesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/30">
-                {expenses.map((expense) => (
+                {filteredExpenses.map((expense) => (
                   <tr key={expense.id} className="hover:bg-surface-container/50">
                     <td className="px-4 py-3 text-on-surface-variant whitespace-nowrap">{formatDate(expense.expense_date)}</td>
                     <td className="px-4 py-3">
@@ -217,7 +241,7 @@ export default function ExpensesPage() {
 
           {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
-            {expenses.map((expense) => (
+            {filteredExpenses.map((expense) => (
               <div key={expense.id} className="rounded-xl border border-outline-variant/50 bg-surface-container/30 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

@@ -72,7 +72,7 @@ describe('SupplierForm', () => {
 
     await user.type(screen.getByLabelText('Supplier name'), '  Distribuidora Norte  ')
     await user.type(screen.getByLabelText('Contact person'), 'Ana Torres')
-    await user.type(screen.getByLabelText('Phone'), '+52 555 123 4567')
+    await user.type(screen.getByLabelText('Phone'), '5551234567')
     await user.type(screen.getByLabelText('Email'), 'ventas@distnorte.mx')
     await user.type(screen.getByLabelText('Website'), 'https://distnorte.mx')
     await user.type(screen.getByLabelText('What they supply'), 'Textiles y uniformes')
@@ -120,5 +120,26 @@ describe('SupplierForm', () => {
       )
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps the WhatsApp button disabled until a phone is entered', () => {
+    render(<SupplierForm open onOpenChange={onOpenChange} />)
+    expect(screen.getByRole('button', { name: 'Send WhatsApp' })).toBeDisabled()
+  })
+
+  it('opens a WhatsApp chat with the typed phone', async () => {
+    const user = userEvent.setup()
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    render(<SupplierForm open onOpenChange={onOpenChange} />)
+
+    await user.type(screen.getByLabelText('Supplier name'), 'Papelera Central')
+    await user.type(screen.getByLabelText('Phone'), '5551234567')
+
+    const waButton = screen.getByRole('button', { name: 'Send WhatsApp' })
+    expect(waButton).toBeEnabled()
+    await user.click(waButton)
+
+    expect(openSpy).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/wa\.me\/52\d+/), '_blank')
+    openSpy.mockRestore()
   })
 })

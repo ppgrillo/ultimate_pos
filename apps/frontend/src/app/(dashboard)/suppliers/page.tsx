@@ -1,14 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Pencil, Plus, Search, Trash2, Truck, PackageOpen, Phone, Globe, Mail, Timer } from 'lucide-react'
+import { Pencil, Plus, Search, Trash2, Truck, PackageOpen, Phone, Globe, Mail, Timer, Square, SquareCheck, Scale, MessageCircle } from 'lucide-react'
 import { useGetSuppliersQuery, useDeleteSupplierMutation, useGetSupplierExpensesQuery } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
+import { openWhatsAppChat } from '@/lib/wallet'
 import { cn, formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { SupplierForm } from '@/components/suppliers/SupplierForm'
+import { CompareSuppliers } from '@/components/suppliers/CompareSuppliers'
 import type { Supplier, SupplierWithStats } from '@ultimate-pos/shared'
+
+const MAX_COMPARE = 4
 
 function formatDate(key: string | null): string {
   if (!key) return '—'
@@ -32,16 +36,35 @@ export default function SuppliersPage() {
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<SupplierWithStats | null>(null)
   const [viewing, setViewing] = useState<SupplierWithStats | null>(null)
+  const [compareIds, setCompareIds] = useState<string[]>([])
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareLimitHint, setCompareLimitHint] = useState(false)
 
   const { data: purchases = [] } = useGetSupplierExpensesQuery(
     { id: viewing?.id ?? '' },
     { skip: !viewing },
   )
 
+  const toggleCompare = (id: string) => {
+    if (compareIds.includes(id)) {
+      setCompareIds((prev) => prev.filter((x) => x !== id))
+      return
+    }
+    if (compareIds.length >= MAX_COMPARE) {
+      setCompareLimitHint(true)
+      setTimeout(() => setCompareLimitHint(false), 2500)
+      return
+    }
+    setCompareIds((prev) => [...prev, id])
+  }
+
+  const selectedSuppliers = suppliers.filter((s) => compareIds.includes(s.id))
+
   const handleDelete = async () => {
     if (!confirmDelete) return
     try {
       await deleteSupplier(confirmDelete.id).unwrap()
+      setCompareIds((prev) => prev.filter((id) => id !== confirmDelete.id))
       setConfirmDelete(null)
     } catch {
       // ignore
@@ -83,9 +106,9 @@ export default function SuppliersPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant/50" />
           <input
             className={cn(inputClass, 'pl-9')}
-            placeholder="Search by name or contact…"
+            placeholder="Search by name, contact or what they supply…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setCompareIds([]) }}
           />
         </div>
       </div>
@@ -133,6 +156,24 @@ export default function SuppliersPage() {
                 </div>
                 {isAdmin && (
                   <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleCompare(supplier.id)}
+                      title="Select for comparison"
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
+                        compareIds.includes(supplier.id)
+                          ? 'text-primary bg-primary/10'
+                          : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high',
+                      )}
+                    >
+                      {compareIds.includes(supplier.id) ? <SquareCheck className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    </button>
+                    {(supplier.phone && (supplier.phone.replace(/\D/g, '').length >= 8)) && (
+                    <ActionIconButton title="Send WhatsApp" onClick={() => openWhatsAppChat(supplier.phone)} wa>
+                      <MessageCircle className="h-3.5 w-3.5" />
+                    </ActionIconButton>
+                  )}
                     <ActionIconButton title="View purchases" onClick={() => setViewing(supplier)}>
                       <PackageOpen className="h-4 w-4" />
                     </ActionIconButton>
@@ -241,6 +282,34 @@ export default function SuppliersPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Compare bar */}
+      {compareIds.length > 0 && (
+        <div className="fixed bottom-5 left-1/2 z-40 -translate-x-1/2 w-max max-w-[calc(100vw-2rem)]">
+          <div className="flex items-center gap-3 rounded-2xl border border-outline-variant/50 bg-surface-container px-4 py-3 shadow-xl backdrop-blur-glass">
+            <Scale className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-sm font-bold text-on-surface whitespace-nowrap">{compareIds.length} selected</span>
+            {compareLimitHint && (
+              <span className="text-xs text-on-surface-variant whitespace-nowrap">Select up to {MAX_COMPARE}</span>
+            )}
+            <Button onClick={() => setCompareOpen(true)}>Compare</Button>
+            <button
+              type="button"
+              onClick={() => setCompareIds([])}
+              className="text-sm font-bold text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      <CompareSuppliers
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        suppliers={selectedSuppliers}
+        onViewPurchases={(s) => { setViewing(s); setCompareOpen(false) }}
+      />
     </div>
   )
 }
@@ -269,7 +338,7 @@ function StatChip({ label, value, primary, icon }: { label: string; value: strin
   )
 }
 
-function ActionIconButton({ title, onClick, danger, children }: { title: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
+function ActionIconButton({ title, onClick, danger, wa, children }: { title: string; onClick: () => void; danger?: boolean; wa?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -277,7 +346,11 @@ function ActionIconButton({ title, onClick, danger, children }: { title: string;
       title={title}
       className={cn(
         'flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors',
-        danger ? 'hover:text-error hover:bg-error/10' : 'hover:text-on-surface hover:bg-surface-container-high',
+        wa
+          ? 'text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300'
+          : danger
+            ? 'hover:text-error hover:bg-error/10'
+            : 'hover:text-on-surface hover:bg-surface-container-high',
       )}
     >
       {children}

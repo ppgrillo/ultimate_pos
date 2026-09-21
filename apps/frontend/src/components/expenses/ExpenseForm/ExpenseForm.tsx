@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Receipt, Upload, X } from 'lucide-react'
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalFooter } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -52,6 +52,19 @@ function emptyForm(type: ExpenseType = 'operating'): FormState {
   }
 }
 
+function toForm(expense: Expense): FormState {
+  return {
+    type: expense.type,
+    category: expense.category,
+    description: expense.description,
+    amount: String(expense.amount),
+    expense_date: expense.expense_date ?? '',
+    receipt_url: expense.receipt_url ?? '',
+    supplier_id: expense.supplier_id ?? '',
+    delivery_days: expense.delivery_days != null ? String(expense.delivery_days) : '',
+  }
+}
+
 export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
   const [createExpense] = useCreateExpenseMutation()
   const [updateExpense] = useUpdateExpenseMutation()
@@ -84,6 +97,15 @@ export function ExpenseForm({ open, onOpenChange, expense }: ExpenseFormProps) {
     if (!next) reset()
     onOpenChange(next)
   }
+
+  useEffect(() => {
+    if (open) {
+      setForm(expense ? toForm(expense) : emptyForm())
+      setSaving(false)
+      setUploading(false)
+      setError(null)
+    }
+  }, [open, expense])
 
   const handleReceipt = async (file: File | undefined) => {
     if (!file) return

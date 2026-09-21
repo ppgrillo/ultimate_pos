@@ -1,27 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import PhoneNumberInput, { type Country, type Value } from 'react-phone-number-input'
+import 'react-phone-number-input/style.css'
 import { cn } from '@/lib/utils'
-
-const COUNTRY_CODES = [
-  { code: 'MX', dial: '+52', flag: '🇲🇽' },
-  { code: 'US', dial: '+1', flag: '🇺🇸' },
-  { code: 'CA', dial: '+1', flag: '🇨🇦' },
-  { code: 'AR', dial: '+54', flag: '🇦🇷' },
-  { code: 'BR', dial: '+55', flag: '🇧🇷' },
-  { code: 'CO', dial: '+57', flag: '🇨🇴' },
-  { code: 'CL', dial: '+56', flag: '🇨🇱' },
-  { code: 'PE', dial: '+51', flag: '🇵🇪' },
-  { code: 'ES', dial: '+34', flag: '🇪🇸' },
-]
 
 export interface PhoneInputProps {
   value?: string
   onChange?: (value: string) => void
   label?: string
   error?: string
-  defaultCountry?: string
+  defaultCountry?: Country
   placeholder?: string
+  className?: string
+}
+
+function normalize(value: string): string {
+  const cleaned = value.replace(/[^\d+]/g, '')
+  if (!cleaned) return ''
+  return cleaned.startsWith('+') ? cleaned : `+${cleaned}`
 }
 
 export function PhoneInput({
@@ -31,39 +27,12 @@ export function PhoneInput({
   error,
   defaultCountry = 'MX',
   placeholder = '555 123 4567',
+  className,
 }: PhoneInputProps) {
-  const defaultEntry = COUNTRY_CODES.find((c) => c.code === defaultCountry) ?? COUNTRY_CODES[0]
-
-  // Parse existing value to extract dial code and local part
-  const findEntry = () => {
-    for (const entry of COUNTRY_CODES) {
-      if (value.startsWith(entry.dial + ' ') || value.startsWith(entry.dial)) {
-        return entry
-      }
-    }
-    return defaultEntry
-  }
-
-  const [selected, setSelected] = useState(findEntry)
-
-  const localPart = value.startsWith(selected.dial)
-    ? value.slice(selected.dial.length).replace(/^\s+/, '')
-    : value
-
-  const handleCountryChange = (code: string) => {
-    const entry = COUNTRY_CODES.find((c) => c.code === code) ?? defaultEntry
-    setSelected(entry)
-    onChange?.(`${entry.dial} ${localPart}`.trim())
-  }
-
-  const handleLocalChange = (local: string) => {
-    onChange?.(`${selected.dial} ${local}`.trim())
-  }
-
   const inputId = label?.toLowerCase().replace(/\s+/g, '-') || 'phone'
 
   return (
-    <div className="space-y-1">
+    <div className={cn('space-y-1', className)}>
       {label && (
         <label
           htmlFor={inputId}
@@ -72,39 +41,21 @@ export function PhoneInput({
           {label}
         </label>
       )}
-      <div
-        className={cn(
-          'flex h-10 w-full items-center rounded-lg border bg-surface-container text-sm transition-colors',
-          'focus-within:ring-2 focus-within:ring-primary',
-          error ? 'border-error' : 'border-outline-variant',
-        )}
-      >
-        <select
-          value={selected.code}
-          onChange={(e) => handleCountryChange(e.target.value)}
-          className="h-full rounded-l-lg bg-transparent pl-2 pr-1 text-on-surface outline-none cursor-pointer"
-          aria-label="Country code"
-        >
-          {COUNTRY_CODES.map((c) => (
-            <option key={c.code} value={c.code} className="bg-surface-container text-on-surface">
-              {c.flag} {c.dial}
-            </option>
-          ))}
-        </select>
-        <div className="w-px h-5 bg-outline-variant/40 mx-1 shrink-0" />
-        <input
-          id={inputId}
-          type="tel"
-          value={localPart}
-          onChange={(e) => handleLocalChange(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 bg-transparent px-2 text-on-surface placeholder:text-on-surface-variant/40 outline-none font-mono"
-          aria-invalid={!!error}
-          aria-describedby={error ? `${inputId}-error` : undefined}
-        />
-      </div>
+      <PhoneNumberInput
+        id={inputId}
+        value={normalize(value) || undefined}
+        onChange={(next?: Value) => onChange?.(next ?? '')}
+        defaultCountry={defaultCountry}
+        addInternationalOption={false}
+        smartCaret={false}
+        placeholder={placeholder}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={error ? `${inputId}-error` : undefined}
+        countrySelectProps={{ 'aria-label': 'Country code' }}
+        className={cn('rnpi', error && 'rnpi-error')}
+      />
       {error && (
-        <p id={`${inputId}-error`} className="text-sm text-error" role="alert">
+        <p id={`${inputId}-error`} role="alert" className="text-sm text-error">
           {error}
         </p>
       )}
