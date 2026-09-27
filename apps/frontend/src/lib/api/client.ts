@@ -15,6 +15,58 @@ export function getApiToken() {
   return _token
 }
 
+/**
+ * Guards the recovery path: a page fires many parallel requests, so without this
+ * every one of them would try to sign out and redirect.
+ */
+let unauthorizedHandled = false
+
+/**
+ * Last-resort recovery for a 401 from the backend.
+ *
+ * The most common cause of a dead session is an access token the backend no longer
+ * accepts (expired, or minted with a different signing secret). Retrying is
+ * useless in that case, and the old behaviour just threw at every call site,
+ * leaving the operator staring at a half-loaded screen with no way out.
+ *
+ * Clearing the NextAuth session is what actually fixes it: the next sign-in mints
+ * a fresh access token. Talking to `/api/auth/signout` directly (instead of
+ * `signOut()` from next-auth/react) keeps this callable from plain fetch code
+ * outside the React tree.
+ */
+export async function recoverFromUnauthorized(): Promise<void> {
+  if (unauthorizedHandled) return
+  unauthorizedHandled = true
+
+  setApiToken(null)
+
+  if (typeof window === 'undefined') return
+
+  try {
+    const csrfRes = await fetch('/api/auth/csrf', { cache: 'no-store' })
+    const { csrfToken } = (await csrfRes.json()) as { csrfToken: string }
+    const body = new URLSearchParams({
+      csrfToken,
+      callbackUrl: `${window.location.origin}/login?reason=session-expired`,
+    })
+    await fetch('/api/auth/signout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+  } catch {
+    // Sign-out is best effort: the redirect below still gets the user to a usable
+    // login screen even if the session cookie survives.
+  }
+
+  window.location.replace(`/login?reason=session-expired`)
+}
+
+/** Test seam. */
+export function __resetUnauthorizedGuard() {
+  unauthorizedHandled = false
+}
+
 interface ApiOptions extends RequestInit {
   params?: Record<string, string>
 }
@@ -45,6 +97,9 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null)
+    if (res.status === 401) {
+      void recoverFromUnauthorized()
+    }
     const errMsg = typeof body?.error === 'string'
       ? body.error
       : body?.error?.issues
@@ -74,6 +129,9 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null)
+    if (res.status === 401) {
+      void recoverFromUnauthorized()
+    }
     const err = new Error(
       body?.error?.message || body?.message || `HTTP ${res.status}`,
     )
