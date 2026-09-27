@@ -8,7 +8,8 @@ import type { AppDispatch } from './index'
 import { setApiToken } from '@/lib/api/client'
 import { useGetCurrentStoreQuery } from './api'
 import { setUser } from './slices/authSlice'
-import { setStore } from './slices/storeSlice'
+import { setStore, setStoreStatus } from './slices/storeSlice'
+import type { StoreLoadStatus } from './slices/storeSlice'
 import type { User } from '@ultimate-pos/shared'
 
 /**
@@ -19,7 +20,7 @@ function SessionSyncProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
   const dispatch = useDispatch<AppDispatch>()
   const accessToken = (session?.user as any)?.accessToken
-  const { data: currentStore } = useGetCurrentStoreQuery(undefined, { skip: !accessToken })
+  const { data: currentStore, isLoading, isFetching, isError } = useGetCurrentStoreQuery(undefined, { skip: !accessToken })
 
   useEffect(() => {
     const raw = session?.user as any
@@ -51,6 +52,18 @@ function SessionSyncProvider({ children }: { children: React.ReactNode }) {
       dispatch(setStore(currentStore))
     }
   }, [currentStore, dispatch])
+
+  // Publish the request lifecycle so consumers can distinguish "still loading" from
+  // "failed" instead of reading a null store and assuming a default.
+  useEffect(() => {
+    let status: StoreLoadStatus
+    if (!accessToken) status = 'idle'
+    else if (currentStore) status = 'ready'
+    else if (isError) status = 'error'
+    else if (isLoading || isFetching) status = 'loading'
+    else status = 'idle'
+    dispatch(setStoreStatus(status))
+  }, [accessToken, currentStore, isLoading, isFetching, isError, dispatch])
 
   return <>{children}</>
 }

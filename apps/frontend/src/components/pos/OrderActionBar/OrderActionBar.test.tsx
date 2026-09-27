@@ -1,4 +1,4 @@
-import { render, screen } from '@/test/test-utils'
+import { render, screen, readyStoreState } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { OrderActionBar } from './OrderActionBar'
 
@@ -12,6 +12,8 @@ describe('OrderActionBar', () => {
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
+        // The checkout action stays blocked until the store request resolves.
+        storeConfig: readyStoreState,
       },
     })
     expect(screen.getByText('Promo')).toBeDisabled()
@@ -32,6 +34,8 @@ describe('OrderActionBar', () => {
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
+        // The checkout action stays blocked until the store request resolves.
+        storeConfig: readyStoreState,
       },
     })
     expect(screen.getByText('$13.50')).toBeInTheDocument()
@@ -49,6 +53,8 @@ describe('OrderActionBar', () => {
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
+        // The checkout action stays blocked until the store request resolves.
+        storeConfig: readyStoreState,
       },
     })
     expect(screen.getByText('Complete Checkout')).toBeEnabled()
@@ -67,6 +73,7 @@ describe('OrderActionBar', () => {
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
         storeConfig: {
+          status: 'ready',
           currentStore: {
             id: 's1', name: 'Store', slug: 'store', address: null, phone: null,
             tax_rate: 0, currency: 'USD', owner_id: 'o1', is_active: true,
@@ -94,6 +101,7 @@ describe('OrderActionBar', () => {
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
         storeConfig: {
+          status: 'ready',
           currentStore: {
             id: 's1', name: 'Store', slug: 'store', address: null, phone: null,
             tax_rate: 0, currency: 'USD', owner_id: 'o1', is_active: true,
@@ -119,6 +127,8 @@ describe('OrderActionBar', () => {
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
+        // The checkout action stays blocked until the store request resolves.
+        storeConfig: readyStoreState,
       },
     })
     await userEvent.click(screen.getByText('Complete Checkout'))
@@ -137,6 +147,8 @@ describe('OrderActionBar', () => {
           table_number: null, order_type: 'dine-in', discount: 0, notes: null, discount_label: null,
           redeemed_points: 0, appliedPromotions: [], promoDiscount: 0,
         },
+        // The checkout action stays blocked until the store request resolves.
+        storeConfig: readyStoreState,
       },
     })
     expect(screen.getByText('Processing...')).toBeInTheDocument()

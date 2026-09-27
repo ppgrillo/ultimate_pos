@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Percent, Trash2, CreditCard, CookingPot, PlusCircle, Send, Wallet, FileText } from 'lucide-react'
+import { Percent, Trash2, CreditCard, CookingPot, PlusCircle, Send, Wallet, FileText, Loader2 } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { useStoreCheckoutReady } from '@/hooks/useStoreCheckoutReady'
 import { clearCart } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
 import { PromoModal } from '@/components/pos/PromoModal'
@@ -22,7 +23,9 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
   const hasKitchen = settings?.hasKitchen ?? false
-  const checkoutMode = settings?.checkoutMode ?? 'order-only'
+  // Stays null until the store is loaded, so the label never advertises an action
+  // ("Complete Payment" vs "Send Order") the backend would reject.
+  const { ready: storeReady, status: storeStatus, checkoutMode } = useStoreCheckoutReady()
   const orderType = useAppSelector((s) => s.cart.order_type)
   const tableNumber = useAppSelector((s) => s.cart.table_number)
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -55,7 +58,9 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   const isDineInKitchenFlow = hasKitchen && orderType === 'dine-in'
   const isTakeoutLike = orderType === 'takeaway' || orderType === 'delivery'
   const needsTable = isDineInKitchenFlow && !tableNumber
-  const canCheckout = itemsExist && !isSubmitting && !needsTable
+  // Block the action while the store configuration is unknown, so the cashier
+  // cannot submit an order that omits a required payment method.
+  const canCheckout = storeReady && itemsExist && !isSubmitting && !needsTable
 
   let actionLabel = 'Complete Checkout'
   let ActionIcon = CreditCard
@@ -63,6 +68,9 @@ export function OrderActionBar({ onCheckout, isSubmitting }: OrderActionBarProps
   if (isDineInKitchenFlow) {
     actionLabel = tableNumber ? 'Add to Table' : 'Select Table'
     ActionIcon = tableNumber ? PlusCircle : CookingPot
+  } else if (!storeReady) {
+    actionLabel = storeStatus === 'error' ? 'Retry store setup' : 'Loading…'
+    ActionIcon = Loader2
   } else if (checkoutMode === 'payment-required') {
     actionLabel = 'Complete Payment'
     ActionIcon = Wallet
