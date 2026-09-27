@@ -46,16 +46,42 @@ import { webhooksRouter } from './webhooks'
 const app = webhooksRouter
 
 async function postWebhook(body: unknown, signature?: string) {
-  const req = new Request('http://localhost/mp-point', {
+  const dataId = (body as { data?: { id?: string } })?.data?.id
+  const url = dataId ? `http://localhost/mp-point?data.id=${dataId}` : 'http://localhost/mp-point'
+  const req = new Request(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-request-id': 'req-uuid-555',
       ...(signature ? { 'x-signature': signature } : {}),
     },
     body: JSON.stringify(body),
   })
   return app.fetch(req)
 }
+
+async function signManifest(
+  secret: string,
+  dataId: string,
+  requestId: string,
+  ts: number,
+): Promise<string> {
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(`id:${dataId};request-id:${requestId};ts:${ts};`))
+  const hex = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return `ts=${ts},v1=${hex}`
+}
+
+const UPPERCASE_ORDER_ID = 'ORD01M3DHNDZQ76N1E973V5W922Z5'
 
 const validOrder = {
   id: 'order-uuid-123',
@@ -95,6 +121,53 @@ describe('webhooks POST /mp-point', () => {
         .mockResolvedValueOnce({ data: validOrder, error: null })
         .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
       const res = await postWebhook(VALID_PAYLOAD, 'ts=9999999999,v1=invalid')
+      expect(res.status).toBe(401)
+    })
+
+    // The suite had no test where a *correct* signature is accepted, so the
+    // manifest could be built wrong and every test still passed. MP answered
+    // 401 on 100% of real deliveries.
+    it('accepts a valid signature over the original-cased data.id', async () => {
+      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
+      const ts = Math.floor(Date.now() / 1000)
+      qb.single
+        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
+      const sig = await signManifest('secret123', UPPERCASE_ORDER_ID, 'req-uuid-555', ts)
+      const res = await postWebhook(payload, sig)
+      expect(res.status).toBe(200)
+    })
+
+    it('accepts a valid signature when MP signed the lowercased data.id', async () => {
+      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
+      const ts = Math.floor(Date.now() / 1000)
+      qb.single
+        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
+      const sig = await signManifest('secret123', UPPERCASE_ORDER_ID.toLowerCase(), 'req-uuid-555', ts)
+      const res = await postWebhook(payload, sig)
+      expect(res.status).toBe(200)
+    })
+
+    it('rejects a correctly formed signature made with the wrong secret', async () => {
+      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
+      const ts = Math.floor(Date.now() / 1000)
+      qb.single
+        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
+      const sig = await signManifest('attacker-secret', UPPERCASE_ORDER_ID, 'req-uuid-555', ts)
+      const res = await postWebhook(payload, sig)
+      expect(res.status).toBe(401)
+    })
+
+    it('rejects a valid signature replayed outside the 5 minute window', async () => {
+      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
+      const staleTs = Math.floor(Date.now() / 1000) - 3600
+      qb.single
+        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
+      const sig = await signManifest('secret123', UPPERCASE_ORDER_ID, 'req-uuid-555', staleTs)
+      const res = await postWebhook(payload, sig)
       expect(res.status).toBe(401)
     })
   })

@@ -36,24 +36,37 @@ async function verifySignature(
   const tsMs = tsNum > 1e12 ? tsNum : tsNum * 1000
   if (Math.abs(now - tsMs) > 300000) return false
 
-  const orderId = dataId?.toLowerCase()
-  const requestId = xRequestId
-
-  if (!orderId || !requestId) return false
-
-  const dataToSign = `id:${orderId};request-id:${requestId};ts:${ts};`
+  if (!dataId || !xRequestId) return false
 
   const encoder = new TextEncoder()
-  const keyData = encoder.encode(clientSecret)
-  const messageData = encoder.encode(dataToSign)
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(clientSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
 
-  const key = await crypto.subtle
-    .importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const signature = await crypto.subtle.sign('HMAC', key, messageData)
-  const computed = Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return computed === receivedHash
+  // MP builds the manifest from data.id exactly as it sent it in the query
+  // string, so the hash is over the original casing. Order ids are uppercase
+  // (ORD01...), but older docs show lowercase and we cannot observe which one
+  // a given delivery used — try both. This is not a bypass: every candidate is
+  // still HMAC-verified with the store secret, so a forged header still fails.
+  const candidates = dataId === dataId.toLowerCase() ? [dataId] : [dataId, dataId.toLowerCase()]
+
+  for (const orderId of candidates) {
+    const dataToSign = `id:${orderId};request-id:${xRequestId};ts:${ts};`
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(dataToSign))
+    const computed = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    if (computed === receivedHash) {
+      console.log(`[mp-point-webhook] Signature OK (casing matched: ${orderId === dataId ? 'as-sent' : 'lowercased'})`)
+      return true
+    }
+  }
+
+  return false
 }
 
 async function getOrderByMpOrderId(mpOrderId: string) {
