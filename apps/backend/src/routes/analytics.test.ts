@@ -89,6 +89,24 @@ const PAID_ORDER = {
   ],
 }
 
+// A card payment that was created on the terminal but never completed. MP Point
+// orders expire after PT3M, so this shape is routine, not hypothetical: the order
+// stays non-cancelled forever and used to be counted as revenue.
+const UNPAID_ORDER = {
+  id: 'unpaid-order-1',
+  status: 'pending',
+  payment_status: 'unpaid',
+  type: 'dine-in',
+  subtotal: '1350.00',
+  tax: '0.00',
+  discount: '0.00',
+  promo_discount: '0.00',
+  metadata: {},
+  total: '1350.00',
+  created_at: '2026-07-31T21:05:00.000Z',
+  payments: [{ method: 'card', status: 'pending', amount: '1350.00' }],
+}
+
 describe('analytics routes', () => {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
@@ -164,6 +182,66 @@ describe('analytics routes', () => {
     expect(body.data.ordersByPayment).toEqual({ Card: 1 })
     expect(body.data.paymentStatusBreakdown).toEqual({ paid: 1 })
     expect(body.data.newCustomers).toBe(0)
+  })
+
+  it('GET /overview excludes unpaid orders from revenue and reports them as pending', async () => {
+    const currentQuery = listQuery({ data: [PAID_ORDER, UNPAID_ORDER], error: null })
+    queueFromCalls([
+      { table: 'orders', value: currentQuery },
+      { table: 'orders', value: listQuery({ data: [], error: null }) },
+      { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
+      { table: 'expenses', value: listQuery({ data: [], error: null }) },
+      { table: 'order_items', value: listQuery({ data: [], error: null }) },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/analytics/overview?${CUSTOM_PARAMS}`, {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    // The 1350 was never collected, so it must not inflate any total.
+    expect(body.data.revenue).toBe(350)
+    expect(body.data.orderCount).toBe(1)
+    expect(body.data.avgOrderValue).toBe(350)
+    expect(body.data.grossSales).toBe(350)
+    expect(body.data.grossProfit).toBe(350)
+    // ...but it stays visible instead of disappearing.
+    expect(body.data.pendingRevenue).toBe(1350)
+    expect(body.data.pendingOrderCount).toBe(1)
+    expect(body.data.ordersByPayment).toEqual({ Card: 1 })
+    expect(body.data.revenueByPayment).toEqual({ Card: 350 })
+    // The paid/unpaid split is the whole point of the breakdown.
+    expect(body.data.paymentStatusBreakdown).toEqual({ paid: 1, unpaid: 1 })
+  })
+
+  it('GET /sales excludes unpaid orders from revenue and from the trend series', async () => {
+    const currentQuery = listQuery({ data: [PAID_ORDER, UNPAID_ORDER], error: null })
+    queueFromCalls([
+      { table: 'orders', value: currentQuery },
+      { table: 'orders', value: listQuery({ data: [], error: null }) },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/analytics/sales?${CUSTOM_PARAMS}`, {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    expect(body.data.revenue).toBe(350)
+    expect(body.data.orderCount).toBe(1)
+    expect(body.data.avgOrderValue).toBe(350)
+    expect(body.data.pendingRevenue).toBe(1350)
+    expect(body.data.pendingOrderCount).toBe(1)
+
+    // The hourly series must only carry the settled hour, otherwise the Revenue
+    // Trend chart keeps showing a 1350 spike that the KPI no longer reports.
+    const hours = body.data.revenueByTime as Array<{ label: string; revenue: number }>
+    expect(hours).toHaveLength(24)
+    expect(hours.find((h) => h.revenue > 0)?.label).toBe('19:00')
+    expect(hours.reduce((sum, h) => sum + h.revenue, 0)).toBe(350)
   })
 
   it('GET /overview computes cogs, gross profit and net profit from product costs', async () => {
@@ -277,8 +355,8 @@ describe('analytics routes', () => {
   it('GET /products allocates net revenue across line items', async () => {
     const ordersQuery = listQuery({
       data: [
-        { id: 'o1', subtotal: 1000, total: 900 }, // $100 discount
-        { id: 'o2', subtotal: 500, total: 500 },
+        { id: 'o1', subtotal: 1000, total: 900, payment_status: 'paid' }, // $100 discount
+        { id: 'o2', subtotal: 500, total: 500, payment_status: 'paid' },
       ],
       error: null,
     })
@@ -321,8 +399,8 @@ describe('analytics routes', () => {
     const now = new Date()
     const currentQuery = listQuery({
       data: [
-        { id: 'd-paid', status: 'paid', total: '350.00', created_at: now.toISOString() },
-        { id: 'd-served', status: 'served', total: '450.00', created_at: now.toISOString() },
+        { id: 'd-paid', status: 'paid', payment_status: 'paid', total: '350.00', created_at: now.toISOString() },
+        { id: 'd-served', status: 'served', payment_status: 'paid', total: '450.00', created_at: now.toISOString() },
       ],
       error: null,
     })
