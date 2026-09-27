@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { mockOrderBusEmit, qb } = vi.hoisted(() => {
+const { mockOrderBusEmit, qb, mockUpdate, mockGetPayment } = vi.hoisted(() => {
   const mockOrderBusEmit = vi.fn()
+  const mockUpdate = vi.fn((_payload: Record<string, unknown>) => ({
+    eq: vi.fn(() => Promise.resolve({ error: null })),
+  }))
+  const mockGetPayment = vi.fn()
 
   function buildQb(resolvers?: { single?: unknown }) {
     const single = resolvers?.single !== undefined
@@ -21,7 +25,7 @@ const { mockOrderBusEmit, qb } = vi.hoisted(() => {
     return {
       from: vi.fn(() => ({
         select,
-        update: vi.fn(() => ({ eq })),
+        update: mockUpdate,
         insert: vi.fn(() => ({ select: vi.fn(() => ({ single })) })),
       })),
       single,
@@ -30,7 +34,7 @@ const { mockOrderBusEmit, qb } = vi.hoisted(() => {
     }
   }
 
-  return { mockOrderBusEmit, qb: buildQb() }
+  return { mockOrderBusEmit, qb: buildQb(), mockUpdate, mockGetPayment }
 })
 
 vi.mock('../events', () => ({
@@ -40,6 +44,15 @@ vi.mock('../events', () => ({
 vi.mock('../lib/supabase/admin', () => ({
   supabaseAdmin: qb,
 }))
+
+vi.mock('../services/payments', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/payments')>()
+  return {
+    ...actual,
+    getCardProvider: (name: Parameters<typeof actual.getCardProvider>[0]) =>
+      name === 'mercado_pago' ? { getPayment: mockGetPayment } : actual.getCardProvider(name),
+  }
+})
 
 import { webhooksRouter } from './webhooks'
 
@@ -107,6 +120,12 @@ describe('webhooks POST /mp-point', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     delete process.env.MP_CLIENT_SECRET
+    mockGetPayment.mockResolvedValue({
+      providerOrderId: 'ORD_MP_001',
+      status: 'created',
+      paymentDetail: undefined,
+      paymentStatus: undefined,
+    })
   })
 
   describe('signature validation', () => {
@@ -116,12 +135,12 @@ describe('webhooks POST /mp-point', () => {
       expect(res.status).toBe(200)
     })
 
-    it('rejects when signature is wrong', async () => {
+    it('no longer blocks the update when the signature does not verify', async () => {
       qb.single
         .mockResolvedValueOnce({ data: validOrder, error: null })
-        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
+        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123', mpPointAccessToken: 'tok' } }, error: null })
       const res = await postWebhook(VALID_PAYLOAD, 'ts=9999999999,v1=invalid')
-      expect(res.status).toBe(401)
+      expect(res.status).toBe(200)
     })
 
     // The suite had no test where a *correct* signature is accepted, so the
@@ -148,27 +167,72 @@ describe('webhooks POST /mp-point', () => {
       const res = await postWebhook(payload, sig)
       expect(res.status).toBe(200)
     })
+  })
 
-    it('rejects a correctly formed signature made with the wrong secret', async () => {
-      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
-      const ts = Math.floor(Date.now() / 1000)
+  // The endpoint now treats the notification purely as a trigger and asks the
+  // provider for the real state, so these cover the two properties that matter:
+  // a genuine sale gets reconciled, and a forged payload cannot invent one.
+  describe('MP is the source of truth', () => {
+    const settings = { mpClientSecret: 'secret123', mpPointAccessToken: 'tok' }
+
+    it('marks the order paid when MP reports processed, even with an unverifiable signature', async () => {
+      mockGetPayment.mockResolvedValue({
+        providerOrderId: 'ORD_MP_001',
+        status: 'processed',
+        paymentDetail: 'accredited',
+        paymentStatus: 'processed',
+      })
       qb.single
-        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
-        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
-      const sig = await signManifest('attacker-secret', UPPERCASE_ORDER_ID, 'req-uuid-555', ts)
-      const res = await postWebhook(payload, sig)
-      expect(res.status).toBe(401)
+        .mockResolvedValueOnce({ data: validOrder, error: null })
+        .mockResolvedValueOnce({ data: { settings }, error: null })
+      const res = await postWebhook(VALID_PAYLOAD, 'ts=1,v1=deadbeef')
+      expect(res.status).toBe(200)
+      expect(mockGetPayment).toHaveBeenCalledWith('ORD_MP_001', expect.objectContaining({ accessToken: 'tok' }))
+      const updates = mockUpdate.mock.calls.map((c) => c[0] as Record<string, unknown>)
+      expect(updates.some((u) => u.status === 'paid' && u.payment_status === 'paid')).toBe(true)
     })
 
-    it('rejects a valid signature replayed outside the 5 minute window', async () => {
-      const payload = { ...VALID_PAYLOAD, data: { id: UPPERCASE_ORDER_ID } }
-      const staleTs = Math.floor(Date.now() / 1000) - 3600
+    it('ignores a forged order.processed when MP still reports the order as created', async () => {
+      mockGetPayment.mockResolvedValue({
+        providerOrderId: 'ORD_MP_001',
+        status: 'created',
+        paymentDetail: undefined,
+        paymentStatus: undefined,
+      })
       qb.single
-        .mockResolvedValueOnce({ data: { ...validOrder, metadata: { mpOrderId: UPPERCASE_ORDER_ID, mpOrderStatus: 'created' } }, error: null })
-        .mockResolvedValueOnce({ data: { settings: { mpClientSecret: 'secret123' } }, error: null })
-      const sig = await signManifest('secret123', UPPERCASE_ORDER_ID, 'req-uuid-555', staleTs)
-      const res = await postWebhook(payload, sig)
-      expect(res.status).toBe(401)
+        .mockResolvedValueOnce({ data: validOrder, error: null })
+        .mockResolvedValueOnce({ data: { settings }, error: null })
+      const res = await postWebhook(VALID_PAYLOAD, 'ts=1,v1=deadbeef')
+      expect(res.status).toBe(200)
+      const updates = mockUpdate.mock.calls.map((c) => c[0] as Record<string, unknown>)
+      expect(updates.some((u) => u.status === 'paid')).toBe(false)
+    })
+
+    it('cancels the order when MP reports expired, ignoring the processed action', async () => {
+      mockGetPayment.mockResolvedValue({
+        providerOrderId: 'ORD_MP_001',
+        status: 'expired',
+        paymentDetail: 'expired',
+        paymentStatus: 'expired',
+      })
+      qb.single
+        .mockResolvedValueOnce({ data: validOrder, error: null })
+        .mockResolvedValueOnce({ data: { settings }, error: null })
+      const res = await postWebhook(VALID_PAYLOAD, 'ts=1,v1=deadbeef')
+      expect(res.status).toBe(200)
+      const updates = mockUpdate.mock.calls.map((c) => c[0] as Record<string, unknown>)
+      expect(updates.some((u) => u.status === 'cancelled')).toBe(true)
+      expect(updates.some((u) => u.status === 'paid')).toBe(false)
+    })
+
+    it('accepts without mutating when the provider poll fails', async () => {
+      mockGetPayment.mockRejectedValue(new Error('mp unreachable'))
+      qb.single
+        .mockResolvedValueOnce({ data: validOrder, error: null })
+        .mockResolvedValueOnce({ data: { settings }, error: null })
+      const res = await postWebhook(VALID_PAYLOAD)
+      expect(res.status).toBe(200)
+      expect(mockUpdate).not.toHaveBeenCalled()
     })
   })
 
