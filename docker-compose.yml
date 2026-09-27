@@ -1,6 +1,10 @@
 services:
-  backend:
-    container_name: ovejapos-dev-backend
+  # Service key MUST equal container_name: this project shares the external `proxy`
+  # network with ovejaposDEV, and a generic key like `backend` would register the
+  # same DNS alias in both stacks, making `backend:3001` resolve round-robin to
+  # either environment. That caused the 2026-09-26 outage.
+  ovejapos-prd-backend:
+    container_name: ovejapos-prd-backend
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,7 +16,7 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - CORS_ORIGIN=https://dev.ovejapos.ovejasautomaticas.com
+      - CORS_ORIGIN=https://ovejapos.ovejasautomaticas.com
       - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY}
       - GOOGLE_SERVICE_ACCOUNT_PATH=/app/certs/service-account-key.json
       - GOOGLE_WALLET_ISSUER_ID=${GOOGLE_WALLET_ISSUER_ID}
@@ -33,19 +37,20 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_PRICE_ID=${STRIPE_PRICE_ID}
       - FRONTEND_URL=${FRONTEND_URL}
+      - PUBLIC_API_URL=https://api-ovejapos.ovejasautomaticas.com
     volumes:
       - ./certs:/app/certs:ro
     networks:
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ovejapos-dev-api.rule=Host(`api-dev.ovejapos.ovejasautomaticas.com`)"
-      - "traefik.http.routers.ovejapos-dev-api.entrypoints=websecure"
-      - "traefik.http.routers.ovejapos-dev-api.tls.certresolver=myresolver"
-      - "traefik.http.services.ovejapos-dev-api.loadbalancer.server.port=3001"
+      - "traefik.http.routers.ovejapos-prd-api.rule=Host(`api-ovejapos.ovejasautomaticas.com`)"
+      - "traefik.http.routers.ovejapos-prd-api.entrypoints=websecure"
+      - "traefik.http.routers.ovejapos-prd-api.tls.certresolver=myresolver"
+      - "traefik.http.services.ovejapos-prd-api.loadbalancer.server.port=3001"
 
-  frontend:
-    container_name: ovejapos-dev-frontend
+  ovejapos-prd-frontend:
+    container_name: ovejapos-prd-frontend
     build:
       context: .
       dockerfile: Dockerfile
@@ -53,26 +58,22 @@ services:
     restart: always
     environment:
       - PORT=3000
-      - NEXT_PUBLIC_API_URL=http://backend:3001
-      - NEXTAUTH_URL=https://dev.ovejapos.ovejasautomaticas.com
+      - NEXT_PUBLIC_API_URL=http://ovejapos-prd-backend:3001
+      - NEXTAUTH_URL=https://ovejapos.ovejasautomaticas.com
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST}
       - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
       - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
     depends_on:
-      - backend
+      - ovejapos-prd-backend
     networks:
       - proxy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ovejapos-dev-frontend.rule=Host(`dev.ovejapos.ovejasautomaticas.com`)"
-      - "traefik.http.routers.ovejapos-dev-frontend.entrypoints=websecure"
-      - "traefik.http.routers.ovejapos-dev-frontend.tls.certresolver=myresolver"
-      - "traefik.http.services.ovejapos-dev-frontend.loadbalancer.server.port=3000"
-      - "traefik.http.routers.ovejapos-dev-frontend.middlewares=ovejapos-rate-limit"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.average=50"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.burst=100"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.period=1s"
+      - "traefik.http.routers.ovejapos-prd-frontend.rule=Host(`ovejapos.ovejasautomaticas.com`)"
+      - "traefik.http.routers.ovejapos-prd-frontend.entrypoints=websecure"
+      - "traefik.http.routers.ovejapos-prd-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.ovejapos-prd-frontend.loadbalancer.server.port=3000"
 
 networks:
   proxy:
