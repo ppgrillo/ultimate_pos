@@ -55,6 +55,10 @@ export interface SalesData {
   avgOrderValue: number
   previousPeriodRevenue: number
   revenueChange: number
+  // Orders whose payment was never settled. Excluded from every total above so
+  // Revenue matches the payment charts, but surfaced so the money is visible.
+  pendingRevenue: number
+  pendingOrderCount: number
   revenueByTime: Array<{ label: string; revenue: number; count: number }>
 }
 
@@ -72,6 +76,8 @@ export interface AnalyticsOverview {
   orderChange: number | null
   avgOrderValue: number
   avgChange: number | null
+  pendingRevenue: number
+  pendingOrderCount: number
   newCustomers: number
   grossSales: number
   discounts: number

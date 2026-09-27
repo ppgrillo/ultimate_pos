@@ -46,23 +46,34 @@ analyticsRouter.get('/sales', async (c) => {
 
   if (error) throw badRequest(error.message)
 
-  const revenue = (orders || []).reduce((sum, o) => sum + Number(o.total || 0), 0)
-  const orderCount = (orders || []).length
+  // Only settled orders are revenue. A card payment that was created but never
+  // completed is not money in the register, and counting it made the Revenue
+  // card disagree with the payment-method charts, which credit only completed
+  // payments. Unpaid orders are surfaced separately so the money stays visible
+  // instead of silently inflating every total.
+  const allOrders = orders || []
+  const paidOrders = allOrders.filter((o) => o.payment_status === 'paid')
+  const pendingOrders = allOrders.filter((o) => o.payment_status !== 'paid')
+  const pendingRevenue = pendingOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+
+  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const orderCount = paidOrders.length
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0
 
   const { prevStart, prevEnd } = getPreviousPeriodRange(start, end)
 
   const { data: prevOrders } = await supabase
     .from('orders')
-    .select('id, total')
+    .select('id, total, payment_status')
     .eq('store_id', storeId)
     .gte('created_at', prevStart.toISOString())
     .lte('created_at', prevEnd.toISOString())
     .not('status', 'eq', 'cancelled')
     .not('status', 'eq', 'refunded')
 
-  const prevRevenue = (prevOrders || []).reduce((sum, o) => sum + Number(o.total || 0), 0)
-  const prevOrderCount = (prevOrders || []).length
+  const prevPaidOrders = (prevOrders || []).filter((o) => o.payment_status === 'paid')
+  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const prevOrderCount = prevPaidOrders.length
   const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
 
   const isHourly = period === 'today' || (period === 'custom' && from && to && from === to)
@@ -73,7 +84,7 @@ analyticsRouter.get('/sales', async (c) => {
     const hourMap = new Map<number, { revenue: number; count: number }>()
     for (let h = 0; h < 24; h++) hourMap.set(h, { revenue: 0, count: 0 })
 
-    for (const order of orders || []) {
+    for (const order of paidOrders) {
       const hour = getHourInTimezone(new Date(order.created_at), tz)
       const entry = hourMap.get(hour)!
       entry.revenue += Number(order.total || 0)
@@ -88,7 +99,7 @@ analyticsRouter.get('/sales', async (c) => {
   } else {
     const dayMap = new Map<string, { revenue: number; count: number }>()
 
-    for (const order of orders || []) {
+    for (const order of paidOrders) {
       const dateKey = getDateKeyInTimezone(new Date(order.created_at), tz)
       const existing = dayMap.get(dateKey) || { revenue: 0, count: 0 }
       existing.revenue += Number(order.total || 0)
@@ -112,6 +123,8 @@ analyticsRouter.get('/sales', async (c) => {
       avgOrderValue: Math.round(avgOrderValue * 100) / 100,
       previousPeriodRevenue: Math.round(prevRevenue * 100) / 100,
       revenueChange: revenueChange === null ? null : Math.round(revenueChange * 10) / 10,
+      pendingRevenue: Math.round(pendingRevenue * 100) / 100,
+      pendingOrderCount: pendingOrders.length,
       revenueByTime,
     },
   })
@@ -130,7 +143,7 @@ analyticsRouter.get('/products', async (c) => {
 
   const { data: orders, error: ordersError } = await supabase
     .from('orders')
-    .select('id, subtotal, total')
+    .select('id, subtotal, total, payment_status')
     .eq('store_id', storeId)
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
@@ -139,8 +152,13 @@ analyticsRouter.get('/products', async (c) => {
 
   if (ordersError) throw badRequest(ordersError.message)
 
+  // Only paid orders, so product revenue keeps summing exactly to the Revenue
+  // card (the allocation below scales by total/subtotal and assumes both sides
+  // see the same order set).
+  const paidOrders = (orders || []).filter((o) => o.payment_status === 'paid')
+
   const orderTotals = new Map<string, { subtotal: number; total: number }>()
-  for (const order of orders || []) {
+  for (const order of paidOrders) {
     orderTotals.set(order.id, {
       subtotal: Number(order.subtotal || 0),
       total: Number(order.total || 0),
@@ -211,7 +229,7 @@ analyticsRouter.get('/overview', async (c) => {
       .not('status', 'eq', 'refunded'),
     supabase
       .from('orders')
-      .select('id, total')
+      .select('id, total, payment_status')
       .eq('store_id', storeId)
       .gte('created_at', prevStart.toISOString())
       .lte('created_at', prevEnd.toISOString())
@@ -242,17 +260,26 @@ analyticsRouter.get('/overview', async (c) => {
     else operatingExpenses += amount
   }
 
-  const revenue = orders.reduce((sum, o) => sum + Number(o.total || 0), 0)
-  const prevRevenue = prevOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
-  const orderCount = orders.length
-  const prevOrderCount = prevOrders.length
+  // Same rule as /sales: only settled orders count toward revenue, profit, COGS
+  // and the payment breakdown. Unpaid orders are reported as pending so the
+  // Revenue card and the payment-method charts agree.
+  const allOrders = orders || []
+  const paidOrders = allOrders.filter((o) => o.payment_status === 'paid')
+  const pendingOrders = allOrders.filter((o) => o.payment_status !== 'paid')
+  const pendingRevenue = pendingOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+
+  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const prevPaidOrders = (prevOrders || []).filter((o) => o.payment_status === 'paid')
+  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const orderCount = paidOrders.length
+  const prevOrderCount = prevPaidOrders.length
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0
   const prevAvgOrderValue = prevOrderCount > 0 ? prevRevenue / prevOrderCount : 0
 
   let grossSales = 0
   let discounts = 0
   let taxCollected = 0
-  for (const order of orders) {
+  for (const order of paidOrders) {
     grossSales += Number(order.subtotal || 0)
     taxCollected += Number(order.tax || 0)
     const rewardDiscount = Number((order.metadata as Record<string, unknown> | null)?.redeemedRewardDiscount || 0)
@@ -261,7 +288,7 @@ analyticsRouter.get('/overview', async (c) => {
 
   let itemsSold = 0
   let cogs = 0
-  const orderIds = orders.map((o) => o.id)
+  const orderIds = paidOrders.map((o) => o.id)
   if (orderIds.length > 0) {
     const { data: orderItems } = await supabase
       .from('order_items')
@@ -298,7 +325,7 @@ analyticsRouter.get('/overview', async (c) => {
   }
 
   const ordersByType: Record<string, number> = {}
-  for (const order of orders) {
+  for (const order of paidOrders) {
     const t = TYPE_LABELS[order.type] || order.type || 'Other'
     ordersByType[t] = (ordersByType[t] || 0) + 1
   }
@@ -314,7 +341,7 @@ analyticsRouter.get('/overview', async (c) => {
   const ordersByPayment: Record<string, number> = {}
   const revenueByPayment: Record<string, number> = {}
   const countedOrderIds = new Set<string>()
-  for (const order of orders) {
+  for (const order of paidOrders) {
     const payments = (order as any).payments
     if (Array.isArray(payments) && payments.length > 0) {
       for (const p of payments) {
@@ -332,8 +359,10 @@ analyticsRouter.get('/overview', async (c) => {
     }
   }
 
+  // Deliberately over every order, paid or not: this is the paid/unpaid split,
+  // so it is where an abandoned payment becomes visible.
   const paymentStatusBreakdown: Record<string, number> = {}
-  for (const order of orders) {
+  for (const order of allOrders) {
     const status = order.payment_status || 'unknown'
     paymentStatusBreakdown[status] = (paymentStatusBreakdown[status] || 0) + 1
   }
@@ -350,6 +379,8 @@ analyticsRouter.get('/overview', async (c) => {
       orderChange: orderChange === null ? null : Math.round(orderChange * 10) / 10,
       avgOrderValue: Math.round(avgOrderValue * 100) / 100,
       avgChange: avgChange === null ? null : Math.round(avgChange * 10) / 10,
+      pendingRevenue: Math.round(pendingRevenue * 100) / 100,
+      pendingOrderCount: pendingOrders.length,
       newCustomers: customersResult.count || 0,
       grossSales: Math.round(grossSales * 100) / 100,
       discounts: Math.round(discounts * 100) / 100,
@@ -378,7 +409,7 @@ analyticsRouter.get('/dashboard-stats', async (c) => {
 
   const { data: todayOrders, error } = await supabase
     .from('orders')
-    .select('id, total, status, created_at')
+    .select('id, total, status, payment_status, created_at')
     .eq('store_id', storeId)
     .gte('created_at', todayStart.toISOString())
     .not('status', 'eq', 'cancelled')
@@ -386,15 +417,18 @@ analyticsRouter.get('/dashboard-stats', async (c) => {
 
   if (error) throw badRequest(error.message)
 
-  const todayRevenue = (todayOrders || []).reduce((sum, o) => sum + Number(o.total || 0), 0)
-  const todayOrderCount = (todayOrders || []).length
+  // Revenue counts settled orders only, matching /sales and /overview.
+  // activeOrders is a workflow counter, so it still looks at every open order.
+  const todayPaidOrders = (todayOrders || []).filter((o) => o.payment_status === 'paid')
+  const todayRevenue = todayPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const todayOrderCount = todayPaidOrders.length
   const activeOrders = (todayOrders || []).filter(
     (o) => o.status === 'pending' || o.status === 'preparing',
   ).length
 
   const hourMap = new Map<number, { revenue: number; count: number }>()
   for (let h = 0; h < 24; h++) hourMap.set(h, { revenue: 0, count: 0 })
-  for (const order of todayOrders || []) {
+  for (const order of todayPaidOrders) {
     const hour = getHourInTimezone(new Date(order.created_at), tz)
     const entry = hourMap.get(hour)!
     entry.revenue += Number(order.total || 0)
