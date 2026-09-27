@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { DashboardContent } from '@/components/layout/DashboardContent'
 import { DashboardMobileNav } from '@/components/layout/DashboardMobileNav'
 import { BillingGate } from '@/components/billing/BillingGate'
+import { BuildIdGuard } from '@/components/BuildIdGuard'
 
 export default function DashboardLayout({
   children,
@@ -14,6 +15,8 @@ export default function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
+      {/* Reloads tabs left open across a deploy, so Server Action ids stay valid. */}
+      <BuildIdGuard />
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <MobileDrawer />
