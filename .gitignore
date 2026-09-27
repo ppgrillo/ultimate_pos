@@ -10,12 +10,11 @@ dist/
 out/
 
 # env
-.env
-.env.local
-.env.production
-.env*.local
-.env.prod
-.env.prod.*
+# Catch-all: ignora TODO archivo .env* — .env, .env.nuevo, .env.prod, .env.local
+# y TAMBIÉN .env.example (contiene STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+# y APPLE_PASS_KEY_PASSPHRASE reales, 13 valores que coinciden con .env.nuevo).
+# Si necesitas una plantilla, hay que generarla a mano sin valores reales.
+.env*
 
 # credentials
 service-account-key.json
