@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { recoverFromUnauthorized } from '@/lib/api/client'
 import type {
   Check,
   CheckWithOrders,
@@ -193,16 +194,32 @@ interface EnrollResult {
   pass: { id: string }
 }
 
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: '/api',
+  prepareHeaders: (headers) => {
+    const token = (globalThis as any).__apiToken ?? null
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    return headers
+  },
+})
+
+/**
+ * A 401 is never transient: the access token is dead (expired, or signed with a
+ * secret the backend does not know) and no retry can recover it. RTK Query would
+ * otherwise leave every panel in a permanent error state with no way forward, so
+ * clear the session and bounce to login.
+ */
+const baseQuery: typeof rawBaseQuery = async (args, apiInstance, extraOptions) => {
+  const result = await rawBaseQuery(args, apiInstance, extraOptions)
+  if (result.error && result.error.status === 401) {
+    void recoverFromUnauthorized()
+  }
+  return result
+}
+
 export const api = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: '/api',
-    prepareHeaders: (headers) => {
-      const token = (globalThis as any).__apiToken ?? null
-      if (token) headers.set('Authorization', `Bearer ${token}`)
-      return headers
-    },
-  }),
+  baseQuery,
   tagTypes: ['Product', 'Category', 'Customer', 'Order', 'Check', 'Store', 'Terminal', 'LoyaltyCard', 'Promotion', 'Reward', 'Expense', 'Supplier', 'Analytics', 'Billing'],
   endpoints: (builder) => ({
     getProducts: builder.query<Product[], void>({
