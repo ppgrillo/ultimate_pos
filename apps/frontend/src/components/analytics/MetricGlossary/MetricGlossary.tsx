@@ -20,6 +20,7 @@ interface Term {
   example?: string
   description: string
   highlight?: boolean
+  muted?: boolean
 }
 
 export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = false }: MetricGlossaryProps) {
@@ -112,6 +113,21 @@ export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = fals
     },
   ]
 
+  // Unpaid orders are not revenue, so they are a footnote rather than a top-line
+  // metric. Only surfaced when there is something to report.
+  if (overview.pendingOrderCount > 0) {
+    terms.push({
+      key: 'pending-payment',
+      name: 'Pending Payment',
+      value: formatCurrency(overview.pendingRevenue),
+      formula: 'Σ orders.total where payment_status ≠ paid',
+      example: `${overview.pendingOrderCount} unpaid ${overview.pendingOrderCount === 1 ? 'order' : 'orders'}`,
+      description:
+        'Orders whose payment never completed — abandoned or failed checkout. Excluded from Revenue, Gross Profit and Net Profit, so an unpaid order stays visible without inflating the totals.',
+      muted: true,
+    })
+  }
+
   const reconciliationFormula = taxInclusive
     ? 'Revenue = Gross Sales − Discounts'
     : 'Revenue = Gross Sales + Tax − Discounts'
@@ -137,6 +153,7 @@ export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = fals
               className={cn(
                 'rounded-lg border border-outline-variant/20 bg-surface-container/40 px-3 py-2.5',
                 term.highlight && 'border-l-2 border-l-primary',
+                term.muted && 'opacity-70',
               )}
             >
               <div className="flex items-baseline justify-between gap-3">

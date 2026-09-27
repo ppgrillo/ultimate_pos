@@ -10,6 +10,8 @@ const overview: AnalyticsOverview = {
   orderChange: null,
   avgOrderValue: 544.77,
   avgChange: null,
+  pendingRevenue: 0,
+  pendingOrderCount: 0,
   newCustomers: 14,
   grossSales: 70350,
   discounts: 2798,
@@ -82,5 +84,23 @@ describe('MetricGlossary', () => {
     render(<MetricGlossary overview={overview} taxLabel="IVA" />)
     expect(screen.getByText('IVA')).toBeInTheDocument()
     expect(screen.queryByText('Tax')).not.toBeInTheDocument()
+  })
+
+  it('hides the pending payment term when every order is settled', () => {
+    render(<MetricGlossary overview={overview} />)
+    expect(screen.queryByText('Pending Payment')).not.toBeInTheDocument()
+  })
+
+  it('shows the pending payment term with its value when orders are unpaid', () => {
+    render(<MetricGlossary overview={overview} {...{ pendingRevenue: 1350, pendingOrderCount: 1 }} />)
+    expect(screen.getByText('Pending Payment')).toBeInTheDocument()
+    expect(screen.getByText('$1,350.00')).toBeInTheDocument()
+    expect(screen.getByText('Σ orders.total where payment_status ≠ paid')).toBeInTheDocument()
+    expect(screen.getByText('Your values: 1 unpaid order')).toBeInTheDocument()
+  })
+
+  it('pluralizes unpaid orders in the pending payment term', () => {
+    render(<MetricGlossary overview={overview} {...{ pendingRevenue: 400, pendingOrderCount: 3 }} />)
+    expect(screen.getByText('Your values: 3 unpaid orders')).toBeInTheDocument()
   })
 })
