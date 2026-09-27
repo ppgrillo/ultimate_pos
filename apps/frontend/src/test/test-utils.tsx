@@ -32,6 +32,38 @@ export function createTestStore(preloadedState?: Partial<ReturnType<typeof rootR
   })
 }
 
+/**
+ * A ready-to-use store for tests that render components gated on the store
+ * request.
+ *
+ * Components block checkout while `GET /stores/current` is pending or failed (see
+ * `useStoreCheckoutReady`), so tests exercising those components must supply a
+ * ready store. Opt-in on purpose: applying it globally would silently change what
+ * unrelated components render (e.g. `DesktopLeftNav` shows the store name in place
+ * of its 'NeoPOS' fallback).
+ */
+export const readyStoreState: NonNullable<
+  Partial<ReturnType<typeof rootReducer>>['storeConfig']
+> = {
+  status: 'ready',
+  currentStore: {
+    id: 's1',
+    name: 'Store',
+    slug: 'store',
+    address: null,
+    phone: null,
+    tax_rate: 0,
+    currency: 'USD',
+    owner_id: 'o1',
+    is_active: true,
+    settings: { hasKitchen: false, checkoutMode: 'order-only' },
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+  } as unknown as NonNullable<
+    ReturnType<typeof rootReducer>
+  >['storeConfig']['currentStore'],
+}
+
 interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
   preloadedState?: Partial<ReturnType<typeof rootReducer>>
 }

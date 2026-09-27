@@ -40,6 +40,7 @@ const defaultPreload = {
     promoDiscount: 0,
   },
   storeConfig: {
+    status: 'ready',
     currentStore: {
       id: 's1',
       name: 'Store',

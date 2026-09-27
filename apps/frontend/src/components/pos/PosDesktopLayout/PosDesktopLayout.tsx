@@ -21,6 +21,7 @@ import { setQuickSaleOpen } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { getActiveCardProvider, cardProviderShortName, readOrderPayment } from '@/lib/card-payments'
 import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
+import { useStoreCheckoutReady } from '@/hooks/useStoreCheckoutReady'
 import { LayoutPanelTop, ShoppingBag, Search, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Check, PaymentMethod, ProductCategory } from '@ultimate-pos/shared'
@@ -90,7 +91,9 @@ export function PosDesktopLayout({
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
   const taxEnabled = settings?.taxEnabled ?? false
-  const checkoutMode = settings?.checkoutMode ?? 'order-only'
+  // Never default this: a wrong guess submits the order without a payment method
+  // and the backend rejects it with 400 "Payment method is required".
+  const { ready: storeReady, checkoutMode, blockedMessage } = useStoreCheckoutReady()
   const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
   const mpPointEnabled = settings?.mpPointEnabled ?? false
   const activeCardProvider = getActiveCardProvider(settings)
@@ -239,6 +242,12 @@ export function PosDesktopLayout({
   }
 
   const handleSubmit = async () => {
+    // Block until the store's real settings are known.
+    if (!storeReady) {
+      setSubmitError(blockedMessage ?? 'Configuración de tienda no disponible.')
+      return
+    }
+
     if (settings?.hasKitchen && order_type === 'dine-in' && (!table_number || table_number <= 0)) {
       return
     }

@@ -20,6 +20,7 @@ import { getActiveCardProvider, cardProviderShortName, readOrderPayment } from '
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { EnrollPrompt } from '@/components/pos/EnrollPrompt'
 import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
+import { useStoreCheckoutReady } from '@/hooks/useStoreCheckoutReady'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
 export function CheckoutPanel() {
@@ -32,7 +33,10 @@ export function CheckoutPanel() {
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
   const taxEnabled = settings?.taxEnabled ?? false
-  const checkoutMode = settings?.checkoutMode ?? 'order-only'
+  // checkoutMode comes from the store request's lifecycle, not from `?? 'order-only'`.
+  // A default here would hide the payment selector while the request is in flight or
+  // after it failed, and the backend answers 400 "Payment method is required".
+  const { ready: storeReady, checkoutMode, paymentRequired, blockedReason, blockedMessage } = useStoreCheckoutReady()
   const acceptedMethods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,13 +75,14 @@ export function CheckoutPanel() {
     ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
     : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
 
-  const paymentRequired = checkoutMode === 'payment-required'
   const payLaterMode = checkoutMode === 'order-first-pay-later'
   const isCash = selectedMethod === 'cash'
   const parsedCashGiven = parseFloat(cashGiven) || 0
   const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - totalAmount) * 100) / 100) : 0
   const cashValid = parsedCashGiven >= totalAmount
-  const canSubmit = !paymentRequired || (selectedMethod !== null && (!isCash || cashValid))
+  // Never submit while the store configuration is unknown: the backend validates
+  // against the real DB value, so a guess here turns into a 400 at the worst moment.
+  const canSubmit = storeReady && (!paymentRequired || (selectedMethod !== null && (!isCash || cashValid)))
   const mpPointEnabled = settings?.mpPointEnabled ?? false
   const activeCardProvider = getActiveCardProvider(settings)
 
@@ -103,6 +108,13 @@ export function CheckoutPanel() {
   }
 
   const handleSubmit = async () => {
+    // Hard stop: without the real store settings we cannot know whether a payment
+    // method is required, and submitting a guess is exactly what produced
+    // 400 "Payment method is required".
+    if (!storeReady) {
+      setError(blockedMessage ?? 'Configuración de tienda no disponible.')
+      return
+    }
     if (paymentRequired && !selectedMethod) return
     if (isCash && !cashValid) return
     setSubmitting(true)
@@ -444,6 +456,15 @@ export function CheckoutPanel() {
           <Percent className="h-4 w-4" />
           {discount > 0 ? 'Edit Promo' : 'Add Promo'}
         </button>
+
+        {!storeReady && (
+          <div className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container/40 border-t border-outline-variant/50 flex items-center gap-2">
+            {blockedReason === 'loading' && (
+              <div className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-on-surface-variant border-t-transparent" />
+            )}
+            <span>{blockedMessage}</span>
+          </div>
+        )}
 
         <button
           onClick={handleSubmit}
