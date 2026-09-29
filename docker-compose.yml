@@ -1,8 +1,8 @@
+# NOTE: the service keys below MUST equal the container names. All environments
+# share the external `proxy` Docker network, so a generic key like `backend`
+# registers the same DNS alias in every stack and `backend:3001` resolves
+# round-robin to whichever environment -- 2026-09-26 outage. Keep the keys unique.
 services:
-  # Service key MUST equal container_name: this project shares the external `proxy`
-  # network with ovejaposPRD, and a generic key like `backend` would register the
-  # same DNS alias in both stacks, making `backend:3001` resolve round-robin to
-  # either environment. That caused the 2026-09-26 outage.
   ovejapos-dev-backend:
     container_name: ovejapos-dev-backend
     build:
@@ -37,6 +37,7 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_PRICE_ID=${STRIPE_PRICE_ID}
       - FRONTEND_URL=${FRONTEND_URL}
+      - PUBLIC_API_URL=https://api-dev.ovejapos.ovejasautomaticas.com
     volumes:
       - ./certs:/app/certs:ro
     networks:
@@ -73,10 +74,6 @@ services:
       - "traefik.http.routers.ovejapos-dev-frontend.entrypoints=websecure"
       - "traefik.http.routers.ovejapos-dev-frontend.tls.certresolver=myresolver"
       - "traefik.http.services.ovejapos-dev-frontend.loadbalancer.server.port=3000"
-      - "traefik.http.routers.ovejapos-dev-frontend.middlewares=ovejapos-rate-limit"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.average=50"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.burst=100"
-      - "traefik.http.middlewares.ovejapos-rate-limit.ratelimit.period=1s"
 
 networks:
   proxy:
