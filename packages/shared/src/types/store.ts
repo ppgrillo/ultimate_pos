@@ -30,6 +30,7 @@ export interface StoreSettings {
   mpPointTerminalId: string
   mpPointAccessToken: string
   mpClientSecret?: string
+  mpWebhookSecret?: string
   clipEnabled?: boolean
   clipApiKey?: string
   clipApiSecret?: string
