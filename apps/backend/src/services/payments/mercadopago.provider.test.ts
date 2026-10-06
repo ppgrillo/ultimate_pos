@@ -31,6 +31,7 @@ describe('mercadoPagoProvider', () => {
         payments: [{ id: 'PAY_001', status: 'created', status_detail: 'created' }],
       },
     })
+    mpService.getOrder.mockResolvedValue({ id: 'ORD_MP_001', status: 'created' })
 
     const result = await mercadoPagoProvider.createPayment({
       totalAmount: 120,
@@ -55,6 +56,7 @@ describe('mercadoPagoProvider', () => {
 
   it('createPayment applies a default description when omitted', async () => {
     mpService.createOrder.mockResolvedValue({ id: 'ORD_MP_001', status: 'created' })
+    mpService.getOrder.mockResolvedValue({ id: 'ORD_MP_001', status: 'created' })
 
     await mercadoPagoProvider.createPayment({
       totalAmount: 50,
@@ -64,6 +66,60 @@ describe('mercadoPagoProvider', () => {
 
     const params = mpService.createOrder.mock.calls[0][1]
     expect(params.description).toBe('Ultimate POS payment')
+  })
+
+  describe('confirming the new order can be read back', () => {
+    const sale = {
+      totalAmount: 10,
+      externalReference: 'ref-guard',
+      terminalId: 'TERM_001',
+    }
+    const created = { id: 'ORD_MP_GUARD', status: 'created' }
+    const mpNotFound = Object.assign(new Error('Order not found.'), {
+      status: 404,
+      code: 'order_not_found',
+    })
+
+    it('lets the sale through when the order reads back', async () => {
+      mpService.createOrder.mockResolvedValue(created)
+      mpService.getOrder.mockResolvedValue(created)
+
+      await expect(mercadoPagoProvider.createPayment(sale, CREDENTIALS)).resolves.toMatchObject({
+        providerOrderId: 'ORD_MP_GUARD',
+      })
+    })
+
+    it('refuses to charge when the token cannot read the order it just created', async () => {
+      mpService.createOrder.mockResolvedValue(created)
+      mpService.getOrder.mockRejectedValue(mpNotFound)
+
+      // Two attempts: the first rides out replication lag, the second is conclusive.
+      await expect(mercadoPagoProvider.createPayment(sale, CREDENTIALS)).rejects.toThrow(
+        /misma aplicacion/,
+      )
+      expect(mpService.getOrder).toHaveBeenCalledTimes(2)
+    })
+
+    it('still allows the sale when the order is merely not visible yet', async () => {
+      mpService.createOrder.mockResolvedValue(created)
+      mpService.getOrder.mockRejectedValueOnce(mpNotFound).mockResolvedValueOnce(created)
+
+      await expect(mercadoPagoProvider.createPayment(sale, CREDENTIALS)).resolves.toMatchObject({
+        providerOrderId: 'ORD_MP_GUARD',
+      })
+    })
+
+    it('allows the sale when the verification itself fails, rather than blocking the register', async () => {
+      mpService.createOrder.mockResolvedValue(created)
+      mpService.getOrder.mockRejectedValue(
+        Object.assign(new Error('Too many requests'), { status: 429, code: 'rate_limit' }),
+      )
+
+      await expect(mercadoPagoProvider.createPayment(sale, CREDENTIALS)).resolves.toMatchObject({
+        providerOrderId: 'ORD_MP_GUARD',
+      })
+      expect(mpService.getOrder).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('getPayment returns normalized status + payment detail', async () => {
