@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [mpPointTerminalId, setMpPointTerminalId] = useState('')
   const [mpPointAccessToken, setMpPointAccessToken] = useState('')
   const [mpClientSecret, setMpClientSecret] = useState('')
+  const [mpWebhookSecret, setMpWebhookSecret] = useState('')
   const [activeCardProvider, setActiveCardProvider] = useState<CardPaymentProviderName>('mercado_pago')
   const [clipEnabled, setClipEnabled] = useState(false)
   const [clipTerminalId, setClipTerminalId] = useState('')
@@ -285,6 +286,7 @@ export default function SettingsPage() {
         clipTerminalId,
         ...(mpPointAccessToken ? { mpPointAccessToken } : {}),
         ...(mpClientSecret ? { mpClientSecret } : {}),
+        ...(mpWebhookSecret ? { mpWebhookSecret } : {}),
         ...(clipApiKey ? { clipApiKey } : {}),
         ...(clipApiSecret ? { clipApiSecret } : {}),
         registrationInterestsConfig: {
@@ -1099,6 +1101,22 @@ export default function SettingsPage() {
                           />
                           <p className="text-[10px] text-on-surface-variant/50 mt-1">
                             Used to verify webhook signatures. Stored encrypted and never exposed to the frontend.
+                            {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                            Webhook Signing Secret
+                          </label>
+                          <input
+                            type="password"
+                            value={mpWebhookSecret}
+                            onChange={(e) => setMpWebhookSecret(e.target.value)}
+                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago webhook signing secret'}
+                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                          />
+                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                            Used to verify webhook signatures (HMAC). Stored encrypted and never exposed to the frontend.
                             {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
                           </p>
                         </div>
