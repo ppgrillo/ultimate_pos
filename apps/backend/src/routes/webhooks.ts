@@ -36,24 +36,37 @@ async function verifySignature(
   const tsMs = tsNum > 1e12 ? tsNum : tsNum * 1000
   if (Math.abs(now - tsMs) > 300000) return false
 
-  const orderId = dataId?.toLowerCase()
-  const requestId = xRequestId
-
-  if (!orderId || !requestId) return false
-
-  const dataToSign = `id:${orderId};request-id:${requestId};ts:${ts};`
+  if (!dataId || !xRequestId) return false
 
   const encoder = new TextEncoder()
-  const keyData = encoder.encode(clientSecret)
-  const messageData = encoder.encode(dataToSign)
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(clientSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
 
-  const key = await crypto.subtle
-    .importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const signature = await crypto.subtle.sign('HMAC', key, messageData)
-  const computed = Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return computed === receivedHash
+  // MP builds the manifest from data.id exactly as it sent it in the query
+  // string, so the hash is over the original casing. Order ids are uppercase
+  // (ORD01...), but older docs show lowercase and we cannot observe which one
+  // a given delivery used — try both. This is not a bypass: every candidate is
+  // still HMAC-verified with the store secret, so a forged header still fails.
+  const candidates = dataId === dataId.toLowerCase() ? [dataId] : [dataId, dataId.toLowerCase()]
+
+  for (const orderId of candidates) {
+    const dataToSign = `id:${orderId};request-id:${xRequestId};ts:${ts};`
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(dataToSign))
+    const computed = Array.from(new Uint8Array(signature))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    if (computed === receivedHash) {
+      console.log(`[mp-point-webhook] Signature OK (casing matched: ${orderId === dataId ? 'as-sent' : 'lowercased'})`)
+      return true
+    }
+  }
+
+  return false
 }
 
 async function getOrderByMpOrderId(mpOrderId: string) {
@@ -94,8 +107,7 @@ webhooksRouter.post('/mp-point', async (c) => {
     return c.json({ message: 'Missing action or data.id' }, 400)
   }
 
-  const mapping = STATUS_MAP[action]
-  if (!mapping) {
+  if (!STATUS_MAP[action]) {
     console.log(`[mp-point-webhook] Unhandled action: ${action}`)
     return c.json({ message: 'Accepted' }, 200)
   }
@@ -116,40 +128,54 @@ webhooksRouter.post('/mp-point', async (c) => {
       .single()
 
     storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-    const clientSecret = storeSettings?.mpClientSecret as string | undefined
+  }
 
-    if (clientSecret) {
-      const valid = await verifySignature(body, signature, clientSecret, c.req.query('data.id'), c.req.header('x-request-id'))
-      if (!valid) {
-        console.warn(`[mp-point-webhook] Invalid signature for store ${storeId}`)
-        return c.json({ message: 'Invalid signature' }, 401)
-      }
-    } else {
-      console.warn(`[mp-point-webhook] mpClientSecret not set for store ${storeId} — skipping signature validation`)
+  // The signature is recorded but no longer gates the update. MP signs Point/QR
+  // notifications with a dedicated webhook key from the developers panel, not
+  // the OAuth client secret we have stored, and the docs state QR notifications
+  // may not be verifiable with the secret signature at all. Rejecting on it
+  // meant every real delivery got 401 and no sale was ever reconciled, while
+  // the only surviving path was a 2 second poll at order creation.
+  const clientSecret = storeSettings?.mpClientSecret as string | undefined
+  if (clientSecret) {
+    const valid = await verifySignature(body, signature, clientSecret, c.req.query('data.id'), c.req.header('x-request-id'))
+    if (!valid) {
+      console.warn(`[mp-point-webhook] signature did not verify for store ${storeId} — continuing, MP API is authoritative`)
     }
+  }
+
+  // MP is the only authority on whether money moved. The action in the payload
+  // is just a hint that something changed, so ask the provider instead of
+  // trusting a value that arrived over an unauthenticated channel.
+  const cardProvider = getCardProvider(getActiveCardProvider(storeSettings))
+  const credentials = getProviderCredentials(storeSettings)
+
+  let authoritative: CardOrderStatus | undefined
+  let mpPaymentDetail: string | undefined
+  let mpPaymentStatus: string | undefined
+
+  if (credentials.accessToken) {
+    try {
+      const payment = await cardProvider.getPayment(mpOrderId, credentials)
+      authoritative = payment.status
+      mpPaymentDetail = payment.paymentDetail
+      mpPaymentStatus = payment.paymentStatus
+    } catch (err) {
+      console.error(`[mp-point-webhook] provider poll failed for ${mpOrderId}: ${(err as Error).message}`)
+      return c.json({ message: 'Accepted' }, 200)
+    }
+  }
+
+  const mapping = Object.values(STATUS_MAP).find((m) => m.mpStatus === authoritative)
+  if (!mapping) {
+    console.log(`[mp-point-webhook] No terminal mapping for MP status "${authoritative}" on ${mpOrderId}`)
+    return c.json({ message: 'Accepted' }, 200)
   }
 
   const currentMetadata = (orderData.metadata as Record<string, unknown>) || {}
 
   if (currentMetadata.mpOrderStatus === mapping.mpStatus) {
     return c.json({ message: 'Already processed' }, 200)
-  }
-
-  // Fetch granular payment detail from the provider API for terminal states
-  let mpPaymentDetail: string | undefined
-  let mpPaymentStatus: string | undefined
-  const cardProvider = getCardProvider(getActiveCardProvider(storeSettings))
-  if (['processed', 'failed', 'canceled', 'expired'].includes(mapping.mpStatus) && storeId) {
-    try {
-      const credentials = getProviderCredentials(storeSettings)
-      if (credentials.accessToken) {
-        const payment = await cardProvider.getPayment(mpOrderId, credentials)
-        mpPaymentDetail = payment.paymentDetail
-        mpPaymentStatus = payment.paymentStatus
-      }
-    } catch {
-      // Fallback — use action-based detail
-    }
   }
 
   try {
