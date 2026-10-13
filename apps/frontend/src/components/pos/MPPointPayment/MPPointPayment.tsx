@@ -182,6 +182,8 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
   const [localState, setLocalState] = useState<PaymentState>('created')
   const [loyaltyData, setLoyaltyData] = useState<LoyaltyData | undefined>(undefined)
   const hasRedirected = useRef(false)
+  const onPaidRef = useRef(onPaid)
+  const loyaltyRef = useRef<LoyaltyData | undefined>(undefined)
 
   useEffect(() => {
     hasRedirected.current = false
@@ -199,14 +201,20 @@ export function MPPointPayment({ open, onOpenChange, orderId, isCreating, total,
   const currentState = localState
 
   useEffect(() => {
-    if (currentState === 'paid' && !hasRedirected.current) {
-      hasRedirected.current = true
-      const timer = setTimeout(() => {
-        onPaid(loyaltyData)
-      }, 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [currentState, onPaid, loyaltyData])
+    onPaidRef.current = onPaid
+  })
+  useEffect(() => {
+    loyaltyRef.current = loyaltyData
+  })
+
+  useEffect(() => {
+    if (currentState !== 'paid' || hasRedirected.current) return
+    hasRedirected.current = true
+    const timer = setTimeout(() => {
+      onPaidRef.current(loyaltyRef.current)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [currentState])
 
   const poll = useCallback(async () => {
     if (!open || !orderId) return
