@@ -616,6 +616,11 @@ selfCheckoutRouter.post('/orders', async (c) => {
           .from('payments')
           .update({ status: 'completed' })
           .eq('order_id', order.id)
+        if (order.customer_id) {
+          const { processMpLoyalty } = await import('../routes/orders')
+          await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => undefined)
+          recordCustomerOrderStat(supabaseAdmin, order.id, order.customer_id, Number(total || 0))
+        }
       } else if (isFailedCardStatus(early.status)) {
         await revertPromotionUsageIfNeeded(
           order.id,
@@ -781,6 +786,25 @@ selfCheckoutRouter.get('/orders/:id', async (c) => {
           meta.payment = { ...((meta.payment as Record<string, unknown>) || {}), providerStatus: status }
         }
       } catch {
+      }
+    }
+  }
+
+  if (!loyaltyData) {
+    const { data: existingEarn } = await supabaseAdmin
+      .from('loyalty_transactions')
+      .select('points, balance_after')
+      .eq('reference_id', orderId)
+      .eq('reference_type', 'order')
+      .eq('type', 'earn')
+      .limit(1)
+    if (existingEarn && existingEarn.length > 0) {
+      const earned = existingEarn[0].points
+      const after = existingEarn[0].balance_after ?? earned
+      loyaltyData = {
+        pointsEarned: earned,
+        pointsBefore: after - earned,
+        pointsAfter: after,
       }
     }
   }
