@@ -7,7 +7,7 @@ import { useGetAnalyticsSalesQuery, useGetAnalyticsProductsQuery, useGetAnalytic
 import type { AnalyticsPeriod } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
-import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw } from 'lucide-react'
+import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Clock } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -238,6 +238,13 @@ export default function AnalyticsPage() {
           value={String(overview?.newCustomers ?? 0)}
           icon={Users}
         />
+        {(sales?.pendingOrderCount ?? 0) > 0 && (
+          <KPICard
+            label="Pending Payment"
+            value={formatCurrency(sales?.pendingRevenue ?? 0)}
+            icon={Clock}
+          />
+        )}
       </div>
 
       <MetricGlossary overview={overview} taxLabel={taxLabel} taxInclusive={taxInclusive} />
