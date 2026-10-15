@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Sparkles, Package, PackageOpen } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Package, PackageOpen, Scale } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { CategoryChips } from '@/components/products/CategoryChips'
@@ -29,6 +29,9 @@ interface ProductFormData {
   track_inventory: boolean
   low_stock_threshold: number | null
   tax_exempt: boolean
+  is_bulk: boolean
+  bulk_unit: string | null
+  bulk_step: number | null
 }
 
 interface Category {
@@ -56,7 +59,12 @@ const defaultForm: ProductFormData = {
   track_inventory: false,
   low_stock_threshold: null,
   tax_exempt: false,
+  is_bulk: false,
+  bulk_unit: 'kg',
+  bulk_step: 0.1,
 }
+
+const BULK_UNIT_PRESETS = ['kg', 'g', 'lb', 'l', 'ml', 'm', 'unidad']
 
 export function ProductForm({ productId, initialData }: ProductFormProps) {
   const router = useRouter()
@@ -98,6 +106,9 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
       form.track_inventory !== b.track_inventory ||
       form.low_stock_threshold !== b.low_stock_threshold ||
       form.tax_exempt !== b.tax_exempt ||
+      form.is_bulk !== b.is_bulk ||
+      form.bulk_unit !== b.bulk_unit ||
+      form.bulk_step !== b.bulk_step ||
       JSON.stringify(form.modifiers) !== JSON.stringify(b.modifiers)
     )
   }, [form])
@@ -128,12 +139,16 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
         description: form.description,
         category_id: form.category_id,
         image_url: form.image_url,
-        modifiers: cleanModifiers,
+        // Bulk products cannot have modifiers; force an empty list.
+        modifiers: form.is_bulk ? [] : cleanModifiers,
         points: form.points ?? 0,
         stock_qty: form.stock_qty,
         track_inventory: form.track_inventory,
         low_stock_threshold: form.low_stock_threshold,
         tax_exempt: form.tax_exempt,
+        is_bulk: form.is_bulk,
+        bulk_unit: form.is_bulk ? (form.bulk_unit || 'kg') : null,
+        bulk_step: form.is_bulk ? (form.bulk_step && form.bulk_step > 0 ? form.bulk_step : 0.1) : null,
       }
 
       if (isEditing) {
@@ -227,6 +242,116 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
         value={form.image_url}
         onChange={(v) => updateField('image_url', v)}
       />
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Scale className="h-5 w-5 text-primary" />
+          <h2 className="font-headline font-bold text-xl text-on-surface">Selling Mode</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => updateField('is_bulk', false)}
+            className={
+              !form.is_bulk
+                ? 'rounded-xl border-2 border-primary bg-primary/10 p-4 text-left transition-colors'
+                : 'rounded-xl border border-outline-variant bg-surface-container/50 p-4 text-left transition-colors hover:bg-surface-container/80'
+            }
+          >
+            <span className="block text-sm font-bold text-on-surface">Per piece</span>
+            <span className="mt-0.5 block text-xs text-on-surface-variant">
+              Sell fixed units — each, plate, box
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              updateField('is_bulk', true)
+              if (!form.bulk_unit) updateField('bulk_unit', 'kg')
+              if (!form.bulk_step) updateField('bulk_step', 0.1)
+            }}
+            className={
+              form.is_bulk
+                ? 'rounded-xl border-2 border-primary bg-primary/10 p-4 text-left transition-colors'
+                : 'rounded-xl border border-outline-variant bg-surface-container/50 p-4 text-left transition-colors hover:bg-surface-container/80'
+            }
+          >
+            <span className="block text-sm font-bold text-on-surface">By weight / bulk</span>
+            <span className="mt-0.5 block text-xs text-on-surface-variant">
+              Sell by kg, liters, meters… — customer enters the amount
+            </span>
+          </button>
+        </div>
+
+        {form.is_bulk && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4 md:col-span-2">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                Unit
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {BULK_UNIT_PRESETS.map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => updateField('bulk_unit', u)}
+                    className={
+                      form.bulk_unit === u
+                        ? 'rounded-full border-2 border-primary bg-primary/15 px-4 py-1.5 text-xs font-bold font-headline text-primary uppercase'
+                        : 'rounded-full border border-outline-variant bg-surface-container px-4 py-1.5 text-xs font-bold font-headline text-on-surface-variant uppercase hover:border-primary/50'
+                    }
+                  >
+                    {u}
+                  </button>
+                ))}
+                {!form.bulk_unit || !BULK_UNIT_PRESETS.includes(form.bulk_unit) ? null : (
+                  <button
+                    type="button"
+                    onClick={() => updateField('bulk_unit', '')}
+                    className="rounded-full border border-dashed border-outline-variant px-4 py-1.5 text-xs font-bold font-headline text-on-surface-variant uppercase hover:border-primary/50"
+                  >
+                    Other
+                  </button>
+                )}
+              </div>
+              {(!form.bulk_unit || !BULK_UNIT_PRESETS.includes(form.bulk_unit)) && (
+                <input
+                  type="text"
+                  value={form.bulk_unit ?? ''}
+                  onChange={(e) => updateField('bulk_unit', e.target.value.slice(0, 16))}
+                  placeholder="Type a custom unit, e.g. bolsa"
+                  maxLength={16}
+                  autoFocus
+                  className="mt-3 w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm font-semibold text-on-surface focus:border-primary focus:outline-none placeholder:text-on-surface-variant/40"
+                />
+              )}
+            </div>
+
+            <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+                Increment Step
+              </label>
+              <input
+                type="number"
+                min={0.001}
+                max={1000}
+                step="any"
+                value={form.bulk_step ?? ''}
+                onChange={(e) =>
+                  updateField('bulk_step', e.target.value ? parseFloat(e.target.value) : 0.1)
+                }
+                placeholder="0.1"
+                className="w-full bg-transparent border-none p-0 font-headline font-semibold text-on-surface text-lg focus:ring-0 placeholder:text-on-surface-variant/30"
+              />
+              <p className="mt-1 text-[11px] text-on-surface-variant">
+                Decimal keypad snaps to this, e.g. 0.1 → 1.5 kg
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="space-y-4">
         <div className="flex items-center gap-2">
@@ -359,7 +484,7 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
         </div>
       </div>
 
-      {hasVariants && (
+      {hasVariants && !form.is_bulk && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -387,6 +512,11 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
           <PointsInput
             value={form.points}
             onChange={(v) => updateField('points', v)}
+            label={
+              form.is_bulk
+                ? `Points per ${form.bulk_unit || 'unit'} sold`
+                : 'Points per Sale'
+            }
           />
         </div>
       )}
@@ -426,14 +556,16 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
               <>
                 <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
-                    Stock Quantity
+                    Stock Quantity{form.is_bulk && form.bulk_unit ? ` (${form.bulk_unit})` : ''}
                   </label>
                   <input
                     type="number"
                     min={0}
-                    step={1}
+                    step={form.is_bulk ? 'any' : 1}
                     value={form.stock_qty ?? ''}
-                    onChange={(e) => updateField('stock_qty', e.target.value ? parseInt(e.target.value, 10) : 0)}
+                    onChange={(e) =>
+                      updateField('stock_qty', e.target.value ? parseFloat(e.target.value) : 0)
+                    }
                     placeholder="0"
                     className="w-full bg-transparent border-none p-0 font-headline font-semibold text-on-surface text-lg focus:ring-0 placeholder:text-on-surface-variant/30"
                   />

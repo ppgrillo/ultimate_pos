@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils'
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge'
 import { KitchenOrderActions } from '@/components/orders/KitchenOrderActions'
 import { useAppSelector } from '@/store/hooks'
+import { useBulkUnit } from '@/hooks/useBulkUnit'
+import { formatQuantity } from '@ultimate-pos/shared'
 import type { Order, OrderStatus } from '@ultimate-pos/shared'
 
 const typeConfig: Record<string, { label: string; classes: string }> = {
@@ -43,6 +45,7 @@ interface OrderCardProps {
 }
 
 export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoading }: OrderCardProps) {
+  const bulkUnitOf = useBulkUnit()
   const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
   const itemCount = order.items?.reduce((s, i) => s + i.quantity, 0) || 0
 
@@ -100,7 +103,14 @@ export function OrderCard({ order, hasKitchen, onStatusChange, onTap, statusLoad
             {order.items?.slice(0, 6).map((item) => (
               <div key={item.id} className="text-sm">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-label font-bold text-on-surface">{item.quantity}x</span>
+                  <span className="font-label font-bold text-on-surface">
+                    {(() => {
+                      const unit = bulkUnitOf(item.product_id)
+                      return unit
+                        ? formatQuantity(Number(item.quantity), unit)
+                        : `${formatQuantity(Number(item.quantity))}x`
+                    })()}
+                  </span>
                   <span className="font-label font-semibold text-on-surface truncate">{item.product_name}</span>
                 </div>
                 {item.modifiers && item.modifiers.length > 0 && (

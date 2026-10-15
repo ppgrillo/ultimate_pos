@@ -13,6 +13,7 @@ export interface PosState {
   customerDrawerOpen: boolean
   customerBarExpanded: boolean
   customizeProductId: string | null
+  bulkProductId: string | null
   customerSelectSkipped: boolean
   scannerOpen: boolean
   kitchenNotice: string | null
@@ -28,6 +29,7 @@ const initialState: PosState = {
   customerDrawerOpen: false,
   customerBarExpanded: false,
   customizeProductId: null,
+  bulkProductId: null,
   customerSelectSkipped: false,
   scannerOpen: false,
   kitchenNotice: null,
@@ -62,6 +64,9 @@ const posSlice = createSlice({
     setCustomizeProductId(state, action: PayloadAction<string | null>) {
       state.customizeProductId = action.payload
     },
+    setBulkProductId(state, action: PayloadAction<string | null>) {
+      state.bulkProductId = action.payload
+    },
     setCustomerSelectSkipped(state, action: PayloadAction<boolean>) {
       state.customerSelectSkipped = action.payload
     },
@@ -80,7 +85,7 @@ const posSlice = createSlice({
 export const {
   setActiveView, setSelectedCategory, setSearchQuery,
   setCartOpen, setCheckoutView, setCustomerDrawerOpen,
-  setCustomerBarExpanded, setCustomizeProductId,
+  setCustomerBarExpanded, setCustomizeProductId, setBulkProductId,
   setCustomerSelectSkipped, setScannerOpen, setKitchenNotice,
   setQuickSaleOpen,
 } = posSlice.actions

@@ -18,10 +18,12 @@ import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { AutoPromoToggle } from '@/components/pos/AutoPromoToggle'
 import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/self-checkout/CustomizeProduct'
+import { BulkQuantityModal as SelfCheckoutBulkQuantityModal } from '@/components/self-checkout/BulkQuantityModal'
 // LoyaltyData type imported inline where needed
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { PhoneInput } from '@/components/ui/PhoneInput'
+import { formatQuantity, snapToStep } from '@ultimate-pos/shared'
 import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse, CardPaymentProviderName } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
@@ -62,6 +64,9 @@ interface CartItem {
   variant_label?: string
   modifiers: string[]
   notes: string | null
+  is_bulk?: boolean
+  bulk_unit?: string | null
+  bulk_step?: number | null
 }
 
 function cartLineKey(item: Pick<CartItem, 'product_id' | 'modifiers' | 'notes'>) {
@@ -107,6 +112,7 @@ export default function SelfCheckoutPage() {
   const [discountLabel, setDiscountLabel] = useState('')
   const [dismissedWelcome, setDismissedWelcome] = useState(false)
   const [customizeProduct, setCustomizeProduct] = useState<Product | null>(null)
+  const [bulkProduct, setBulkProduct] = useState<Product | null>(null)
 
   // ─── Promotions ───────────────────────────────────────────────────────────
   const [promotions, setPromotions] = useState<Promotion[]>([])
@@ -164,7 +170,7 @@ export default function SelfCheckoutPage() {
       order_number: number
       total: number
       created_at: string
-      items: Array<{ product_name: string; quantity: number }>
+      items: Array<{ product_name: string; quantity: number; product_id?: string | null }>
     }>
   }
 
@@ -177,7 +183,7 @@ export default function SelfCheckoutPage() {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false)
   const [lastOrder, setLastOrder] = useState<{
     total: number
-    items: { name: string; quantity: number; price: number }[]
+    items: { name: string; quantity: number; price: number; unit?: string | null }[]
     loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }
     customerName?: string
     // optional summary fields for the success receipt
@@ -388,7 +394,7 @@ export default function SelfCheckoutPage() {
     setRedeemedRewardData(null)
     setRewards([])
     try {
-      const json = await apiFetch<{ data: { customer: Customer; loyaltyCard: LoyaltyCardData | null; recentOrders: Array<{ id: string; order_number: number; total: number; created_at: string; items: Array<{ product_name: string; quantity: number }> }> } }>(
+      const json = await apiFetch<{ data: { customer: Customer; loyaltyCard: LoyaltyCardData | null; recentOrders: Array<{ id: string; order_number: number; total: number; created_at: string; items: Array<{ product_name: string; quantity: number; product_id?: string | null }> }> } }>(
         `/customers/${customer.id}/detail`,
       )
       setDismissedWelcome(true)
@@ -450,6 +456,13 @@ export default function SelfCheckoutPage() {
       if (pa !== pb) return pa ? -1 : 1
       return a.name.localeCompare(b.name)
     })
+
+  // Resolve the bulk unit (kg, l, ...) for a historical order item so recent
+  // orders render fractional quantities with their unit instead of "x1.5".
+  const bulkUnitOf = (productId?: string | null) =>
+    productId
+      ? (products.find((p) => p.id === productId && p.is_bulk)?.bulk_unit ?? null)
+      : null
 
   // sale subtotal (prices baked with product-level promos)
   const saleSubtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -571,6 +584,10 @@ export default function SelfCheckoutPage() {
     setQrExpanded(false)
     setFormExpanded(false)
     setCameraExpanded(false)
+    if (product.is_bulk) {
+      setBulkProduct(product)
+      return
+    }
     if (product.modifiers && product.modifiers.length > 0) {
       setCustomizeProduct(product)
       return
@@ -602,6 +619,49 @@ export default function SelfCheckoutPage() {
           variant_label: '',
           modifiers: [],
           notes: null,
+        },
+      ]
+    })
+  }
+
+  function handleBulkConfirm(quantity: number) {
+    const product = bulkProduct
+    if (!product) return
+    setBulkProduct(null)
+    if (!(quantity > 0)) return
+    const step = product.bulk_step && product.bulk_step > 0 ? product.bulk_step : 0.1
+    const promo = autoPromotions ? getPromotionForProduct(product) : undefined
+    const salePrice = promo && !hasPromoConditions(promo)
+      ? promo.discount_type === 'percentage'
+        ? Math.round(product.price * (1 - promo.discount_value / 100) * 100) / 100
+        : Math.max(0, Math.round((product.price - promo.discount_value) * 100) / 100)
+      : Number(product.price)
+    setCartItems((prev) => {
+      const existing = prev.find((i) => i.product_id === product.id)
+      if (existing) {
+        return prev.map((i) =>
+          i.product_id === product.id
+            ? { ...i, quantity: snapToStep(Number(i.quantity) + quantity, step) }
+            : i,
+        )
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          name: product.name,
+          price: salePrice,
+          original_price: Number(product.price),
+          quantity,
+          image_url: product.image_url,
+          points: product.points ?? undefined,
+          category_id: product.category_id ?? null,
+          variant_label: '',
+          modifiers: [],
+          notes: null,
+          is_bulk: true,
+          bulk_unit: product.bulk_unit ?? null,
+          bulk_step: product.bulk_step ?? null,
         },
       ]
     })
@@ -662,6 +722,7 @@ export default function SelfCheckoutPage() {
 
   function handleClearCart() {
     setCartItems([])
+    setBulkProduct(null)
     setTip(0)
     setDiscount(0)
     setDiscountLabel('')
@@ -706,6 +767,7 @@ export default function SelfCheckoutPage() {
     setRedeemedRewardData(null)
     setRewards([])
     setCustomizeProduct(null)
+    setBulkProduct(null)
   }
 
   // ─── Promo ────────────────────────────────────────────────────────────────
@@ -778,7 +840,12 @@ export default function SelfCheckoutPage() {
     setLastOrder({
       total: Math.round((finalTotal + tipAmount) * 100) / 100,
       tip: tipAmount > 0 ? tipAmount : undefined,
-      items: cartItems.map((i) => ({ name: i.variant_label ? `${i.name} (${i.variant_label})` : i.name, quantity: i.quantity, price: i.price })),
+      items: cartItems.map((i) => ({
+        name: i.variant_label ? `${i.name} (${i.variant_label})` : i.name,
+        quantity: i.quantity,
+        price: i.price,
+        unit: i.is_bulk ? (i.bulk_unit ?? null) : null,
+      })),
       productSavings,
       discount,
       discountLabel,
@@ -811,6 +878,7 @@ export default function SelfCheckoutPage() {
     setQrExpanded(true)
     setCameraExpanded(true)
     setCustomizeProduct(null)
+    setBulkProduct(null)
     setPageState('browsing')
   }
 
@@ -891,11 +959,16 @@ export default function SelfCheckoutPage() {
               {lastOrder?.items.map((item, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-container-high text-[11px] font-bold text-on-surface-variant">
-                    {item.quantity}x
+                    {item.unit ? formatQuantity(item.quantity) : `${formatQuantity(item.quantity)}x`}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-on-surface">{item.name}</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">x{item.quantity} @ {formatCurrency(item.price)}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">
+                      {item.unit
+                        ? `${formatQuantity(item.quantity, item.unit)} @ `
+                        : `x${formatQuantity(item.quantity)} @ `}
+                      {formatCurrency(item.price)}
+                    </p>
                   </div>
                   <p className="shrink-0 text-sm font-headline font-bold text-on-surface">
                     {formatCurrency(item.price * item.quantity)}
@@ -1544,7 +1617,13 @@ export default function SelfCheckoutPage() {
                                   {order.items.map((item, i) => (
                                     <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
                                       {item.product_name || 'Product'}
-                                      {item.quantity > 1 && <span className="text-primary/50">x{item.quantity}</span>}
+                                      {Number(item.quantity) !== 1 && (
+                                        <span className="text-primary/50">
+                                          {bulkUnitOf(item.product_id)
+                                            ? formatQuantity(Number(item.quantity), bulkUnitOf(item.product_id))
+                                            : `x${formatQuantity(Number(item.quantity))}`}
+                                        </span>
+                                      )}
                                     </span>
                                   ))}
                                 </div>
@@ -2166,6 +2245,16 @@ export default function SelfCheckoutPage() {
           onClose={() => setCustomizeProduct(null)}
         />
       )}
+
+      {/* ── Bulk (weight/volume) quantity modal ─────────────────────── */}
+      {bulkProduct && (
+        <SelfCheckoutBulkQuantityModal
+          product={bulkProduct}
+          promotion={autoPromotions ? getPromotionForProduct(bulkProduct) : null}
+          onConfirm={handleBulkConfirm}
+          onClose={() => setBulkProduct(null)}
+        />
+      )}
     </div>
   )
 }
@@ -2201,10 +2290,16 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
       : null
 
   const productPoints = item.points ?? 0
+  const isBulk = !!item.is_bulk
+  const bulkUnit = item.bulk_unit ?? null
+  const bulkStep = item.bulk_step && item.bulk_step > 0 ? item.bulk_step : 1
+  const qty = Number(item.quantity)
   const itemPoints = hl
     ? productPoints > 0
-      ? productPoints * item.quantity
-      : Math.floor(item.price * (ppc ?? 10)) * item.quantity
+      ? Math.floor(productPoints * qty)
+      : isBulk
+        ? Math.floor(item.price * qty * (ppc ?? 10))
+        : Math.floor(item.price * (ppc ?? 10)) * qty
     : 0
 
   return (
@@ -2233,10 +2328,14 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
           {item.original_price > item.price ? (
             <>
               <p className="line-through text-xs text-on-surface-variant/50">{formatCurrency(item.original_price)}</p>
-              <p className="font-headline font-bold text-sm text-primary">{formatCurrency(item.price)}</p>
+              <p className="font-headline font-bold text-sm text-primary">
+                {formatCurrency(item.price)}{isBulk && bulkUnit ? ` / ${bulkUnit}` : ''}
+              </p>
             </>
           ) : (
-            <p className="font-headline font-bold text-sm text-primary">{formatCurrency(item.price)}</p>
+            <p className="font-headline font-bold text-sm text-primary">
+              {formatCurrency(item.price)}{isBulk && bulkUnit ? ` / ${bulkUnit}` : ''}
+            </p>
           )}
           {itemPoints > 0 && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
@@ -2247,8 +2346,11 @@ function SelfCheckoutCartRow({ item, onQuantityChange, hasLoyalty: hl, pointsPer
         </div>
       </div>
       <QuantityStepper
-        value={item.quantity}
-        onChange={(qty) => onQuantityChange(cartLineKey(item), qty)}
+        value={qty}
+        step={isBulk ? bulkStep : 1}
+        unit={isBulk ? bulkUnit : null}
+        max={isBulk ? 100000 : 99}
+        onChange={(next) => onQuantityChange(cartLineKey(item), next)}
       />
     </div>
   )

@@ -37,12 +37,15 @@ export const productSchema = z.object({
   image_url: z.string().url().nullable().optional(),
   modifiers: z.array(modifierGroupSchema).optional().default([]),
   points: z.number().int().min(0).nullable().optional(),
-  stock_qty: z.number().int().min(0).nullable().optional(),
+  stock_qty: z.number().min(0).nullable().optional(),
   track_inventory: z.boolean().optional().default(false),
   low_stock_threshold: z.number().int().min(0).nullable().optional(),
   is_active: z.boolean().optional().default(true),
   tax_exempt: z.boolean().optional().default(false),
   pinned: z.boolean().optional().default(false),
+  is_bulk: z.boolean().optional().default(false),
+  bulk_unit: z.string().trim().min(1).max(16).nullable().optional(),
+  bulk_step: z.number().positive().max(1000).nullable().optional(),
 })
 
 export const orderSchema = z.object({
@@ -53,7 +56,7 @@ export const orderSchema = z.object({
   type: z.enum(['dine-in', 'takeaway', 'delivery']).default('dine-in'),
   items: z.array(z.object({
     product_id: z.string().uuid().nullable(),
-    quantity: z.number().int().positive(),
+    quantity: z.number().positive().max(100000),
     unit_price: z.number().min(0).optional(),
     modifiers: z.array(z.string()).optional().default([]),
     notes: z.string().nullable().optional(),
@@ -89,7 +92,7 @@ export const addCheckOrderSchema = z.object({
   type: z.enum(['dine-in', 'takeaway', 'delivery']).default('dine-in'),
   items: z.array(z.object({
     product_id: z.string().uuid().nullable(),
-    quantity: z.number().int().positive(),
+    quantity: z.number().positive().max(100000),
     unit_price: z.number().min(0).optional(),
     modifiers: z.array(z.string()).optional().default([]),
     notes: z.string().nullable().optional(),

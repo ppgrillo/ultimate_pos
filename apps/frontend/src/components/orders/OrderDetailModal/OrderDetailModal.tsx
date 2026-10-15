@@ -16,8 +16,9 @@ import { Clock, Table2, User, Receipt, DollarSign, Gift } from 'lucide-react'
 import type { KitchenWorkflowStepStatus, Order, OrderStatus, PaymentMethod } from '@ultimate-pos/shared'
 import { useGetOrderByIdQuery, usePayOrderMutation } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
-import { getKitchenStatusLabel, getKitchenTimeline } from '@ultimate-pos/shared'
+import { getKitchenStatusLabel, getKitchenTimeline, formatQuantity, round2 } from '@ultimate-pos/shared'
 import { CollectPaymentModal } from '@/components/orders/CollectPaymentModal'
+import { useBulkUnit } from '@/hooks/useBulkUnit'
 import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
 
 interface OrderDetailModalProps {
@@ -33,6 +34,7 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
   const { data: fullOrder } = useGetOrderByIdQuery(order?.id ?? '', { skip: !open || !order })
   const displayOrder = fullOrder ?? order
   const workflow = useAppSelector((s) => s.storeConfig.currentStore?.settings?.kitchenWorkflow ?? null)
+  const bulkUnitOf = useBulkUnit()
   const settings = useAppSelector((s) => s.storeConfig.currentStore?.settings)
   const mpPointEnabled = (settings?.mpPointEnabled as boolean) ?? false
   const activeCardProvider = getActiveCardProvider(settings)
@@ -108,7 +110,11 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
                 <span>Item</span>
                 <span className="text-right">Amount</span>
               </div>
-              {displayOrder.items?.map((item) => (
+              {displayOrder.items?.map((item) => {
+                const bulkUnit = bulkUnitOf(item.product_id)
+                const qty = Number(item.quantity)
+                const lineTotal = round2(Number(item.unit_price) * qty)
+                return (
                 <div key={item.id} className="px-4 py-2.5">
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <div>
@@ -116,15 +122,18 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
                       {item.modifiers?.length > 0 && (
                         <p className="text-[11px] text-on-surface-variant">{item.modifiers.join(', ')}</p>
                       )}
-                      <p className="text-[11px] text-on-surface-variant">x{item.quantity} @ {formatCurrency(item.unit_price)}</p>
+                      <p className="text-[11px] text-on-surface-variant">
+                        {bulkUnit ? formatQuantity(qty, bulkUnit) : `x${formatQuantity(qty)}`} @ {formatCurrency(item.unit_price)}
+                      </p>
                     </div>
-                    <p className="text-sm font-label font-bold text-on-surface text-right">{formatCurrency(item.unit_price * item.quantity)}</p>
+                    <p className="text-sm font-label font-bold text-on-surface text-right">{formatCurrency(lineTotal)}</p>
                   </div>
                   {item.notes && (
                     <p className="text-[11px] text-on-surface-variant mt-1 italic">&quot;{item.notes}&quot;</p>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

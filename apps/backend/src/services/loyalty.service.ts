@@ -13,31 +13,43 @@ export async function calculateEarnPoints(
   const productIds = [...new Set(items.map(i => i.product_id).filter(Boolean))]
   const { data: products } = await supabaseAdmin
     .from('products')
-    .select('id, points')
+    .select('id, points, is_bulk')
     .in('id', productIds)
 
-  const perProductPoints = new Map<string, number | null>(
-    (products ?? []).map((p: any) => [p.id, p.points as number | null])
+  const perProduct = new Map<string, { points: number | null; isBulk: boolean }>(
+    (products ?? []).map((p: any) => [p.id, { points: p.points as number | null, isBulk: !!p.is_bulk }])
   )
 
   let totalPoints = 0
   for (const item of items) {
+    const qty = Number(item.quantity) || 0
+    if (qty <= 0) continue
     if (!item.product_id) {
       if (item.points != null && item.points > 0) {
-        totalPoints += item.points * item.quantity
+        totalPoints += Math.floor(item.points * qty)
       }
       continue
     }
-    const pp = perProductPoints.get(item.product_id)
-    if (pp != null && pp > 0) {
-      totalPoints += pp * item.quantity
+    const pp = perProduct.get(item.product_id)
+    const fixed = pp?.points ?? null
+    if (fixed != null && fixed > 0) {
+      // Fixed points per unit of measure: per piece for regular products,
+      // per kg/l for bulk products (points * weight).
+      totalPoints += Math.floor(fixed * qty)
+    } else if (pp?.isBulk) {
+      // Money mode for bulk: points follow the actual line total so fractional
+      // quantities don't inflate/deflate (floor(price*rate) * 0.5 would be wrong).
+      totalPoints += Math.floor(item.price * qty * rate)
     } else {
-      totalPoints += Math.floor(item.price * rate) * item.quantity
+      totalPoints += Math.floor(Math.floor(item.price * rate) * qty)
     }
   }
 
   if (subtotal > 0 && discount > 0) {
     totalPoints = Math.floor(totalPoints * Math.max(0, subtotal - discount) / subtotal)
+  } else {
+    // Loyalty balances are integers; guarantee it even without a discount.
+    totalPoints = Math.floor(totalPoints)
   }
 
   return totalPoints

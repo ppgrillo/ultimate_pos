@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCustomizeProductId } from '@/store/slices/posSlice'
+import { setCustomizeProductId, setBulkProductId } from '@/store/slices/posSlice'
 import { addItem, clearAutoPromotions } from '@/store/slices/cartSlice'
 import { PosLayout } from '@/components/pos/PosLayout'
 import { PosDesktopLayout } from '@/components/pos/PosDesktopLayout'
@@ -12,6 +12,7 @@ import { CheckoutPanel } from '@/components/pos/CheckoutPanel'
 import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
 import { CustomerDrawer } from '@/components/pos/CustomerDrawer'
 import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
+import { BulkQuantityModal } from '@/components/pos/BulkQuantityModal'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -54,6 +55,10 @@ export default function PosKitchenPage() {
   const featured = products.find((p) => p.points && p.points > 50)
 
   const handleAdd = useCallback((product: Product) => {
+    if (product.is_bulk) {
+      dispatch(setBulkProductId(product.id))
+      return
+    }
     if (product.modifiers && product.modifiers.length > 0) {
       dispatch(setCustomizeProductId(product.id))
       return
@@ -73,7 +78,12 @@ export default function PosKitchenPage() {
     }))
   }, [dispatch, getPromotionForProduct, autoPromotions])
 
-  const customizeModal = <CustomizeProduct />
+  const customizeModal = (
+    <>
+      <CustomizeProduct />
+      <BulkQuantityModal />
+    </>
+  )
 
   return (
     <>

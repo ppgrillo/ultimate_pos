@@ -169,3 +169,62 @@ describe('cartSlice autoPromotions', () => {
     expect((cleared as CartState).autoPromotions).toBe(true)
   })
 })
+
+describe('cartSlice bulk quantities', () => {
+  const bulkItem = (quantity: number) => ({
+    product_id: 'apples',
+    name: 'Apples',
+    price: 2.5,
+    original_price: 2.5,
+    quantity,
+    variant_label: '',
+    modifiers: [],
+    notes: null,
+    category_id: null,
+    is_bulk: true,
+    bulk_unit: 'kg',
+    bulk_step: 0.5,
+  })
+
+  it('merges fractional bulk lines by summing quantities', () => {
+    const state1 = cartReducer(baseState, addItem(bulkItem(0.5)))
+    const state2 = cartReducer(state1, addItem(bulkItem(1)))
+    expect(state2.items).toHaveLength(1)
+    expect(state2.items[0]?.quantity).toBe(1.5)
+  })
+
+  it('updates a bulk line to a fractional quantity', () => {
+    const populated = cartReducer(baseState, addItem(bulkItem(1)))
+    const updated = cartReducer(populated, updateQuantity({
+      product_id: 'apples',
+      modifiers: [],
+      notes: null,
+      quantity: 2.25,
+    }))
+    expect(updated.items[0]?.quantity).toBe(2.25)
+  })
+
+  it('rounds accumulated float drift when merging bulk lines', () => {
+    const state1 = cartReducer(baseState, addItem(bulkItem(0.1)))
+    const state2 = cartReducer(state1, addItem(bulkItem(0.2)))
+    expect(state2.items[0]?.quantity).toBe(0.3)
+    expect(state2.items[0]?.quantity).not.toBe(0.1 + 0.2)
+  })
+
+  it('rounds the merged total to 3 decimals across repeated adds', () => {
+    let state = cartReducer(baseState, addItem(bulkItem(0.1)))
+    state = cartReducer(state, addItem(bulkItem(0.7)))
+    expect(state.items[0]?.quantity).toBe(0.8)
+  })
+
+  it('rounds a float-drifted updateQuantity to 3 decimals', () => {
+    const populated = cartReducer(baseState, addItem(bulkItem(1)))
+    const updated = cartReducer(populated, updateQuantity({
+      product_id: 'apples',
+      modifiers: [],
+      notes: null,
+      quantity: 0.1 + 0.2,
+    }))
+    expect(updated.items[0]?.quantity).toBe(0.3)
+  })
+})

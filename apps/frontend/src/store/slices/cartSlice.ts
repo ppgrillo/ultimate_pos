@@ -1,7 +1,7 @@
 'use client'
 
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
-import type { AppliedPromotion } from '@ultimate-pos/shared'
+import { snapToStep, type AppliedPromotion } from '@ultimate-pos/shared'
 
 export interface CartItem {
   product_id: string | null
@@ -94,7 +94,10 @@ const cartSlice = createSlice({
     addItem(state, action: PayloadAction<CartItem>) {
       const existing = state.items.find((item) => isSameCartLine(item, action.payload))
       if (existing) {
-        existing.quantity += action.payload.quantity
+        // Round to 3 decimals (matches the order_items.quantity numeric(12,3)
+        // column) so fractional bulk weights don't accumulate float drift
+        // (0.1 + 0.2 would otherwise become 0.30000000000000004).
+        existing.quantity = snapToStep(existing.quantity + action.payload.quantity)
       } else {
         state.items.push({
           ...action.payload,
@@ -114,7 +117,7 @@ const cartSlice = createSlice({
     updateQuantity(state, action: PayloadAction<{ product_id: string | null; modifiers: string[]; notes: string | null; quantity: number; is_custom?: boolean; name?: string }>) {
       const item = state.items.find((entry) => isSameCartLine(entry, action.payload))
       if (item) {
-        item.quantity = Math.max(0, action.payload.quantity)
+        item.quantity = Math.max(0, snapToStep(action.payload.quantity))
         state.appliedPromotions = []
         state.promoDiscount = 0
       }

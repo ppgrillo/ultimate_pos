@@ -227,8 +227,9 @@ analyticsRouter.get('/products', async (c) => {
       quantity: 0,
       revenue: 0,
     }
-    existing.quantity += item.quantity
-    existing.revenue += item.quantity * Number(item.unit_price || 0) * factor
+    const qty = Number(item.quantity) || 0
+    existing.quantity += qty
+    existing.revenue += qty * Number(item.unit_price || 0) * factor
     productMap.set(item.product_id, existing)
   }
 
@@ -350,7 +351,7 @@ analyticsRouter.get('/overview', async (c) => {
 
     const productIdSet = new Set<string>()
     for (const item of orderItems || []) {
-      itemsSold += item.quantity
+      itemsSold += Number(item.quantity) || 0
       if (item.product_id) productIdSet.add(item.product_id)
     }
 
@@ -363,7 +364,7 @@ analyticsRouter.get('/overview', async (c) => {
       const costMap = new Map((products || []).map((p) => [p.id, p.cost]))
       for (const item of orderItems || []) {
         const cost = item.product_id ? costMap.get(item.product_id) : undefined
-        if (typeof cost === 'number' && cost > 0) cogs += item.quantity * cost
+        if (typeof cost === 'number' && cost > 0) cogs += (Number(item.quantity) || 0) * cost
       }
     }
   }

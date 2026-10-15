@@ -5,15 +5,16 @@ import { cn } from '@/lib/utils'
 interface PointsInputProps {
   value: number | null
   onChange: (value: number | null) => void
+  label?: string
   className?: string
 }
 
-export function PointsInput({ value, onChange, className }: PointsInputProps) {
+export function PointsInput({ value, onChange, label = 'Points per Sale', className }: PointsInputProps) {
   return (
     <div className={cn('flex items-center justify-between rounded-xl bg-surface-container/50 border border-outline-variant p-5', className)}>
       <div className="flex-1">
         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
-          Points per Sale
+          {label}
         </label>
         <div className="flex items-center gap-2">
           <span className="text-2xl font-extrabold font-headline text-primary">⭐</span>

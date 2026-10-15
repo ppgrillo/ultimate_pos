@@ -10,7 +10,8 @@ import { useGetCheckByIdQuery, useGetChecksQuery, useVoidCheckMutation } from '@
 import { CheckPaymentFlow } from '@/components/pos/CheckPaymentFlow'
 import { SecureActionDialog } from '@/components/ui/SecureActionDialog'
 import type { Check, KitchenWorkflowConfig } from '@ultimate-pos/shared'
-import { getKitchenStatusLabel } from '@ultimate-pos/shared'
+import { getKitchenStatusLabel, formatQuantity, round2 } from '@ultimate-pos/shared'
+import { useBulkUnit } from '@/hooks/useBulkUnit'
 
 interface TablesWorkspaceProps {
   onCloseAndPay?: (check: Check & { total?: number; has_active_kitchen?: boolean }) => void
@@ -59,6 +60,7 @@ function TableCheckRow({
   isAdmin?: boolean
 }) {
   const { data: detail, isFetching } = useGetCheckByIdQuery(check.id, { skip: !expanded })
+  const bulkUnitOf = useBulkUnit()
 
   const rounds = useMemo(() => {
     const grouped = new Map<number, NonNullable<typeof detail>['orders']>()
@@ -140,9 +142,19 @@ function TableCheckRow({
                         {order.items.map((item) => (
                           <div key={item.id} className="flex items-start justify-between gap-2 text-xs">
                             <span className="text-on-surface">
-                              <span className="font-label font-bold">{item.quantity}x</span> {item.product_name}
+                              <span className="font-label font-bold">
+                                {(() => {
+                                  const unit = bulkUnitOf((item as { product_id?: string | null }).product_id)
+                                  return unit
+                                    ? formatQuantity(Number(item.quantity || 0), unit)
+                                    : `${formatQuantity(Number(item.quantity || 0))}x`
+                                })()}
+                              </span>{' '}
+                              {item.product_name}
                             </span>
-                            <span className="text-on-surface-variant">{formatCurrency(Number(item.unit_price || 0) * Number(item.quantity || 0))}</span>
+                            <span className="text-on-surface-variant">
+                              {formatCurrency(round2(Number(item.unit_price || 0) * Number(item.quantity || 0)))}
+                            </span>
                           </div>
                         ))}
                         {order.notes && (

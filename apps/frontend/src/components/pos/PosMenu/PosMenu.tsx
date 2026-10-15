@@ -1,7 +1,7 @@
 'use client'
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setSelectedCategory, setSearchQuery, setCustomizeProductId } from '@/store/slices/posSlice'
+import { setSelectedCategory, setSearchQuery, setCustomizeProductId, setBulkProductId } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { CategoryChips } from '@/components/pos/CategoryChips'
@@ -48,6 +48,10 @@ export function PosMenu() {
     })
 
   const handleAdd = (product: Product) => {
+    if (product.is_bulk) {
+      dispatch(setBulkProductId(product.id))
+      return
+    }
     if (product.modifiers && product.modifiers.length > 0) {
       dispatch(setCustomizeProductId(product.id))
       return

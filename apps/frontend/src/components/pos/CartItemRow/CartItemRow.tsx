@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useGetProductsQuery } from '@/store/api'
 import { removeItem, updateQuantity, type CartItem } from '@/store/slices/cartSlice'
 import { formatCurrency } from '@/lib/utils'
+import { formatQuantity } from '@ultimate-pos/shared'
 import { proxyImageUrl } from '@/lib/image-proxy'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 
@@ -27,12 +28,20 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
   const pointsPerCurrency = store?.settings?.pointsPerCurrency ?? 10
   const productPoints = product?.points ?? 0
   const isCustom = !item.product_id
+  const isBulk = !isCustom && (product?.is_bulk ?? false)
+  const bulkUnit = isBulk ? product?.bulk_unit ?? null : null
+  const bulkStep = isBulk && product?.bulk_step && product.bulk_step > 0 ? product.bulk_step : 1
+  // Mirrors the backend calculateEarnPoints formula per line:
+  // fixed points -> floor(points * qty); money -> bulk: floor(price*qty*rate),
+  // piece: floor(price*rate) * qty.
   const itemPoints = hasLoyalty
     ? isCustom
-      ? (item.points ?? 0) * item.quantity
+      ? Math.floor((item.points ?? 0) * item.quantity)
       : productPoints > 0
-        ? productPoints * item.quantity
-        : Math.floor(item.price * pointsPerCurrency) * item.quantity
+        ? Math.floor(productPoints * item.quantity)
+        : isBulk
+          ? Math.floor(item.price * item.quantity * pointsPerCurrency)
+          : Math.floor(item.price * pointsPerCurrency) * item.quantity
     : 0
 
   return (
@@ -54,7 +63,10 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
         {item.variant_label && (
           <p className="text-xs text-on-surface-variant truncate mt-0.5">{item.variant_label}</p>
         )}
-        <p className="font-headline font-bold text-primary text-sm mt-0.5">{formatCurrency(item.price)}</p>
+        <p className="font-headline font-bold text-primary text-sm mt-0.5">
+          {formatCurrency(item.price)}
+          {isBulk && bulkUnit ? ` / ${bulkUnit}` : ''}
+        </p>
         {itemPoints > 0 && (
           <span className="inline-flex w-fit items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 mt-0.5 text-[10px] font-semibold text-primary">
             <Star className="h-2.5 w-2.5 fill-primary" />
@@ -66,6 +78,9 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
         <div className="flex items-center gap-1">
           <QuantityStepper
             value={item.quantity}
+            step={isBulk ? bulkStep : 1}
+            unit={isBulk ? bulkUnit : null}
+            max={isBulk ? 100000 : 99}
             onChange={(qty: number) => {
               if (qty === 0) {
                 dispatch(removeItem({
@@ -102,7 +117,9 @@ export function CartItemRow({ item, editable = true }: CartItemRowProps) {
           </button>
         </div>
       ) : (
-        <span className="text-sm text-on-surface-variant">x{item.quantity}</span>
+        <span className="text-sm text-on-surface-variant whitespace-nowrap">
+          {isBulk ? formatQuantity(item.quantity, bulkUnit) : `x${item.quantity}`}
+        </span>
       )}
     </div>
   )

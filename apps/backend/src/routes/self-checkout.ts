@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { selfCheckoutAuth } from '../middleware/self-checkout'
 import { notFound, badRequest } from '../middleware/error'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
-import { computeOrderTotals, resolveTip } from '@ultimate-pos/shared'
+import { computeOrderTotals, resolveTip, round2 } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
 import {
   isPromotionActive,
@@ -344,7 +344,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
       ? Math.min(incomingUnitPrice, expectedPromotionalPrice)
       : expectedPromotionalPrice
 
-    const itemTotal = unitPrice * item.quantity
+    const itemTotal = round2(unitPrice * item.quantity)
     subtotal += itemTotal
     const isExempt = taxExemptEnabled && product?.tax_exempt === true
     if (!isExempt) taxableSubtotal += itemTotal

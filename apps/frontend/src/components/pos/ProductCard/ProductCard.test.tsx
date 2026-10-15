@@ -45,4 +45,17 @@ describe('ProductCard', () => {
     render(<ProductCard product={baseProduct} onAdd={vi.fn()} variant="rich" />)
     expect(screen.getByText('Add to Cart')).toBeInTheDocument()
   })
+
+  it('shows the unit for bulk products in compact mode', () => {
+    const product = { ...baseProduct, is_bulk: true, bulk_unit: 'kg' }
+    render(<ProductCard product={product} onAdd={vi.fn()} />)
+    expect(screen.getByText('$4.50')).toBeInTheDocument()
+    expect(screen.getByText('/kg')).toBeInTheDocument()
+  })
+
+  it('shows the unit for bulk products in rich mode', () => {
+    const product = { ...baseProduct, is_bulk: true, bulk_unit: 'l' }
+    render(<ProductCard product={product} onAdd={vi.fn()} variant="rich" />)
+    expect(screen.getByText('per l')).toBeInTheDocument()
+  })
 })

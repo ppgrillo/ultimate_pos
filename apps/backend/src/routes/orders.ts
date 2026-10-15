@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { orderSchema, canTransition, computeOrderTotals, resolveTip } from '@ultimate-pos/shared'
+import { orderSchema, canTransition, computeOrderTotals, resolveTip, round2 } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
@@ -375,7 +375,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       ? isCustom ? incomingUnitPrice : Math.min(incomingUnitPrice, expectedPromotionalPrice)
       : expectedPromotionalPrice
 
-    const itemTotal = unitPrice * item.quantity
+    const itemTotal = round2(unitPrice * item.quantity)
     subtotal += itemTotal
     const isExempt = isCustom ? false : (taxExemptEnabled && product?.tax_exempt === true)
     if (!isExempt) taxableSubtotal += itemTotal
@@ -922,7 +922,7 @@ ordersRouter.post('/:id/pay', async (c) => {
     if (card) {
       const itemsForPoints = (order.items || []).map((i: any) => ({
         product_id: i.product_id,
-        quantity: i.quantity,
+        quantity: Number(i.quantity) || 1,
         price: Number(i.unit_price ?? 0),
         points: i.points,
       }))
@@ -1160,12 +1160,12 @@ export async function processMpLoyalty(
   if (existingTxs && existingTxs.length > 0) return undefined
 
   const items = (order.items || []) as any[]
-  const subtotal = items.reduce((s, i) => s + Number(i.unit_price) * (i.quantity || 1), 0)
+  const subtotal = items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity || 1), 0)
   const discount = Number(order.discount || 0)
 
   const itemsForPoints = items.map((i: any) => ({
     product_id: i.product_id,
-    quantity: i.quantity,
+    quantity: Number(i.quantity) || 1,
     price: Number(i.unit_price ?? 0),
     points: i.points,
   }))

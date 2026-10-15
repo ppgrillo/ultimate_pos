@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Gift, X } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { addItem, clearRewardItems, setRedeemedReward } from '@/store/slices/cartSlice'
-import { setCustomizeProductId } from '@/store/slices/posSlice'
+import { setCustomizeProductId, setBulkProductId } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { useGetProductsQuery } from '@/store/api'
 import type { LoyaltyReward, Product } from '@ultimate-pos/shared'
@@ -84,6 +84,10 @@ export function RewardsPanel({
     if (reward.reward_type === 'free_product' && reward.product_id) {
       const product = products.find((p: Product) => p.id === reward.product_id)
       if (product) {
+        if (product.is_bulk) {
+          dispatch(setBulkProductId(product.id))
+          return
+        }
         const hasModifiers = product.modifiers && product.modifiers.length > 0
         if (hasModifiers) {
           dispatch(setCustomizeProductId(product.id))

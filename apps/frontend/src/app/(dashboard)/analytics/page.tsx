@@ -7,6 +7,7 @@ import { useGetAnalyticsSalesQuery, useGetAnalyticsProductsQuery, useGetAnalytic
 import type { AnalyticsPeriod } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
+import { formatQuantity } from '@ultimate-pos/shared'
 import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Clock, HandCoins } from 'lucide-react'
 import {
   AreaChart,
@@ -437,7 +438,7 @@ export default function AnalyticsPage() {
                         <span className="text-sm text-on-surface truncate">{p.name}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 text-right text-sm text-on-surface-variant">{p.quantitySold}</td>
+                    <td className="py-2.5 px-4 text-right text-sm text-on-surface-variant">{formatQuantity(p.quantitySold)}</td>
                     <td className="py-2.5 pl-4 text-right text-sm font-bold text-on-surface">{formatCurrency(p.revenue)}</td>
                   </tr>
                 ))}

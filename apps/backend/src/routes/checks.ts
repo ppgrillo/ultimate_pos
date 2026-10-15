@@ -247,7 +247,7 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
     const isCustom = item.product_id === null
     const product = isCustom ? null : productMap.get(item.product_id)
     const unitPrice = item.unit_price != null ? item.unit_price : Number(product?.price || 0)
-    const itemTotal = unitPrice * item.quantity
+    const itemTotal = round2(unitPrice * item.quantity)
     subtotal += itemTotal
     const isExempt = isCustom ? false : (taxExemptEnabled && product?.tax_exempt === true)
     if (!isExempt) taxableSubtotal += itemTotal

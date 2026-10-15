@@ -148,6 +148,9 @@ export interface ProductUpsertInput {
   track_inventory: boolean
   low_stock_threshold: number | null
   tax_exempt: boolean
+  is_bulk: boolean
+  bulk_unit: string | null
+  bulk_step: number | null
 }
 
 export interface BillingStatusInfo {

@@ -33,6 +33,9 @@ export interface Product {
   is_active: boolean
   tax_exempt: boolean
   pinned: boolean
+  is_bulk: boolean
+  bulk_unit: string | null
+  bulk_step: number | null
   created_at: string
   updated_at: string
 }
