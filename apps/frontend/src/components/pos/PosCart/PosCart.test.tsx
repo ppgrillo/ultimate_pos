@@ -2,6 +2,12 @@ import { render, screen } from '@/test/test-utils'
 import { PosCart } from './PosCart'
 import type { CartItem } from '@/store/slices/cartSlice'
 
+const mockPush = vi.fn()
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}))
+
 vi.mock('@/store/api', async () => {
   const actual = await vi.importActual<any>('@/store/api')
   return {
@@ -68,7 +74,7 @@ describe('PosCart', () => {
     expect(screen.getByText('Checkout')).toBeInTheDocument()
   })
 
-  it('shows open tables panel when hasKitchen is enabled', () => {
+  it('shows the destination table row instead of an open tables panel when hasKitchen is enabled', () => {
     render(<PosCart />, {
       preloadedState: {
         cart: baseCart,
@@ -90,6 +96,7 @@ describe('PosCart', () => {
         },
       },
     })
-    expect(screen.getByText('Open Tables')).toBeInTheDocument()
+    expect(screen.getByText('Elegir mesa')).toBeInTheDocument()
+    expect(screen.queryByText('Open Tables')).not.toBeInTheDocument()
   })
 })

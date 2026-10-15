@@ -45,7 +45,7 @@ describe('SupplierForm', () => {
   })
 
   it('validates that a name is required', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<SupplierForm open onOpenChange={onOpenChange} />)
 
     await user.click(screen.getByRole('button', { name: 'Add Supplier' }))
@@ -55,7 +55,7 @@ describe('SupplierForm', () => {
   })
 
   it('validates the email format', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<SupplierForm open onOpenChange={onOpenChange} />)
 
     await user.type(screen.getByLabelText('Supplier name'), 'Distribuidora Norte')
@@ -67,7 +67,7 @@ describe('SupplierForm', () => {
   })
 
   it('creates a supplier with normalized values', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<SupplierForm open onOpenChange={onOpenChange} />)
 
     await user.type(screen.getByLabelText('Supplier name'), '  Distribuidora Norte  ')
@@ -102,7 +102,7 @@ describe('SupplierForm', () => {
   })
 
   it('updates the supplier when edited', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<SupplierForm open onOpenChange={onOpenChange} supplier={SUPPLIER} />)
 
     await user.clear(screen.getByLabelText('Supplier name'))
@@ -128,7 +128,7 @@ describe('SupplierForm', () => {
   })
 
   it('opens a WhatsApp chat with the typed phone', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     render(<SupplierForm open onOpenChange={onOpenChange} />)
 

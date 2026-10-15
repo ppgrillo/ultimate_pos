@@ -5,6 +5,9 @@ import {
   closeCheckSchema,
   createCheckSchema,
   voidCheckSchema,
+  computeOrderTotals,
+  resolveTip,
+  round2,
 } from '@ultimate-pos/shared'
 import { authMiddleware, requireRole } from '../middleware/auth'
 import { requireAccess } from '../middleware/requireAccess'
@@ -13,6 +16,21 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { decryptSettings } from '../lib/settings'
 import { orderBus } from '../events'
 import { createRedemption, revertRedemption } from '../services/rewards.service'
+import {
+  getActiveCardProvider,
+  getCardProvider,
+  getProviderCredentials,
+  getProviderTerminalId,
+  isCardPaymentConfigured,
+  cardProviderDisplayName,
+} from '../services/payments'
+import { buildPaymentMetadata } from '../services/payments/metadata'
+import { isTerminalCardStatus } from '../services/payments/status'
+import {
+  applyCheckCardOutcome,
+  isPendingCheckCardPayment,
+  readCheckPayment,
+} from '../services/check-payment'
 
 export const checksRouter = new Hono()
 
@@ -176,6 +194,9 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
 
   if (checkError || !check) throw notFound('Check not found')
   if (check.status !== 'open') throw badRequest('Check is not open')
+  if (isPendingCheckCardPayment(check)) {
+    throw badRequest('A card payment is pending on this check. Finish or cancel it before adding items.')
+  }
 
   const { data: store } = await supabaseAdmin
     .from('stores')
@@ -254,20 +275,16 @@ checksRouter.post('/:id/orders', requireRole('admin', 'employee'), zValidator('j
     }
   }
 
-  const totalDiscount = discount + promoDiscount + rewardDiscount
-
-  let tax = 0
-  if (taxEnabled && taxRate > 0) {
-    if (taxInclusive) {
-      tax = Math.round((taxableSubtotal - taxableSubtotal / (1 + taxRate)) * 100) / 100
-    } else {
-      tax = Math.round(taxableSubtotal * taxRate * 100) / 100
-    }
-  }
-
-  const total = taxInclusive
-    ? Math.round((subtotal - totalDiscount) * 100) / 100
-    : Math.round((subtotal + tax - totalDiscount) * 100) / 100
+  const { tax, total } = computeOrderTotals({
+    subtotal,
+    taxableSubtotal,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount,
+    promoDiscount,
+    rewardDiscount,
+  })
 
   const tz = (settings?.timezone as string) || 'UTC'
   const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -394,6 +411,14 @@ checksRouter.post('/:id/close', requireRole('admin', 'employee'), zValidator('js
   if (!check) throw notFound('Check not found')
   if (check.status !== 'open') throw badRequest('Check is already closed')
 
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+
   const { data: orders } = await supabaseAdmin
     .from('orders')
     .select('*')
@@ -408,16 +433,110 @@ checksRouter.post('/:id/close', requireRole('admin', 'employee'), zValidator('js
 
   const total = payableOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
 
+  const tip = payableOrders.length > 0
+    ? resolveTip(input.tip, {
+        tipEnabled: (settings?.tipsEnabled as boolean) ?? false,
+        tipAppliesTo: (settings?.tipAppliesTo as 'all' | 'dine-in') ?? 'all',
+        orderType: 'dine-in',
+        tipMaxPercent: settings?.tipMaxPercent as number | undefined,
+        tipBase: total,
+      })
+    : 0
+
+  const checkGrandTotal = round2(total + tip)
+  const cardProviderName = getActiveCardProvider(settings)
+  const isCardPayment = input.payment_method === 'card' && isCardPaymentConfigured(settings)
+
+  // Card + terminal: create the intent, keep the check open, and let the POS
+  // modal drive the terminal. The check is only closed once the provider
+  // confirms (via GET /:id/mp-status or the webhook).
+  if (isCardPayment && payableOrders.length > 0) {
+    const existing = readCheckPayment(check)
+    if (existing.providerOrderId && existing.providerStatus && !isTerminalCardStatus(existing.providerStatus)) {
+      return c.json({
+        data: {
+          ...check,
+          total: checkGrandTotal,
+          tip_amount: tip,
+          providerOrderId: existing.providerOrderId,
+          awaiting_payment: true,
+        },
+      })
+    }
+
+    const cardProvider = getCardProvider(cardProviderName)
+    const credentials = getProviderCredentials(settings)
+    const terminalId = getProviderTerminalId(settings)
+    const currentMetadata = (check.metadata as Record<string, unknown>) || {}
+
+    const payment = await cardProvider.createPayment({
+      totalAmount: checkGrandTotal,
+      externalReference: id,
+      description: `Ultimate POS - Check #${id.slice(0, 8)}`,
+      terminalId,
+    }, credentials).catch((err: unknown) => {
+      throw badRequest(`${cardProviderDisplayName(cardProviderName)} payment failed: ${(err as { message?: string })?.message || 'Unknown error'}`)
+    })
+
+    const metadata = {
+      ...buildPaymentMetadata(currentMetadata, cardProviderName, payment.providerOrderId, 'created'),
+      amount: checkGrandTotal,
+      tip,
+    }
+
+    const { data: pending, error: metaError } = await supabaseAdmin
+      .from('checks')
+      .update({ metadata, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('store_id', storeId)
+      .select('*')
+      .single()
+
+    if (metaError) throw badRequest(metaError.message)
+
+    orderBus.emit('order:status-changed', { store_id: storeId, type: 'check:payment-pending', check_id: id })
+
+    return c.json({
+      data: {
+        ...pending,
+        total: checkGrandTotal,
+        tip_amount: tip,
+        providerOrderId: payment.providerOrderId,
+        awaiting_payment: true,
+      },
+    })
+  }
+
+  if (input.payment_method === 'cash' && input.cash_amount_given !== undefined && input.cash_amount_given < checkGrandTotal) {
+    throw badRequest('Amount given must be at least the total')
+  }
+
+  let tipAttached = false
+  let cashInfoAttached = false
+
   for (const order of payableOrders) {
     if (order.payment_status !== 'paid') {
-      await supabaseAdmin
-        .from('payments')
-        .insert({
-          order_id: order.id,
-          amount: order.total,
-          method: input.payment_method || 'cash',
-          status: 'completed',
-        })
+      const payment: Record<string, unknown> = {
+        order_id: order.id,
+        amount: order.total,
+        method: input.payment_method || 'cash',
+        status: 'completed',
+        tip_amount: 0,
+      }
+
+      if (!tipAttached && tip > 0) {
+        payment.amount = round2(Number(order.total || 0) + tip)
+        payment.tip_amount = tip
+        tipAttached = true
+      }
+
+      if (input.payment_method === 'cash' && input.cash_amount_given !== undefined && !cashInfoAttached) {
+        payment.amount_given = input.cash_amount_given
+        payment.change_due = round2(input.cash_amount_given - checkGrandTotal)
+        cashInfoAttached = true
+      }
+
+      await supabaseAdmin.from('payments').insert(payment)
     }
 
     await supabaseAdmin
@@ -435,6 +554,7 @@ checksRouter.post('/:id/close', requireRole('admin', 'employee'), zValidator('js
     .from('checks')
     .update({
       status: 'closed',
+      tip_amount: tip,
       closed_by: userId,
       closed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -448,7 +568,133 @@ checksRouter.post('/:id/close', requireRole('admin', 'employee'), zValidator('js
 
   orderBus.emit('order:status-changed', { store_id: storeId, type: 'check:closed', check_id: id })
 
-  return c.json({ data: { ...closed, total } })
+  return c.json({ data: { ...closed, total: round2(total + tip), tip_amount: tip } })
+})
+
+// Polls the provider for a pending card payment on a check. When the provider
+// confirms, every payable order is marked paid and the check is closed; on a
+// terminal failure the pending state is cleared so the operator can retry.
+checksRouter.get('/:id/mp-status', async (c) => {
+  const storeId = c.get('storeId')
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const { data: check } = await supabaseAdmin
+    .from('checks')
+    .select('*')
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .single()
+
+  if (!check) throw notFound('Check not found')
+
+  if (check.status === 'closed') {
+    return c.json({ data: { ...check, payment_status: 'paid' } })
+  }
+
+  const info = readCheckPayment(check)
+  if (!info.providerOrderId) {
+    return c.json({ data: { ...check, payment_status: 'unpaid' } })
+  }
+
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const providerName = getActiveCardProvider(settings)
+  const cardProvider = getCardProvider(providerName)
+  const credentials = getProviderCredentials(settings)
+
+  let status = info.providerStatus
+  let detail = info.detail
+
+  // The provider is the only authority on whether money moved.
+  if (credentials.accessToken) {
+    try {
+      const payment = await cardProvider.getPayment(info.providerOrderId, credentials)
+      status = payment.status
+      detail = payment.paymentDetail
+    } catch (err) {
+      console.error(`[checks:mp-status] provider poll failed for ${info.providerOrderId}: ${(err as Error).message}`)
+    }
+  }
+
+  if (status) {
+    await applyCheckCardOutcome({
+      check,
+      currentMetadata: (check.metadata as Record<string, unknown>) || {},
+      provider: providerName,
+      providerOrderId: info.providerOrderId,
+      status,
+      detail,
+      closedBy: userId,
+    })
+  }
+
+  const { data: fresh } = await supabaseAdmin
+    .from('checks')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  const paid = fresh?.status === 'closed'
+  return c.json({ data: { ...fresh, payment_status: paid ? 'paid' : 'unpaid' } })
+})
+
+// Cancels a pending card payment intent and clears it from the check, leaving
+// the account open so the operator can choose another method.
+checksRouter.post('/:id/cancel-mp', requireRole('admin', 'employee'), async (c) => {
+  const storeId = c.get('storeId')
+  const id = c.req.param('id')
+
+  const { data: check } = await supabaseAdmin
+    .from('checks')
+    .select('*')
+    .eq('id', id)
+    .eq('store_id', storeId)
+    .single()
+
+  if (!check) throw notFound('Check not found')
+
+  const info = readCheckPayment(check)
+  if (!info.providerOrderId || check.status === 'closed') {
+    return c.json({ success: true })
+  }
+
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
+
+  const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+  const providerName = getActiveCardProvider(settings)
+  const cardProvider = getCardProvider(providerName)
+  const credentials = getProviderCredentials(settings)
+
+  if (credentials.accessToken) {
+    try {
+      await cardProvider.cancelPayment(info.providerOrderId, credentials)
+    } catch (err) {
+      console.warn(`[checks:cancel-mp] provider cancel failed for ${info.providerOrderId}: ${(err as Error).message}`)
+    }
+  }
+
+  const currentMetadata = (check.metadata as Record<string, unknown>) || {}
+  const metadata = buildPaymentMetadata(currentMetadata, providerName, info.providerOrderId, 'canceled')
+
+  const { error } = await supabaseAdmin
+    .from('checks')
+    .update({ metadata, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('store_id', storeId)
+
+  if (error) throw badRequest(error.message)
+
+  return c.json({ success: true })
 })
 
 checksRouter.post('/:id/void', requireRole('admin'), zValidator('json', voidCheckSchema), async (c) => {
@@ -466,6 +712,26 @@ checksRouter.post('/:id/void', requireRole('admin'), zValidator('json', voidChec
 
   if (!check) throw notFound('Check not found')
   if (check.status !== 'open') throw badRequest('Check is not open')
+
+  // Best-effort: do not leave a live terminal intent behind when voiding.
+  const pendingPayment = readCheckPayment(check)
+  if (
+    pendingPayment.providerOrderId &&
+    pendingPayment.providerStatus &&
+    !isTerminalCardStatus(pendingPayment.providerStatus)
+  ) {
+    const { data: store } = await supabaseAdmin
+      .from('stores')
+      .select('settings')
+      .eq('id', storeId)
+      .single()
+    const settings = decryptSettings((store?.settings as Record<string, unknown>) || {})
+    const provider = getCardProvider(getActiveCardProvider(settings))
+    const credentials = getProviderCredentials(settings)
+    if (credentials.accessToken) {
+      await provider.cancelPayment(pendingPayment.providerOrderId, credentials).catch(() => {})
+    }
+  }
 
   const { data: orders } = await supabaseAdmin
     .from('orders')

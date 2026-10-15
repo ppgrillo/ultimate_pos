@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../lib/supabase/admin'
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { orderSchema, canTransition } from '@ultimate-pos/shared'
+import { orderSchema, canTransition, computeOrderTotals, resolveTip } from '@ultimate-pos/shared'
 import { authMiddleware } from '../middleware/auth'
 import { requireAccess } from '../middleware/requireAccess'
 import { notFound, badRequest } from '../middleware/error'
@@ -435,20 +435,36 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     }
   }
 
-  const totalDiscount = discount + promoDiscount + rewardDiscount
+  const interim = computeOrderTotals({
+    subtotal,
+    taxableSubtotal,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount,
+    promoDiscount,
+    rewardDiscount,
+  })
 
-  let tax = 0
-  if (taxEnabled && taxRate > 0) {
-    if (taxInclusive) {
-      tax = Math.round((taxableSubtotal - taxableSubtotal / (1 + taxRate)) * 100) / 100
-    } else {
-      tax = Math.round(taxableSubtotal * taxRate * 100) / 100
-    }
-  }
+  const tip = resolveTip(input.tip, {
+    tipEnabled: (settings?.tipsEnabled as boolean) ?? false,
+    tipAppliesTo: (settings?.tipAppliesTo as 'all' | 'dine-in') ?? 'all',
+    orderType: input.type || 'dine-in',
+    tipMaxPercent: settings?.tipMaxPercent as number | undefined,
+    tipBase: interim.baseTotal,
+  })
 
-  const total = taxInclusive
-    ? Math.round((subtotal - totalDiscount) * 100) / 100
-    : Math.round((subtotal + tax - totalDiscount) * 100) / 100
+  const { tax, total } = computeOrderTotals({
+    subtotal,
+    taxableSubtotal,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount,
+    promoDiscount,
+    rewardDiscount,
+    tip,
+  })
 
   const hasKitchen = (settings?.hasKitchen as boolean) ?? false
   const initialStatus = !hasKitchen && paymentMethod && !isCardPayment ? 'paid' : 'pending'
@@ -484,6 +500,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
       discount_label: input.discount_label || null,
       promo_discount: promoDiscount,
       applied_promotions: validatedCartPromotions,
+      tip_amount: tip,
       total,
       notes: input.notes,
     })
@@ -581,6 +598,7 @@ ordersRouter.post('/', zValidator('json', orderSchema), async (c) => {
     const paymentData: Record<string, unknown> = {
       order_id: order.id,
       amount: total,
+      tip_amount: tip,
       method: paymentMethod,
       status: isCardPayment ? 'pending' : 'completed',
     }
@@ -813,15 +831,15 @@ ordersRouter.post('/:id/pay', async (c) => {
     throw badRequest(`Payment method "${paymentMethod}" is not accepted`)
   }
 
-  const { data: order } = await supabase
-    .from('orders')
-    .select('id, order_number, status, payment_status, total, subtotal, discount, items:order_items(*), applied_promotions, customer_id, metadata, type')
-    .eq('id', orderId)
-    .eq('store_id', storeId)
-    .single()
+    const { data: order } = await supabase
+      .from('orders')
+      .select('id, order_number, status, payment_status, total, subtotal, discount, tip_amount, items:order_items(*), applied_promotions, customer_id, metadata, type')
+      .eq('id', orderId)
+      .eq('store_id', storeId)
+      .single()
 
-  if (!order) throw notFound('Order not found')
-  if (order.payment_status === 'paid') throw badRequest('Order is already paid')
+    if (!order) throw notFound('Order not found')
+    if (order.payment_status === 'paid') throw badRequest('Order is already paid')
   if (order.status === 'cancelled' || order.status === 'refunded') throw badRequest('Cannot pay a cancelled or refunded order')
 
   if (paymentMethod === 'cash' && cashAmountGiven !== undefined && cashAmountGiven < Number(order.total)) {
@@ -844,13 +862,14 @@ ordersRouter.post('/:id/pay', async (c) => {
     paidPaymentStatus = 'unpaid'
   }
 
-  const paymentData: Record<string, unknown> = {
-    order_id: orderId,
-    amount: Number(order.total),
-    method: paymentMethod,
-    status: isCardFlow ? 'pending' : 'completed',
-    ...(isCardFlow ? { provider: cardProviderName } : {}),
-  }
+    const paymentData: Record<string, unknown> = {
+      order_id: orderId,
+      amount: Number(order.total),
+      tip_amount: Number(order.tip_amount || 0),
+      method: paymentMethod,
+      status: isCardFlow ? 'pending' : 'completed',
+      ...(isCardFlow ? { provider: cardProviderName } : {}),
+    }
 
   if (paymentMethod === 'cash' && cashAmountGiven !== undefined) {
     paymentData.amount_given = cashAmountGiven

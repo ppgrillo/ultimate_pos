@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Receipt } from 'lucide-react'
+import { ArrowLeft, Bolt, Lock, Percent, Banknote, BadgeCheck, Receipt, PlusCircle } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setCheckoutView, setCartOpen, setActiveView, setKitchenNotice } from '@/store/slices/posSlice'
 import { clearCart, setOrderType, setTable } from '@/store/slices/cartSlice'
@@ -12,6 +12,7 @@ import { formatCurrency, cn } from '@/lib/utils'
 import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
+import { TipSelector } from '@/components/pos/TipSelector'
 import { PromoModal } from '@/components/pos/PromoModal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
@@ -21,6 +22,7 @@ import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { EnrollPrompt } from '@/components/pos/EnrollPrompt'
 import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import { useStoreCheckoutReady } from '@/hooks/useStoreCheckoutReady'
+import { computeOrderTotals, round2 } from '@ultimate-pos/shared'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
 export function CheckoutPanel() {
@@ -44,6 +46,7 @@ export function CheckoutPanel() {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState<string>('')
   const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
+  const [tip, setTip] = useState(0)
   const hasLoyalty = (settings?.hasLoyalty as boolean) ?? false
   const { data: loyaltyCard } = useGetLoyaltyCardQuery(customer_id ?? '', { skip: !customer_id || !hasLoyalty })
 
@@ -66,23 +69,38 @@ export function CheckoutPanel() {
         : 0
     : 0
 
-  const computedTax = !taxEnabled ? 0 : taxInclusive
-    ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
-    : Math.round(actualSubtotal * taxRate * 100) / 100
+  const { total: totalAmount } = computeOrderTotals({
+    subtotal,
+    productSavings,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount,
+    promoDiscount,
+    rewardDiscount,
+  })
 
-  const totalDiscount = discount + promoDiscount + rewardDiscount
-  const totalAmount = taxInclusive
-    ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
-    : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
+  const tipsEnabled = settings?.tipsEnabled ?? false
+  const kitchenDineIn = !!settings?.hasKitchen && order_type === 'dine-in'
+  // Tips are captured at check close for kitchen dine-in, so hide the inline selector there.
+  const tipAllowed = tipsEnabled && !kitchenDineIn && (settings?.tipAppliesTo !== 'dine-in' || order_type === 'dine-in')
+  const tipAmount = tipAllowed ? tip : 0
+  const grandTotal = round2(totalAmount + tipAmount)
 
   const payLaterMode = checkoutMode === 'order-first-pay-later'
   const isCash = selectedMethod === 'cash'
   const parsedCashGiven = parseFloat(cashGiven) || 0
-  const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - totalAmount) * 100) / 100) : 0
-  const cashValid = parsedCashGiven >= totalAmount
+  const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - grandTotal) * 100) / 100) : 0
+  const cashValid = parsedCashGiven >= grandTotal
+  // Kitchen dine-in never collects payment inline: items are added to the table's
+  // check and the tab is settled later via "Close & Pay". Require a table so the
+  // "Add to Table" action can't fire without one.
+  const needsTable = kitchenDineIn && (!table_number || table_number <= 0)
   // Never submit while the store configuration is unknown: the backend validates
   // against the real DB value, so a guess here turns into a 400 at the worst moment.
-  const canSubmit = storeReady && (!paymentRequired || (selectedMethod !== null && (!isCash || cashValid)))
+  const canSubmit = storeReady && !needsTable && (
+    kitchenDineIn || !paymentRequired || (selectedMethod !== null && (!isCash || cashValid))
+  )
   const mpPointEnabled = settings?.mpPointEnabled ?? false
   const activeCardProvider = getActiveCardProvider(settings)
 
@@ -97,7 +115,7 @@ export function CheckoutPanel() {
     dispatch(setCheckoutView(false))
     dispatch(setCartOpen(false))
     setMpPaymentOrderId(null)
-    router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
+    router.push(`/pos/receipt?paymentMethod=card&total=${grandTotal}${tipAmount > 0 ? `&tip=${tipAmount}` : ''}`)
   }
 
   const handleMpCancel = async () => {
@@ -115,8 +133,8 @@ export function CheckoutPanel() {
       setError(blockedMessage ?? 'Configuración de tienda no disponible.')
       return
     }
-    if (paymentRequired && !selectedMethod) return
-    if (isCash && !cashValid) return
+    if (!kitchenDineIn && paymentRequired && !selectedMethod) return
+    if (!kitchenDineIn && isCash && !cashValid) return
     setSubmitting(true)
     setError(null)
 
@@ -208,6 +226,7 @@ export function CheckoutPanel() {
         redeemed_reward_id: redeemed_reward_id || undefined,
         payment_method: paymentRequired ? selectedMethod : undefined,
         cash_amount_given: isCash ? parsedCashGiven : undefined,
+        tip: tipAmount > 0 ? tipAmount : undefined,
       })
 
       const paymentInfo = readOrderPayment(res.data?.metadata)
@@ -232,7 +251,8 @@ export function CheckoutPanel() {
       const params = new URLSearchParams()
       if (paymentRequired && selectedMethod) {
         params.set('paymentMethod', selectedMethod)
-        params.set('total', String(totalAmount))
+        params.set('total', String(grandTotal))
+        if (tipAmount > 0) params.set('tip', String(tipAmount))
         if (isCash && changeDue > 0) {
           params.set('changeDue', String(changeDue))
         }
@@ -262,13 +282,17 @@ export function CheckoutPanel() {
     }
   }
 
-  const buttonLabel = paymentRequired && selectedMethod
-    ? isCash
-      ? `Charge ${formatCurrency(totalAmount)}`
-      : `Charge ${formatCurrency(totalAmount)} with ${selectedMethod === 'card' ? 'Card' : 'Transfer'}`
-    : payLaterMode
-      ? `Create Order for ${formatCurrency(totalAmount)}`
-      : `Charge ${formatCurrency(totalAmount)}`
+  const buttonLabel = kitchenDineIn
+    ? table_number && table_number > 0
+      ? `Add to Table ${table_number}`
+      : 'Select Table'
+    : paymentRequired && selectedMethod
+      ? isCash
+        ? `Charge ${formatCurrency(grandTotal)}`
+        : `Charge ${formatCurrency(grandTotal)} with ${selectedMethod === 'card' ? 'Card' : 'Transfer'}`
+      : payLaterMode
+        ? `Create Order for ${formatCurrency(grandTotal)}`
+        : `Charge ${formatCurrency(grandTotal)}`
 
   return (
     <div className="flex flex-col h-full">
@@ -360,9 +384,28 @@ export function CheckoutPanel() {
             taxLabel={taxLabel}
             taxInclusive={taxInclusive}
             taxEnabled={taxEnabled}
+            tip={tipAmount > 0 ? tipAmount : undefined}
+            tipLabel={settings?.tipLabel || 'Tip'}
             showTotal
           />
           </div>
+
+          {tipAllowed && (
+            <div>
+              <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">
+                Tip
+              </h3>
+              <TipSelector
+                tip={tip}
+                base={totalAmount}
+                onChange={setTip}
+                label={settings?.tipLabel || 'Tip'}
+                presets={settings?.tipPresets}
+                allowCustom={settings?.tipAllowCustom ?? false}
+                maxPercent={settings?.tipMaxPercent ?? 100}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -373,7 +416,7 @@ export function CheckoutPanel() {
       )}
 
       <div className="border-t border-outline-variant p-4 space-y-3">
-        {paymentRequired && (
+        {paymentRequired && !kitchenDineIn && (
           <>
             <div>
               <h3 className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2">
@@ -383,7 +426,7 @@ export function CheckoutPanel() {
                 selected={selectedMethod}
                 onSelect={handleMethodChange}
                 acceptedMethods={acceptedMethods}
-                amount={totalAmount}
+                amount={grandTotal}
                 mpPointEnabled={mpPointEnabled}
                 cardProviderLabel={cardProviderShortName(activeCardProvider)}
               />
@@ -407,7 +450,7 @@ export function CheckoutPanel() {
                       step={0.01}
                       value={cashGiven}
                       onChange={(e) => setCashGiven(e.target.value)}
-                      placeholder={formatCurrency(totalAmount)}
+                      placeholder={formatCurrency(grandTotal)}
                       className={cn(
                         'w-full rounded-lg border bg-surface-container-high py-3 pl-8 pr-3 text-lg font-headline font-bold text-on-surface placeholder:text-on-surface-variant/30 transition-all',
                         'focus-visible:outline-none focus-visible:ring-2',
@@ -439,7 +482,7 @@ export function CheckoutPanel() {
                     <span className="font-headline font-bold text-lg">
                       {cashValid
                         ? formatCurrency(changeDue)
-                        : formatCurrency(Math.abs(totalAmount - parsedCashGiven)) + ' short'}
+                        : formatCurrency(Math.abs(grandTotal - parsedCashGiven)) + ' short'}
                     </span>
                   </div>
                 )}
@@ -478,7 +521,7 @@ export function CheckoutPanel() {
             </>
           ) : (
             <>
-              {payLaterMode ? <Receipt className="h-5 w-5" /> : isCash ? <Banknote className="h-5 w-5" /> : <Bolt className="h-5 w-5" />}
+              {kitchenDineIn ? <PlusCircle className="h-5 w-5" /> : payLaterMode ? <Receipt className="h-5 w-5" /> : isCash ? <Banknote className="h-5 w-5" /> : <Bolt className="h-5 w-5" />}
               {buttonLabel}
             </>
           )}
@@ -496,7 +539,7 @@ export function CheckoutPanel() {
         open={mpPaymentOrderId !== null}
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
         orderId={mpPaymentOrderId}
-        total={totalAmount}
+        total={grandTotal}
         providerName={activeCardProvider}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}

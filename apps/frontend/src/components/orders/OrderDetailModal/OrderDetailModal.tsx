@@ -173,6 +173,12 @@ export function OrderDetailModal({ order, open, onOpenChange, hasKitchen, onStat
                 <span className="font-label font-bold text-on-surface">{formatCurrency(displayOrder.tax)}</span>
               </div>
             )}
+            {Number(displayOrder.tip_amount ?? 0) > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-on-surface-variant">{settings?.tipLabel || 'Tip'}</span>
+                <span className="font-label font-bold text-on-surface">{formatCurrency(Number(displayOrder.tip_amount))}</span>
+              </div>
+            )}
             {displayOrder.loyalty?.earned ? (
               <div className="flex justify-between text-xs">
                 <span className="text-on-surface-variant">Points earned</span>

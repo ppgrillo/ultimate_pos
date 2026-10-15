@@ -8,6 +8,8 @@ import { OrderSummary } from '@/components/pos/OrderSummary'
 import { DiningOptionToggle } from '@/components/pos/DiningOptionToggle'
 import { PaymentModal } from '@/components/pos/PaymentModal'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { CheckPaymentFlow } from '@/components/pos/CheckPaymentFlow'
+import type { CheckForPayment } from '@/components/pos/CheckPaymentFlow'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
 import { OpenChecksPanel } from '@/components/pos/OpenChecksPanel/OpenChecksPanel'
 import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
@@ -20,11 +22,11 @@ import { setSelectedCustomer } from '@/store/slices/customersSlice'
 import { setQuickSaleOpen } from '@/store/slices/posSlice'
 import { api } from '@/lib/api/client'
 import { getActiveCardProvider, cardProviderShortName, readOrderPayment } from '@/lib/card-payments'
-import { useCloseCheckMutation, useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
+import { useGetLoyaltyCardQuery, api as rtkApi } from '@/store/api'
 import { useStoreCheckoutReady } from '@/hooks/useStoreCheckoutReady'
 import { LayoutPanelTop, ShoppingBag, Search, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { Check, PaymentMethod, ProductCategory } from '@ultimate-pos/shared'
+import type { PaymentMethod, ProductCategory } from '@ultimate-pos/shared'
 import { AutoPromoToggle } from '@/components/pos/AutoPromoToggle'
 
 interface PosDesktopLayoutProps {
@@ -47,10 +49,10 @@ export function PosDesktopLayout({
   const [submitting, setSubmitting] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [mpPaymentOrderId, setMpPaymentOrderId] = useState<string | null>(null)
-  const [checkToClose, setCheckToClose] = useState<(Check & { total?: number }) | null>(null)
+  const [mpGrandTotal, setMpGrandTotal] = useState(0)
+  const [mpTip, setMpTip] = useState(0)
+  const [checkToClose, setCheckToClose] = useState<CheckForPayment | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [closeCheckError, setCloseCheckError] = useState<string | null>(null)
-  const [closeCheck, { isLoading: closingCheck }] = useCloseCheckMutation()
 
   const items = useAppSelector((s) => s.cart.items)
   const customer_id = useAppSelector((s) => s.cart.customer_id)
@@ -99,6 +101,17 @@ export function PosDesktopLayout({
   const activeCardProvider = getActiveCardProvider(settings)
   const cardProviderLabel = cardProviderShortName(activeCardProvider)
 
+  const tipsEnabled = settings?.tipsEnabled ?? false
+  const isDineInTipContext = !!checkToClose || order_type === 'dine-in'
+  const tipAllowed = tipsEnabled && (settings?.tipAppliesTo !== 'dine-in' || isDineInTipContext)
+  const tipConfig = {
+    enabled: tipAllowed,
+    label: settings?.tipLabel || 'Tip',
+    presets: settings?.tipPresets,
+    allowCustom: settings?.tipAllowCustom ?? false,
+    maxPercent: settings?.tipMaxPercent ?? 100,
+  }
+
   const computedTax = !taxEnabled ? 0 : taxInclusive
     ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
     : Math.round(actualSubtotal * taxRate * 100) / 100
@@ -108,9 +121,11 @@ export function PosDesktopLayout({
     ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
     : Math.round((actualSubtotal + computedTax - totalDiscount) * 100) / 100
 
-  const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number) => {
+  const doSubmit = async (paymentMethod?: PaymentMethod, cashAmountGiven?: number, tip?: number) => {
     const isCash = paymentMethod === 'cash'
     const isMpPoint = paymentMethod === 'card' && mpPointEnabled
+    const tipAmount = tip && tip > 0 ? tip : 0
+    const grandTotal = Math.round((totalAmount + tipAmount) * 100) / 100
 
     setSubmitting(true)
     setSubmitError(null)
@@ -193,9 +208,12 @@ export function PosDesktopLayout({
         redeemed_reward_id: redeemed_reward_id || undefined,
         payment_method: paymentMethod,
         cash_amount_given: isCash ? cashAmountGiven : undefined,
+        tip: tipAmount > 0 ? tipAmount : undefined,
       })
       if (isMpPoint && readOrderPayment(res.data?.metadata).providerOrderId) {
         setSubmitting(false)
+        setMpGrandTotal(grandTotal)
+        setMpTip(tipAmount)
         setMpPaymentOrderId(res.data.id)
         return
       }
@@ -211,9 +229,10 @@ export function PosDesktopLayout({
       const params = new URLSearchParams()
       if (paymentMethod) {
         params.set('paymentMethod', paymentMethod)
-        params.set('total', String(totalAmount))
-        if (isCash && cashAmountGiven !== undefined && cashAmountGiven > totalAmount) {
-          params.set('changeDue', String(Math.round((cashAmountGiven - totalAmount) * 100) / 100))
+        params.set('total', String(grandTotal))
+        if (tipAmount > 0) params.set('tip', String(tipAmount))
+        if (isCash && cashAmountGiven !== undefined && cashAmountGiven > grandTotal) {
+          params.set('changeDue', String(Math.round((cashAmountGiven - grandTotal) * 100) / 100))
         }
       }
       const rewardPoints = redeemed_reward_data?.points_required ?? 0
@@ -263,8 +282,8 @@ export function PosDesktopLayout({
     await doSubmit()
   }
 
-  const handlePaymentConfirm = async (method: PaymentMethod, cashGiven?: number) => {
-    await doSubmit(method, cashGiven)
+  const handlePaymentConfirm = async (method: PaymentMethod, cashGiven?: number, tip?: number) => {
+    await doSubmit(method, cashGiven, tip)
     setShowPaymentModal(false)
   }
 
@@ -272,7 +291,9 @@ export function PosDesktopLayout({
     dispatch(setSelectedCustomer(null))
     dispatch(clearCart())
     setMpPaymentOrderId(null)
-    router.push(`/pos/receipt?paymentMethod=card&total=${totalAmount}`)
+    const params = new URLSearchParams({ paymentMethod: 'card', total: String(mpGrandTotal) })
+    if (mpTip > 0) params.set('tip', String(mpTip))
+    router.push(`/pos/receipt?${params.toString()}`)
   }
 
   const handleMpCancel = async () => {
@@ -280,27 +301,15 @@ export function PosDesktopLayout({
       try { await api.post(`/orders/${mpPaymentOrderId}/cancel-mp`) } catch {}
     }
     setMpPaymentOrderId(null)
+    setMpGrandTotal(0)
+    setMpTip(0)
   }
 
-  const handleCloseCheckPayment = async (method: PaymentMethod, cashAmountGiven?: number) => {
-    if (!checkToClose) return
-    try {
-      setCloseCheckError(null)
-      await closeCheck({
-        checkId: checkToClose.id,
-        payment_method: method,
-        cash_amount_given: method === 'cash' ? cashAmountGiven : undefined,
-      }).unwrap()
-      dispatch(setOrderType('dine-in'))
-      dispatch(setTable(null))
-      setCheckToClose(null)
-      setShowPaymentModal(false)
-    } catch (err) {
-      const message = err && typeof err === 'object' && 'data' in err
-        ? ((err as { data?: { error?: string } }).data?.error || 'Could not close check')
-        : 'Could not close check'
-      setCloseCheckError(message)
-    }
+  const handleCloseCheckCompleted = () => {
+    dispatch(setOrderType('dine-in'))
+    dispatch(setTable(null))
+    setCheckToClose(null)
+    setShowPaymentModal(false)
   }
 
   if (enableTablesView && settings?.hasKitchen && activeView === 'tables') {
@@ -323,24 +332,19 @@ export function PosDesktopLayout({
         <div className="flex-1 overflow-hidden">
           <TablesWorkspace
             onCloseAndPay={(check) => {
-              setCloseCheckError(null)
               setCheckToClose(check)
               setShowPaymentModal(true)
             }}
           />
         </div>
-        <PaymentModal
+        <CheckPaymentFlow
+          check={checkToClose}
           open={showPaymentModal}
           onOpenChange={(open) => {
             setShowPaymentModal(open)
-            if (!open && checkToClose) setCheckToClose(null)
+            if (!open) setCheckToClose(null)
           }}
-          total={checkToClose ? Number(checkToClose.total || 0) : totalAmount}
-          onConfirm={checkToClose ? handleCloseCheckPayment : handlePaymentConfirm}
-          acceptedMethods={acceptedMethods}
-          mpPointEnabled={mpPointEnabled}
-          cardProviderLabel={cardProviderLabel}
-          isLoading={submitting || closingCheck}
+          onClosed={handleCloseCheckCompleted}
         />
       </div>
     )
@@ -505,15 +509,9 @@ export function PosDesktopLayout({
 
          {settings?.hasKitchen && (
            <div className="border-t border-outline-variant px-4 py-2">
-             {closeCheckError && (
-               <p className="mb-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error">
-                 {closeCheckError}
-               </p>
-             )}
              <OpenChecksPanel
                enableWorkspaceShortcut={false}
                onCloseAndPay={(check) => {
-                 setCloseCheckError(null)
                  setCheckToClose(check)
                  setShowPaymentModal(true)
                }}
@@ -533,24 +531,32 @@ export function PosDesktopLayout({
         </aside>
 
       <PaymentModal
-        open={showPaymentModal}
-        onOpenChange={(open) => {
-          setShowPaymentModal(open)
-          if (!open && checkToClose) setCheckToClose(null)
-        }}
-        total={checkToClose ? Number(checkToClose.total || 0) : totalAmount}
-        onConfirm={checkToClose ? handleCloseCheckPayment : handlePaymentConfirm}
+        open={showPaymentModal && !checkToClose}
+        onOpenChange={(open) => setShowPaymentModal(open)}
+        total={totalAmount}
+        onConfirm={handlePaymentConfirm}
         acceptedMethods={acceptedMethods}
         mpPointEnabled={mpPointEnabled}
         cardProviderLabel={cardProviderLabel}
-        isLoading={submitting || closingCheck}
+        tipConfig={tipConfig}
+        isLoading={submitting}
+      />
+
+      <CheckPaymentFlow
+        check={checkToClose}
+        open={showPaymentModal && !!checkToClose}
+        onOpenChange={(open) => {
+          setShowPaymentModal(open)
+          if (!open) setCheckToClose(null)
+        }}
+        onClosed={handleCloseCheckCompleted}
       />
 
       <MPPointPayment
         open={mpPaymentOrderId !== null}
         onOpenChange={(v) => { if (!v) setMpPaymentOrderId(null) }}
         orderId={mpPaymentOrderId}
-        total={totalAmount}
+        total={mpGrandTotal}
         providerName={activeCardProvider}
         onPaid={handleMpPaid}
         onCancel={handleMpCancel}

@@ -6,11 +6,10 @@ import { cn, formatCurrency } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView } from '@/store/slices/posSlice'
 import { setOrderType, setTable } from '@/store/slices/cartSlice'
-import { useCloseCheckMutation, useGetCheckByIdQuery, useGetChecksQuery, useVoidCheckMutation } from '@/store/api'
-import { PaymentModal } from '@/components/pos/PaymentModal'
-import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
+import { useGetCheckByIdQuery, useGetChecksQuery, useVoidCheckMutation } from '@/store/api'
+import { CheckPaymentFlow } from '@/components/pos/CheckPaymentFlow'
 import { SecureActionDialog } from '@/components/ui/SecureActionDialog'
-import type { Check, KitchenWorkflowConfig, PaymentMethod } from '@ultimate-pos/shared'
+import type { Check, KitchenWorkflowConfig } from '@ultimate-pos/shared'
 import { getKitchenStatusLabel } from '@ultimate-pos/shared'
 
 interface TablesWorkspaceProps {
@@ -202,10 +201,8 @@ export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps
   const workflow = settings?.kitchenWorkflow ?? null
   const { data: checks = [], isFetching, refetch } = useGetChecksQuery({ status: 'open' })
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [closeCheckError, setCloseCheckError] = useState<string | null>(null)
   const [localCheckToClose, setLocalCheckToClose] = useState<OpenCheck | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [closeCheck, { isLoading: closingCheck }] = useCloseCheckMutation()
   const [checkToVoid, setCheckToVoid] = useState<OpenCheck | null>(null)
   const [voidReason, setVoidReason] = useState('')
   const [showVoidReason, setShowVoidReason] = useState(false)
@@ -253,25 +250,6 @@ export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps
     }
   }
 
-  const handleLocalCloseConfirm = async (method: PaymentMethod, cashGiven?: number) => {
-    if (!localCheckToClose) return
-    try {
-      setCloseCheckError(null)
-      await closeCheck({
-        checkId: localCheckToClose.id,
-        payment_method: method,
-        cash_amount_given: method === 'cash' ? cashGiven : undefined,
-      }).unwrap()
-      setLocalCheckToClose(null)
-      setShowPaymentModal(false)
-    } catch (err) {
-      const message = err && typeof err === 'object' && 'data' in err
-        ? ((err as { data?: { error?: string } }).data?.error || 'Could not close check')
-        : 'Could not close check'
-      setCloseCheckError(message)
-    }
-  }
-
   return (
     <section className="h-full overflow-y-auto p-3 lg:p-4">
       <div className="mx-auto w-full max-w-6xl space-y-3">
@@ -308,12 +286,6 @@ export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps
           </div>
         </div>
 
-        {closeCheckError && (
-          <p className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error">
-            {closeCheckError}
-          </p>
-        )}
-
         {isFetching ? (
           <div className="rounded-xl border border-outline-variant/50 bg-surface-container/40 p-4 text-sm text-on-surface-variant">
             Loading active tables…
@@ -349,18 +321,17 @@ export function TablesWorkspace({ onCloseAndPay, isAdmin }: TablesWorkspaceProps
       </div>
 
       {!onCloseAndPay && (
-        <PaymentModal
+        <CheckPaymentFlow
+          check={localCheckToClose}
           open={showPaymentModal}
           onOpenChange={(open) => {
             setShowPaymentModal(open)
-            if (!open && localCheckToClose) setLocalCheckToClose(null)
+            if (!open) setLocalCheckToClose(null)
           }}
-          total={Number(localCheckToClose?.total || 0)}
-          onConfirm={handleLocalCloseConfirm}
-          acceptedMethods={settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']}
-          mpPointEnabled={settings?.mpPointEnabled ?? false}
-          cardProviderLabel={cardProviderShortName(getActiveCardProvider(settings))}
-          isLoading={closingCheck}
+          onClosed={() => {
+            setLocalCheckToClose(null)
+            setShowPaymentModal(false)
+          }}
         />
       )}
 

@@ -5,6 +5,10 @@ import { TablesWorkspace } from './TablesWorkspace'
 const mockCloseCheck = vi.fn(() => ({ unwrap: vi.fn().mockResolvedValue({}) }))
 const mockRefetch = vi.fn()
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 vi.mock('@/store/api', async () => {
   const actual = await vi.importActual<any>('@/store/api')
   return {

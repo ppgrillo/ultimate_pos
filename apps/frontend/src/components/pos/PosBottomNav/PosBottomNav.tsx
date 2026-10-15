@@ -5,14 +5,6 @@ import { cn } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { setActiveView, setCartOpen, setCheckoutView, setCustomerDrawerOpen, setScannerOpen } from '@/store/slices/posSlice'
 
-const tabs = [
-  { id: 'menu' as const, label: 'Menu', icon: LayoutGrid },
-  { id: 'tables' as const, label: 'Mesas', icon: Table2 },
-  { id: 'cart' as const, label: 'Carrito', icon: ShoppingBag },
-  { id: 'scan' as const, label: 'Escanear', icon: Scan },
-  { id: 'customers' as const, label: 'Clientes', icon: Users },
-]
-
 interface PosBottomNavProps {
   enableTablesTab?: boolean
 }
@@ -26,6 +18,14 @@ export function PosBottomNav({ enableTablesTab = false }: PosBottomNavProps) {
   const scannerOpen = useAppSelector((s) => s.pos.scannerOpen)
   const items = useAppSelector((s) => s.cart.items)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
+
+  const tabs = [
+    { id: 'menu' as const, label: 'Menu', icon: LayoutGrid },
+    { id: 'tables' as const, label: 'Mesas', icon: Table2 },
+    { id: 'cart' as const, label: hasKitchen ? 'Orden' : 'Carrito', icon: ShoppingBag },
+    { id: 'scan' as const, label: 'Escanear', icon: Scan },
+    { id: 'customers' as const, label: 'Clientes', icon: Users },
+  ]
 
   const activeTab: 'menu' | 'tables' | 'cart' | 'scan' | 'customers' =
     customerDrawerOpen ? 'customers'

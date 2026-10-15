@@ -76,6 +76,7 @@ export const orderSchema = z.object({
   notes: z.string().nullable().optional(),
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
+  tip: z.number().min(0).optional().default(0),
 })
 
 export const createCheckSchema = z.object({
@@ -116,6 +117,7 @@ export const addCheckOrderSchema = z.object({
 export const closeCheckSchema = z.object({
   payment_method: z.enum(['cash', 'card', 'transfer']).optional(),
   cash_amount_given: z.number().min(0).optional(),
+  tip: z.number().min(0).optional().default(0),
 })
 
 export const voidCheckSchema = z.object({

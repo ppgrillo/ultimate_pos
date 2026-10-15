@@ -1,6 +1,7 @@
 'use client'
 
 import { formatCurrency } from '@/lib/utils'
+import { computeOrderTotals } from '@ultimate-pos/shared'
 import type { AppliedPromotion } from '@ultimate-pos/shared'
 
 interface OrderSummaryProps {
@@ -17,6 +18,8 @@ interface OrderSummaryProps {
   taxLabel?: string
   taxInclusive?: boolean
   taxEnabled?: boolean
+  tip?: number
+  tipLabel?: string
   showTotal?: boolean
 }
 
@@ -34,22 +37,22 @@ export function OrderSummary({
   taxLabel = 'Tax',
   taxInclusive = false,
   taxEnabled = true,
+  tip = 0,
+  tipLabel = 'Tip',
   showTotal = false,
 }: OrderSummaryProps) {
-  const actualSubtotal = subtotal - productSavings
-
-  const tax = !taxEnabled
-    ? 0
-    : taxOverride ?? (
-      taxInclusive
-        ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
-        : Math.round(actualSubtotal * taxRate * 100) / 100
-    )
-
-  const totalDiscount = discount + promoDiscount + rewardDiscount
-  const total = taxInclusive
-      ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
-      : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
+  const { tax, totalDiscount, total, tip: tipAmount } = computeOrderTotals({
+    subtotal,
+    productSavings,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount,
+    promoDiscount,
+    rewardDiscount,
+    taxOverride,
+    tip,
+  })
 
   return (
     <div className="space-y-1.5 text-sm">
@@ -98,6 +101,12 @@ export function OrderSummary({
         <div className="flex justify-between text-on-surface-variant">
           <span>{taxLabel} ({(taxRate * 100).toFixed(0)}%){taxInclusive ? ' incl.' : ''}</span>
           <span>{formatCurrency(tax)}</span>
+        </div>
+      )}
+      {tipAmount > 0 && (
+        <div className="flex justify-between text-on-surface-variant">
+          <span>{tipLabel}</span>
+          <span>{formatCurrency(tipAmount)}</span>
         </div>
       )}
       {showTotal && (

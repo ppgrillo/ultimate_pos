@@ -10,6 +10,7 @@ import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
 import { CategoryChips } from '@/components/pos/CategoryChips'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
+import { TipSelector } from '@/components/pos/TipSelector'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
 import { getActiveCardProvider, cardProviderDisplayName } from '@/lib/card-payments'
@@ -47,6 +48,7 @@ import {
   RotateCcw,
   User,
   CreditCard,
+  HandCoins,
 } from 'lucide-react'
 interface CartItem {
   product_id: string
@@ -86,6 +88,11 @@ export default function SelfCheckoutPage() {
   const [hasLoyalty, setHasLoyalty] = useState(false)
   const [pointsPerCurrency, setPointsPerCurrency] = useState(10)
   const [specialInstructionsEnabled, setSpecialInstructionsEnabled] = useState(true)
+  const [tipEnabled, setTipEnabled] = useState(false)
+  const [tipLabel, setTipLabel] = useState('Tip')
+  const [tipPresets, setTipPresets] = useState<number[] | undefined>(undefined)
+  const [tipAllowCustom, setTipAllowCustom] = useState(false)
+  const [tipMaxPercent, setTipMaxPercent] = useState(100)
 
   // ─── Catalogue ───────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([])
@@ -95,6 +102,7 @@ export default function SelfCheckoutPage() {
 
   // ─── Cart ─────────────────────────────────────────────────────────────────
   const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [tip, setTip] = useState(0)
   const [discount, setDiscount] = useState(0)
   const [discountLabel, setDiscountLabel] = useState('')
   const [dismissedWelcome, setDismissedWelcome] = useState(false)
@@ -179,6 +187,7 @@ export default function SelfCheckoutPage() {
     promoDiscount?: number
     rewardDiscount?: number
     rewardLabel?: string
+    tip?: number
     appliedPromotions?: { promotion_id: string; name: string; discount_amount: number }[]
   } | null>(null)
 
@@ -212,6 +221,11 @@ export default function SelfCheckoutPage() {
       setHasLoyalty((settings?.hasLoyalty as boolean) ?? false)
       setPointsPerCurrency((settings?.pointsPerCurrency as number) ?? 10)
       setSpecialInstructionsEnabled((settings?.specialInstructionsEnabled as boolean) ?? true)
+      setTipEnabled((settings?.tipsEnabled as boolean) ?? false)
+      setTipLabel((settings?.tipLabel as string) ?? 'Tip')
+      setTipPresets((settings?.tipPresets as number[]) ?? undefined)
+      setTipAllowCustom((settings?.tipAllowCustom as boolean) ?? false)
+      setTipMaxPercent((settings?.tipMaxPercent as number) ?? 100)
       setPromoPin((settings?.promoPin as string) ?? '')
       setInterestsConfig(settings?.registrationInterestsConfig as {
         enabled?: boolean
@@ -461,6 +475,11 @@ export default function SelfCheckoutPage() {
     : Math.round(actualSubtotal * taxRate * 100) / 100
   const cartTotalDiscount = discount + promoDiscount + rewardDiscount
   const cartPreDiscountTotal = taxInclusive ? actualSubtotal : actualSubtotal + cartTax
+  const tipAmount = tipEnabled ? tip : 0
+  const cartFinalTotal = taxInclusive
+    ? Math.round((actualSubtotal - cartTotalDiscount) * 100) / 100
+    : Math.round((actualSubtotal + cartTax - cartTotalDiscount) * 100) / 100
+  const cartGrandTotal = Math.round((cartFinalTotal + tipAmount) * 100) / 100
 
   const handleRewardSelect = (reward: LoyaltyReward) => {
     setRedeemedRewardId(reward.id)
@@ -643,6 +662,7 @@ export default function SelfCheckoutPage() {
 
   function handleClearCart() {
     setCartItems([])
+    setTip(0)
     setDiscount(0)
     setDiscountLabel('')
     setAppliedPromotions([])
@@ -665,6 +685,7 @@ export default function SelfCheckoutPage() {
 
   function handleResetAll() {
     setCartItems([])
+    setTip(0)
     setDiscount(0)
     setDiscountLabel('')
     setAppliedPromotions([])
@@ -733,6 +754,7 @@ export default function SelfCheckoutPage() {
                 }))
               : undefined,
             redeemed_reward_id: redeemedRewardId || undefined,
+            tip: tipAmount > 0 ? tipAmount : undefined,
           }),
         },
       )
@@ -754,7 +776,8 @@ export default function SelfCheckoutPage() {
       ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
       : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
     setLastOrder({
-      total: finalTotal,
+      total: Math.round((finalTotal + tipAmount) * 100) / 100,
+      tip: tipAmount > 0 ? tipAmount : undefined,
       items: cartItems.map((i) => ({ name: i.variant_label ? `${i.name} (${i.variant_label})` : i.name, quantity: i.quantity, price: i.price })),
       productSavings,
       discount,
@@ -776,6 +799,7 @@ export default function SelfCheckoutPage() {
 
   function handleNewOrder() {
     setCartItems([])
+    setTip(0)
     setDiscount(0)
     setDiscountLabel('')
     setCustomerProfile(null)
@@ -929,6 +953,16 @@ export default function SelfCheckoutPage() {
                             {lastOrder.rewardLabel || 'Reward'}
                           </span>
                           <span className="font-headline font-bold">-{formatCurrency(lastOrder.rewardDiscount)}</span>
+                        </div>
+                      )}
+
+                      {lastOrder.tip !== undefined && lastOrder.tip > 0 && (
+                        <div className="flex items-center justify-between text-sm text-on-surface-variant">
+                          <span className="flex items-center gap-1">
+                            <HandCoins className="h-3.5 w-3.5" />
+                            {tipLabel}
+                          </span>
+                          <span className="font-headline font-bold">{formatCurrency(lastOrder.tip)}</span>
                         </div>
                       )}
                     </>
@@ -1606,6 +1640,8 @@ export default function SelfCheckoutPage() {
             taxLabel={taxLabel}
             taxInclusive={taxInclusive}
             taxEnabled={taxEnabled}
+            tip={tipAmount > 0 ? tipAmount : undefined}
+            tipLabel={tipLabel}
           />
           {rewardDiscount > 0 && (
             <div className="flex justify-between text-sm text-secondary mt-1.5">
@@ -1618,27 +1654,28 @@ export default function SelfCheckoutPage() {
           )}
         </div>
 
+        {tipEnabled && cartItems.length > 0 && (
+          <div className="shrink-0 border-t border-outline-variant/50 px-4 py-3">
+            <TipSelector
+              tip={tip}
+              base={cartFinalTotal}
+              onChange={setTip}
+              label={tipLabel}
+              presets={tipPresets}
+              allowCustom={tipAllowCustom}
+              maxPercent={tipMaxPercent}
+            />
+          </div>
+        )}
+
         {/* Total row (large) */}
         <div className="shrink-0 border-t border-outline-variant/50 px-4 py-3">
-          {(() => {
-            // use originalSubtotal (catalog prices) and productSavings to compute actualSubtotal
-            const actualSubtotal = cartItems.reduce((sum, i) => sum + i.original_price * i.quantity, 0) - productSavings
-            const totalDiscount = discount + promoDiscount + rewardDiscount
-            const tax = !taxEnabled ? 0 : taxInclusive
-              ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
-              : Math.round(actualSubtotal * taxRate * 100) / 100
-            const finalTotal = taxInclusive
-              ? Math.round((actualSubtotal - totalDiscount) * 100) / 100
-              : Math.round((actualSubtotal + tax - totalDiscount) * 100) / 100
-            return (
-              <div className="flex items-center justify-between">
-                <span className="font-label font-bold text-sm text-on-surface-variant">Total</span>
-                <span className="font-headline font-bold text-xl text-primary">
-                  {formatCurrency(finalTotal)}
-                </span>
-              </div>
-            )
-          })()}
+          <div className="flex items-center justify-between">
+            <span className="font-label font-bold text-sm text-on-surface-variant">Total</span>
+            <span className="font-headline font-bold text-xl text-primary">
+              {formatCurrency(cartGrandTotal)}
+            </span>
+          </div>
         </div>
 
         {/* Footer buttons */}
@@ -2111,12 +2148,8 @@ export default function SelfCheckoutPage() {
         }}
         orderId={orderId}
         isCreating={isCreatingOrder}
-        // show total including product savings and cart-level promo discount
-        total={
-          taxInclusive
-            ? Math.round((actualSubtotal - (discount + promoDiscount + rewardDiscount)) * 100) / 100
-            : Math.round((actualSubtotal * (1 + (taxEnabled ? taxRate : 0)) - (discount + promoDiscount + rewardDiscount)) * 100) / 100
-        }
+        // show total including product savings, cart-level promo discount and tip
+        total={cartGrandTotal}
         onPaid={handlePaid}
         onCancel={handlePaymentCancel}
         providerName={stationProvider}

@@ -1,6 +1,7 @@
 'use client'
 
 import { ShoppingCart, ClipboardList, ContactRound, BarChart3, Receipt } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 import { MobileBottomNav } from '@/components/ui/MobileBottomNav'
 import type { MobileTab } from '@/components/ui/MobileBottomNav'
 import { useAppSelector } from '@/store/hooks'
@@ -13,9 +14,14 @@ const baseTabs: MobileTab[] = [
 ]
 
 export function DashboardMobileNav() {
+  const pathname = usePathname()
   const items = useAppSelector((s) => s.cart.items)
   const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen)
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0)
+
+  // POS routes render their own bottom nav (PosBottomNav). Keep this one out of
+  // the way, exactly like DashboardShell does for the top header.
+  if (pathname.startsWith('/pos')) return null
 
   const posTab: MobileTab = hasKitchen
     ? { id: 'pos', label: 'POS K', icon: ShoppingCart, href: '/pos-kitchen' }

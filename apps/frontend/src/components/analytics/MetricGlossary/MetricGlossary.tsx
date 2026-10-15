@@ -10,6 +10,7 @@ interface MetricGlossaryProps {
   overview: AnalyticsOverview | undefined
   taxLabel?: string
   taxInclusive?: boolean
+  tipsEnabled?: boolean
 }
 
 interface Term {
@@ -22,7 +23,7 @@ interface Term {
   highlight?: boolean
 }
 
-export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = false }: MetricGlossaryProps) {
+export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = false, tipsEnabled = false }: MetricGlossaryProps) {
   const [expanded, setExpanded] = useState(false)
   if (!overview) return null
 
@@ -55,6 +56,15 @@ export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = fals
       formula: 'Σ orders.tax',
       description: `Tax charged on sales this period (${taxInclusive ? 'already included in prices' : 'added on top of prices'}).`,
     },
+    ...(tipsEnabled || (overview.tipsCollected ?? 0) > 0
+      ? [{
+          key: 'tips',
+          name: 'Tips',
+          value: formatCurrency(overview.tipsCollected),
+          formula: 'Σ orders.tip_amount + Σ checks.tip_amount',
+          description: 'Gratuities left by customers. Already included in Revenue — shown separately for reporting.',
+        }]
+      : []),
     {
       key: 'items',
       name: 'Items Sold',
@@ -112,13 +122,15 @@ export function MetricGlossary({ overview, taxLabel = 'Tax', taxInclusive = fals
     },
   ]
 
+  const hasTips = (overview.tipsCollected ?? 0) > 0
+
   const reconciliationFormula = taxInclusive
-    ? 'Revenue = Gross Sales − Discounts'
-    : 'Revenue = Gross Sales + Tax − Discounts'
+    ? `Revenue = Gross Sales − Discounts${hasTips ? ' + Tips' : ''}`
+    : `Revenue = Gross Sales + Tax − Discounts${hasTips ? ' + Tips' : ''}`
 
   const reconciliationExample = taxInclusive
-    ? `${formatCurrency(overview.revenue)} = ${formatCurrency(overview.grossSales)} − ${formatCurrency(overview.discounts)}`
-    : `${formatCurrency(overview.revenue)} = ${formatCurrency(overview.grossSales)} + ${formatCurrency(overview.taxCollected)} − ${formatCurrency(overview.discounts)}`
+    ? `${formatCurrency(overview.revenue)} = ${formatCurrency(overview.grossSales)} − ${formatCurrency(overview.discounts)}${hasTips ? ` + ${formatCurrency(overview.tipsCollected)}` : ''}`
+    : `${formatCurrency(overview.revenue)} = ${formatCurrency(overview.grossSales)} + ${formatCurrency(overview.taxCollected)} − ${formatCurrency(overview.discounts)}${hasTips ? ` + ${formatCurrency(overview.tipsCollected)}` : ''}`
 
   return (
     <div className="overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container/50">

@@ -18,6 +18,7 @@ const baseState: CartState = {
   redeemed_reward_id: null,
   redeemed_reward_data: null,
   autoPromotions: true,
+  tip: 0,
 }
 
 describe('cartSlice identity', () => {

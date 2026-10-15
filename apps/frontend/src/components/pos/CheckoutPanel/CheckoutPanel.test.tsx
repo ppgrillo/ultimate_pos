@@ -78,15 +78,33 @@ describe('CheckoutPanel', () => {
     expect(screen.getByText('Table Number')).toBeInTheDocument()
   })
 
-  it('blocks dine-in submit without table number', async () => {
+  it('disables the action until a table is selected for dine-in', () => {
     render(<CheckoutPanel />, { preloadedState: defaultPreload })
 
-    await userEvent.click(screen.getByText('Charge $10.00'))
-    expect(screen.getByText('Table number is required for dine-in orders')).toBeInTheDocument()
+    expect(screen.getByText('Select Table').closest('button')).toBeDisabled()
     expect(mockApiPost).not.toHaveBeenCalled()
   })
 
-  it('submits add-on flow and redirects to receipt when table is set', async () => {
+  it('shows "Add to Table" and hides payment for kitchen dine-in', () => {
+    render(<CheckoutPanel />, {
+      preloadedState: {
+        ...defaultPreload,
+        cart: { ...defaultPreload.cart, table_number: 12 },
+        storeConfig: {
+          ...defaultPreload.storeConfig,
+          currentStore: {
+            ...defaultPreload.storeConfig.currentStore,
+            settings: { hasKitchen: true, checkoutMode: 'payment-required' },
+          },
+        },
+      },
+    })
+
+    expect(screen.getByText('Add to Table 12')).toBeInTheDocument()
+    expect(screen.queryByText('Payment Method')).not.toBeInTheDocument()
+  })
+
+  it('adds the order to the table check when a table is set', async () => {
     render(<CheckoutPanel />, {
       preloadedState: {
         ...defaultPreload,
@@ -97,7 +115,7 @@ describe('CheckoutPanel', () => {
       },
     })
 
-    await userEvent.click(screen.getByText('Charge $10.00'))
+    await userEvent.click(screen.getByText('Add to Table 12'))
 
     expect(mockApiGet).toHaveBeenCalledWith('/checks/active', { params: { tableNumber: '12' } })
     expect(mockApiPost).toHaveBeenCalledWith('/checks/check-1/orders', expect.any(Object))

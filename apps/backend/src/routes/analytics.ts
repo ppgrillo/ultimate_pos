@@ -24,6 +24,27 @@ async function getStoreTimezone(storeId: string, queryTz?: string | null): Promi
   return ((data?.settings as Record<string, unknown>)?.timezone as string) || 'UTC'
 }
 
+type CheckTipRow = { tip_amount: number | string | null; created_at: string }
+
+// Kitchen checks keep their orders at tip_amount = 0 and store the gratuity on
+// the check itself, so orders.total never carries it. Revenue is built from
+// orders.total, so the check tip has to be added back here or the Revenue card
+// would disagree with the payment-method totals (whose payment rows DO include
+// the tip). When no tip was given every row is 0 and this is a no-op.
+async function fetchCheckTips(storeId: string, start: Date, end: Date): Promise<CheckTipRow[]> {
+  const { data } = await supabaseAdmin
+    .from('checks')
+    .select('tip_amount, created_at')
+    .eq('store_id', storeId)
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+  return (data || []) as CheckTipRow[]
+}
+
+function sumCheckTips(rows: Array<{ tip_amount: number | string | null }>): number {
+  return rows.reduce((sum, row) => sum + Number(row.tip_amount || 0), 0)
+}
+
 analyticsRouter.get('/sales', async (c) => {
   const supabase = supabaseAdmin
   const storeId = c.get('storeId')
@@ -56,7 +77,9 @@ analyticsRouter.get('/sales', async (c) => {
   const pendingOrders = allOrders.filter((o) => o.payment_status !== 'paid')
   const pendingRevenue = pendingOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
 
-  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const currentCheckTips = await fetchCheckTips(storeId, start, end)
+
+  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + sumCheckTips(currentCheckTips)
   const orderCount = paidOrders.length
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0
 
@@ -71,8 +94,10 @@ analyticsRouter.get('/sales', async (c) => {
     .not('status', 'eq', 'cancelled')
     .not('status', 'eq', 'refunded')
 
+  const prevCheckTips = await fetchCheckTips(storeId, prevStart, prevEnd)
+
   const prevPaidOrders = (prevOrders || []).filter((o) => o.payment_status === 'paid')
-  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + sumCheckTips(prevCheckTips)
   const prevOrderCount = prevPaidOrders.length
   const revenueChange = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null
 
@@ -91,6 +116,12 @@ analyticsRouter.get('/sales', async (c) => {
       entry.count += 1
     }
 
+    for (const tip of currentCheckTips) {
+      const hour = getHourInTimezone(new Date(tip.created_at), tz)
+      const entry = hourMap.get(hour)
+      if (entry) entry.revenue += Number(tip.tip_amount || 0)
+    }
+
     revenueByTime = Array.from(hourMap.entries()).map(([hour, data]) => ({
       label: `${hour.toString().padStart(2, '0')}:00`,
       revenue: Math.round(data.revenue * 100) / 100,
@@ -104,6 +135,13 @@ analyticsRouter.get('/sales', async (c) => {
       const existing = dayMap.get(dateKey) || { revenue: 0, count: 0 }
       existing.revenue += Number(order.total || 0)
       existing.count += 1
+      dayMap.set(dateKey, existing)
+    }
+
+    for (const tip of currentCheckTips) {
+      const dateKey = getDateKeyInTimezone(new Date(tip.created_at), tz)
+      const existing = dayMap.get(dateKey) || { revenue: 0, count: 0 }
+      existing.revenue += Number(tip.tip_amount || 0)
       dayMap.set(dateKey, existing)
     }
 
@@ -218,10 +256,10 @@ analyticsRouter.get('/overview', async (c) => {
   const { start, end } = getDateRangeInTimezone(period, tz, from, to)
   const { prevStart, prevEnd } = getPreviousPeriodRange(start, end)
 
-  const [ordersResult, prevOrdersResult, customersResult, expensesResult] = await Promise.all([
+  const [ordersResult, prevOrdersResult, customersResult, expensesResult, checkTipsResult, prevCheckTipsResult] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, total, subtotal, tax, discount, promo_discount, metadata, type, payment_status, created_at, payments:payments(method, status, amount)')
+      .select('id, total, subtotal, tax, tip_amount, discount, promo_discount, metadata, type, payment_status, created_at, payments:payments(method, status, amount)')
       .eq('store_id', storeId)
       .gte('created_at', start.toISOString())
       .lte('created_at', end.toISOString())
@@ -247,6 +285,18 @@ analyticsRouter.get('/overview', async (c) => {
       .eq('store_id', storeId)
       .gte('expense_date', getDateKeyInTimezone(start, tz))
       .lte('expense_date', getDateKeyInTimezone(end, tz)),
+    supabase
+      .from('checks')
+      .select('tip_amount')
+      .eq('store_id', storeId)
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString()),
+    supabase
+      .from('checks')
+      .select('tip_amount')
+      .eq('store_id', storeId)
+      .gte('created_at', prevStart.toISOString())
+      .lte('created_at', prevEnd.toISOString()),
   ])
 
   const orders = ordersResult.data || []
@@ -268,9 +318,12 @@ analyticsRouter.get('/overview', async (c) => {
   const pendingOrders = allOrders.filter((o) => o.payment_status !== 'paid')
   const pendingRevenue = pendingOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
 
-  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const checkTips = sumCheckTips(checkTipsResult.data || [])
+  const prevCheckTips = sumCheckTips(prevCheckTipsResult.data || [])
+
+  const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + checkTips
   const prevPaidOrders = (prevOrders || []).filter((o) => o.payment_status === 'paid')
-  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const prevRevenue = prevPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + prevCheckTips
   const orderCount = paidOrders.length
   const prevOrderCount = prevPaidOrders.length
   const avgOrderValue = orderCount > 0 ? revenue / orderCount : 0
@@ -317,6 +370,12 @@ analyticsRouter.get('/overview', async (c) => {
 
   const grossProfit = revenue - cogs
   const netProfit = grossProfit - operatingExpenses
+
+  // Tips are stored on the order (and on the check for kitchen dine-in, whose
+  // orders keep tip_amount = 0). Revenue above now includes both, so this only
+  // surfaces the tip amount for reporting.
+  const tipsFromOrders = paidOrders.reduce((sum, o) => sum + Number((o as { tip_amount?: number }).tip_amount || 0), 0)
+  const tipsCollected = tipsFromOrders + checkTips
 
   const TYPE_LABELS: Record<string, string> = {
     'dine-in': 'Dine-in',
@@ -385,6 +444,7 @@ analyticsRouter.get('/overview', async (c) => {
       grossSales: Math.round(grossSales * 100) / 100,
       discounts: Math.round(discounts * 100) / 100,
       taxCollected: Math.round(taxCollected * 100) / 100,
+      tipsCollected: Math.round(tipsCollected * 100) / 100,
       itemsSold,
       cogs: Math.round(cogs * 100) / 100,
       grossProfit: Math.round(grossProfit * 100) / 100,
@@ -420,7 +480,8 @@ analyticsRouter.get('/dashboard-stats', async (c) => {
   // Revenue counts settled orders only, matching /sales and /overview.
   // activeOrders is a workflow counter, so it still looks at every open order.
   const todayPaidOrders = (todayOrders || []).filter((o) => o.payment_status === 'paid')
-  const todayRevenue = todayPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const todayCheckTips = await fetchCheckTips(storeId, todayStart, new Date())
+  const todayRevenue = todayPaidOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + sumCheckTips(todayCheckTips)
   const todayOrderCount = todayPaidOrders.length
   const activeOrders = (todayOrders || []).filter(
     (o) => o.status === 'pending' || o.status === 'preparing',

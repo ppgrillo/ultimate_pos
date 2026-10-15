@@ -1,0 +1,1 @@
+export { PosFullBleed } from './PosFullBleed'

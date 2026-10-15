@@ -8,6 +8,7 @@ certs/
 .next/
 dist/
 out/
+*.tsbuildinfo
 
 # env
 # Catch-all: ignora TODO archivo .env* — .env, .env.dev, .env.nuevo, .env.prod,

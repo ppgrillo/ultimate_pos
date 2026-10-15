@@ -12,6 +12,8 @@ export interface Check {
   closed_by: string | null
   void_reason: string | null
   notes: string | null
+  tip_amount?: number
+  metadata?: Record<string, unknown>
   opened_at: string
   closed_at: string | null
   created_at: string

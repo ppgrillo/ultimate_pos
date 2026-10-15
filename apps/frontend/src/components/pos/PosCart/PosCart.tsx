@@ -1,24 +1,14 @@
 'use client'
 
-import { ShoppingBag, Trash2, ArrowLeft } from 'lucide-react'
-import { useState } from 'react'
+import { ShoppingBag, Trash2, ArrowLeft, ChevronRight, UtensilsCrossed } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCartOpen, setCheckoutView } from '@/store/slices/posSlice'
+import { setActiveView, setCartOpen, setCheckoutView } from '@/store/slices/posSlice'
 import { clearCart } from '@/store/slices/cartSlice'
 import { CartItemRow } from '@/components/pos/CartItemRow'
 import { OrderSummary } from '@/components/pos/OrderSummary'
-import { OpenChecksPanel } from '@/components/pos/OpenChecksPanel/OpenChecksPanel'
-import { PaymentModal } from '@/components/pos/PaymentModal'
-import { useCloseCheckMutation } from '@/store/api'
-import { getActiveCardProvider, cardProviderShortName } from '@/lib/card-payments'
-import type { Check, PaymentMethod } from '@ultimate-pos/shared'
 
 export function PosCart() {
   const dispatch = useAppDispatch()
-  const [checkToClose, setCheckToClose] = useState<(Check & { total?: number }) | null>(null)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [closeCheckError, setCloseCheckError] = useState<string | null>(null)
-  const [closeCheck, { isLoading: closingCheck }] = useCloseCheckMutation()
   const items = useAppSelector((s) => s.cart.items)
   const discount = useAppSelector((s) => s.cart.discount)
   const appliedPromotions = useAppSelector((s) => s.cart.appliedPromotions)
@@ -28,29 +18,13 @@ export function PosCart() {
   const count = items.reduce((sum, i) => sum + i.quantity, 0)
   const store = useAppSelector((s) => s.storeConfig.currentStore)
   const settings = store?.settings
+  const hasKitchen = settings?.hasKitchen ?? false
+  const orderType = useAppSelector((s) => s.cart.order_type)
+  const tableNumber = useAppSelector((s) => s.cart.table_number)
   const taxRate = store?.tax_rate ? Number(store.tax_rate) / 100 : 0
   const taxLabel = settings?.taxLabel || 'Tax'
   const taxInclusive = settings?.taxInclusive ?? false
   const taxEnabled = settings?.taxEnabled ?? false
-
-  const handleCloseCheckPayment = async (method: PaymentMethod, cashGiven?: number) => {
-    if (!checkToClose) return
-    try {
-      setCloseCheckError(null)
-      await closeCheck({
-        checkId: checkToClose.id,
-        payment_method: method,
-        cash_amount_given: method === 'cash' ? cashGiven : undefined,
-      }).unwrap()
-      setCheckToClose(null)
-      setShowPaymentModal(false)
-    } catch (err) {
-      const message = err && typeof err === 'object' && 'data' in err
-        ? ((err as { data?: { error?: string } }).data?.error || 'Could not close check')
-        : 'Could not close check'
-      setCloseCheckError(message)
-    }
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -83,6 +57,21 @@ export function PosCart() {
         </div>
       </div>
 
+      {hasKitchen && orderType === 'dine-in' && (
+        <button
+          onClick={() => dispatch(setActiveView('tables'))}
+          className="flex w-full items-center justify-between gap-2 border-b border-outline-variant px-4 py-2.5 text-left transition-colors hover:bg-surface-container"
+        >
+          <span className="flex items-center gap-2">
+            <UtensilsCrossed className="h-4 w-4 text-primary" />
+            <span className="text-xs font-label font-bold text-on-surface">
+              {tableNumber ? `Mesa ${tableNumber}` : 'Elegir mesa'}
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-on-surface-variant" />
+        </button>
+      )}
+
       {items.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center py-12 px-4 text-center">
           <ShoppingBag className="h-12 w-12 text-on-surface-variant/30 mb-3" />
@@ -112,23 +101,6 @@ export function PosCart() {
               taxInclusive={taxInclusive}
               taxEnabled={taxEnabled}
             />
-            {settings?.hasKitchen && (
-              <div className="pt-2">
-                {closeCheckError && (
-                  <p className="mb-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error">
-                    {closeCheckError}
-                  </p>
-                )}
-                <OpenChecksPanel
-                  enableWorkspaceShortcut={false}
-                  onCloseAndPay={(check) => {
-                    setCloseCheckError(null)
-                    setCheckToClose(check)
-                    setShowPaymentModal(true)
-                  }}
-                />
-              </div>
-            )}
             <button
               onClick={() => {
                 dispatch(setCheckoutView(true))
@@ -140,20 +112,6 @@ export function PosCart() {
           </div>
         </>
       )}
-
-      <PaymentModal
-        open={showPaymentModal}
-        onOpenChange={(open) => {
-          setShowPaymentModal(open)
-          if (!open && checkToClose) setCheckToClose(null)
-        }}
-        total={Number(checkToClose?.total || 0)}
-        onConfirm={handleCloseCheckPayment}
-        acceptedMethods={settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']}
-        mpPointEnabled={settings?.mpPointEnabled ?? false}
-        cardProviderLabel={cardProviderShortName(getActiveCardProvider(settings))}
-        isLoading={closingCheck}
-      />
     </div>
   )
 }

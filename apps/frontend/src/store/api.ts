@@ -41,6 +41,22 @@ export interface CustomerStats {
   avgOrderValue: number
 }
 
+export interface CloseCheckResult {
+  id: string
+  total: number
+  tip_amount?: number
+  providerOrderId?: string
+  awaiting_payment?: boolean
+  metadata?: Record<string, unknown>
+}
+
+export interface CheckMpStatus {
+  id: string
+  status?: string
+  payment_status?: string
+  metadata?: Record<string, unknown>
+}
+
 export interface DashboardStats {
   todayRevenue: number
   todayOrderCount: number
@@ -82,6 +98,7 @@ export interface AnalyticsOverview {
   grossSales: number
   discounts: number
   taxCollected: number
+  tipsCollected: number
   itemsSold: number
   cogs: number
   grossProfit: number
@@ -540,18 +557,28 @@ export const api = createApi({
         { type: 'Check', id: checkId },
       ],
     }),
-    closeCheck: builder.mutation<{ id: string; total: number }, { checkId: string; payment_method?: PaymentMethod; cash_amount_given?: number }>({
+    closeCheck: builder.mutation<CloseCheckResult, { checkId: string; payment_method?: PaymentMethod; cash_amount_given?: number; tip?: number }>({
       query: ({ checkId, ...body }) => ({
         url: `/checks/${checkId}/close`,
         method: 'POST',
         body,
       }),
-      transformResponse: (response: { data: { id: string; total: number } }) => response.data,
+      transformResponse: (response: { data: CloseCheckResult }) => response.data,
       invalidatesTags: (_result, _error, { checkId }) => [
         { type: 'Order', id: 'LIST' },
         { type: 'Check', id: 'LIST' },
         { type: 'Check', id: checkId },
       ],
+    }),
+    getCheckMpStatus: builder.query<CheckMpStatus, string>({
+      query: (id) => `/checks/${id}/mp-status`,
+      transformResponse: (response: { data: CheckMpStatus }) => response.data,
+    }),
+    cancelCheckMp: builder.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `/checks/${id}/cancel-mp`,
+        method: 'POST',
+      }),
     }),
     voidCheck: builder.mutation<{ id: string }, { checkId: string; reason: string }>({
       query: ({ checkId, ...body }) => ({
@@ -971,6 +998,8 @@ export const {
   useAddOrderToCheckMutation,
   useCloseCheckMutation,
   useVoidCheckMutation,
+  useGetCheckMpStatusQuery,
+  useCancelCheckMpMutation,
   useEnrollCustomerMutation,
   useGetLoyaltyCardQuery,
   useLazyGetLoyaltyCardQuery,

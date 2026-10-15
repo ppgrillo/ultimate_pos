@@ -15,6 +15,7 @@ import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
 import { QuickSaleModal } from '@/components/pos/QuickSaleModal'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
+import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PackageOpen } from 'lucide-react'
 import type { Product } from '@ultimate-pos/shared'
@@ -35,6 +36,7 @@ export default function PosPage() {
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const quickSaleOpen = useAppSelector((s) => s.pos.quickSaleOpen)
   const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
+  const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen)
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
   const { getPromotionForProduct } = usePromotions()
@@ -87,15 +89,18 @@ export default function PosPage() {
       <div className="lg:hidden">
         <PosLayout
           menu={<PosMenu />}
+          tables={<TablesWorkspace />}
           cart={<PosCart />}
           checkout={<CheckoutPanel />}
           customerDrawer={<CustomerDrawer />}
+          enableTablesView={!!hasKitchen}
         />
       </div>
 
       {/* Desktop layout */}
       <div className="hidden h-full lg:block">
         <PosDesktopLayout
+          enableTablesView={!!hasKitchen}
           categories={categories}
           featuredProduct={featured ? (
             <FeaturedProductCard

@@ -59,6 +59,7 @@ export interface CartState {
     product_id?: string
   } | null
   autoPromotions: boolean
+  tip: number
 }
 
 const initialState: CartState = {
@@ -79,6 +80,7 @@ const initialState: CartState = {
   redeemed_reward_id: null,
   redeemed_reward_data: null,
   autoPromotions: true,
+  tip: 0,
 }
 
 const cartSlice = createSlice({
@@ -184,6 +186,10 @@ const cartSlice = createSlice({
     setNotes(state, action: PayloadAction<string | null>) {
       state.notes = action.payload
     },
+    setTip(state, action: PayloadAction<number>) {
+      const value = Number(action.payload)
+      state.tip = Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : 0
+    },
     setAppliedPromotions(state, action: PayloadAction<{ promotions: AppliedPromotion[]; totalDiscount: number }>) {
       state.appliedPromotions = action.payload.promotions
       state.promoDiscount = action.payload.totalDiscount
@@ -218,6 +224,6 @@ export const {
   setDiscount, setNotes, clearCart,
   setRedeemedPoints, setAppliedPromotions, clearAutoPromotions,
   setRedeemedReward, clearRewardItems,
-  setAutoPromotions,
+  setAutoPromotions, setTip,
 } = cartSlice.actions
 export default cartSlice.reducer
