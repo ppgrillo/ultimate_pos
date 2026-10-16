@@ -301,7 +301,8 @@ function getJwtSecret() {
 
 storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => {
   const storeId = c.get('storeId')
-  const { name, terminalId, provider: requestedProvider } = await c.req.json<{ name: string; terminalId: string; provider?: CardPaymentProviderName }>()
+  const body = await c.req.json<{ name: string; terminalId: string; provider?: CardPaymentProviderName; acceptsCash?: boolean; showWelcome?: boolean }>()
+  const { name, terminalId, provider: requestedProvider, acceptsCash, showWelcome } = body
 
   if (!name || !name.trim()) throw badRequest('Station name is required')
   if (!terminalId || !terminalId.trim()) throw badRequest('Terminal ID is required')
@@ -340,6 +341,8 @@ storesRouter.post('/self-checkout/stations', requireRole('admin'), async (c) => 
     isActive: true,
     createdAt,
     token,
+    acceptsCash: Boolean(acceptsCash),
+    showWelcome: showWelcome !== false,
   }
 
   // Atomic append under the stores row lock — no lost updates between concurrent admins.

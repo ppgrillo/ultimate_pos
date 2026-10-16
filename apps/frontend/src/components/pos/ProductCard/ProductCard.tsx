@@ -34,7 +34,7 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
           }
         }}
         onClick={() => onAdd(product)}
-        className="group relative flex flex-col rounded-lg bg-surface-container/40 border border-outline-variant/60 overflow-hidden transition-all hover:border-primary/40 hover:shadow-md active:scale-[0.97] cursor-pointer"
+        className="group relative flex min-w-0 flex-col rounded-lg bg-surface-container/40 border border-outline-variant/60 overflow-hidden transition-all hover:border-primary/40 hover:shadow-md active:scale-[0.97] cursor-pointer"
       >
         <div className="relative aspect-[4/3] bg-surface-container-high overflow-hidden">
           {product.pinned && (
@@ -55,8 +55,8 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
             </div>
           )}
         </div>
-        <div className="p-1.5 space-y-0.5 flex flex-col flex-1">
-          <h3 className="font-headline font-bold text-[11px] text-on-surface leading-tight line-clamp-2">{product.name}</h3>
+        <div className="p-1.5 space-y-0.5 flex flex-col flex-1 min-w-0">
+          <h3 className="font-headline font-bold text-[11px] text-on-surface leading-tight line-clamp-2 break-words">{product.name}</h3>
           <div className="flex items-center gap-1.5">
             {salePrice !== null && (
               <span className="font-headline font-semibold text-[10px] text-on-surface-variant line-through">

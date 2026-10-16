@@ -12,6 +12,7 @@ interface PaymentMethodSelectorProps {
   layout?: 'horizontal' | 'vertical'
   mpPointEnabled?: boolean
   cardProviderLabel?: string
+  methodLabels?: Partial<Record<PaymentMethod, string>>
 }
 
 const methodConfig: Partial<Record<PaymentMethod, { label: string; icon: typeof Banknote }>> = {
@@ -28,6 +29,7 @@ export function PaymentMethodSelector({
   layout = 'horizontal',
   mpPointEnabled,
   cardProviderLabel = 'Point',
+  methodLabels,
 }: PaymentMethodSelectorProps) {
   const methods = acceptedMethods
     .filter((m): m is keyof typeof methodConfig => m in methodConfig)
@@ -64,7 +66,7 @@ export function PaymentMethodSelector({
             <Icon className={cn(layout === 'horizontal' ? 'h-5 w-5' : 'h-5 w-5 shrink-0')} />
             <span className="flex flex-col items-center">
               <span className="flex items-center gap-1.5">
-                {method.label}
+                {methodLabels?.[method.id] ?? method.label}
                 {method.id === 'card' && mpPointEnabled && (
                   <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
                     {cardProviderLabel}

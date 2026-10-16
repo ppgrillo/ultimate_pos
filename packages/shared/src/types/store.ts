@@ -63,6 +63,8 @@ export interface SelfCheckoutStation {
   isActive: boolean
   createdAt: string
   token?: string
+  acceptsCash?: boolean
+  showWelcome?: boolean
 }
 
 export interface WalletPassDesign {

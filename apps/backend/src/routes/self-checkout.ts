@@ -248,6 +248,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
 
   const body = await c.req.json()
   const { items, customer_id, discount, discount_label, redeemed_reward_id } = body
+  const paymentMethod: 'cash' | 'card' = body.payment_method === 'cash' ? 'cash' : 'card'
+  const cashAmountGiven = typeof body.cash_amount_given === 'number' ? body.cash_amount_given : null
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw badRequest('At least one item is required')
@@ -262,13 +264,21 @@ selfCheckoutRouter.post('/orders', async (c) => {
   if (!store) throw notFound('Store not found')
 
   const settings = decryptSettings((store.settings as Record<string, unknown>) || {})
-  if (!station.terminalId) {
-    throw badRequest('Station has no terminal assigned. Contact the store admin.')
+
+  if (paymentMethod === 'cash' && !station.acceptsCash) {
+    throw badRequest('Cash payments are not enabled for this station. Contact the store admin.')
   }
 
   const stationPayment = resolveStationPayment(settings, station)
-  if (!stationPayment.credentials.accessToken) {
-    throw badRequest(`${cardProviderDisplayName(stationPayment.providerName)} is not configured for this station. Contact the store admin.`)
+
+  // Card payments require a terminal and configured provider credentials.
+  if (paymentMethod === 'card') {
+    if (!station.terminalId) {
+      throw badRequest('Station has no terminal assigned. Contact the store admin.')
+    }
+    if (!stationPayment.credentials.accessToken) {
+      throw badRequest(`${cardProviderDisplayName(stationPayment.providerName)} is not configured for this station. Contact the store admin.`)
+    }
   }
 
   const taxRate = store.tax_rate ? Number(store.tax_rate) / 100 : 0
@@ -446,8 +456,8 @@ selfCheckoutRouter.post('/orders', async (c) => {
       customer_id: customer_id || null,
       type: 'takeaway',
       order_number: nextOrderNumber,
-      status: 'pending',
-      payment_status: 'unpaid',
+      status: paymentMethod === 'cash' ? 'paid' : 'pending',
+      payment_status: paymentMethod === 'cash' ? 'paid' : 'unpaid',
       subtotal,
       tax,
       discount: disc,
@@ -559,17 +569,6 @@ selfCheckoutRouter.post('/orders', async (c) => {
       .eq('id', order.id)
   }
 
-  const { error: paymentError } = await supabaseAdmin
-    .from('payments')
-    .insert({
-      order_id: order.id,
-      amount: total,
-      method: 'card',
-      status: 'pending',
-    })
-
-  if (paymentError) throw badRequest(paymentError.message)
-
   const stationBaseMeta: Record<string, unknown> = {
     stationId: station.id,
     stationName: station.name,
@@ -580,108 +579,144 @@ selfCheckoutRouter.post('/orders', async (c) => {
   let providerOrderId: string | null = null
   let providerStatus: CardOrderStatus = 'created'
 
-  try {
-    const payment = await stationPayment.provider.createPayment({
-      totalAmount: total,
-      externalReference: order.id,
-      description: `Self-checkout - ${items.length} items`,
-      terminalId: stationPayment.terminalId,
-    }, stationPayment.credentials)
+  if (paymentMethod === 'cash') {
+    // Cash is settled at the station immediately — no terminal involved.
+    const parsedCashGiven = cashAmountGiven != null ? cashAmountGiven : total
+    const changeDue = Math.max(0, Math.round((parsedCashGiven - total) * 100) / 100)
 
-    providerOrderId = payment.providerOrderId
-
-    await supabaseAdmin
-      .from('orders')
-      .update({ metadata: buildPaymentMetadata(stationBaseMeta, stationPayment.providerName, providerOrderId, 'created') })
-      .eq('id', order.id)
-
-    await supabaseAdmin
+    const { error: cashPaymentError } = await supabaseAdmin
       .from('payments')
-      .update({ reference: providerOrderId, provider: stationPayment.providerName })
-      .eq('order_id', order.id)
+      .insert({
+        order_id: order.id,
+        amount: total,
+        method: 'cash',
+        status: 'completed',
+        amount_given: parsedCashGiven,
+        change_due: changeDue,
+      })
 
-    // Poll the provider immediately — payment may already be processed at the terminal
+    if (cashPaymentError) throw badRequest(cashPaymentError.message)
+
+    if (order.customer_id) {
+      const { processMpLoyalty } = await import('../routes/orders')
+      await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => undefined)
+      recordCustomerOrderStat(supabaseAdmin, order.id, order.customer_id, Number(total || 0))
+    }
+  } else {
+    const { error: paymentError } = await supabaseAdmin
+      .from('payments')
+      .insert({
+        order_id: order.id,
+        amount: total,
+        method: 'card',
+        status: 'pending',
+      })
+
+    if (paymentError) throw badRequest(paymentError.message)
+
     try {
-      const early = await stationPayment.provider.getPayment(providerOrderId, stationPayment.credentials)
-      if (early.status === 'processed') {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            status: 'paid',
-            payment_status: 'paid',
-            metadata: buildPaymentMetadata({ ...order.metadata, ...stationBaseMeta }, stationPayment.providerName, providerOrderId, 'processed', early.paymentDetail),
-          })
-          .eq('id', order.id)
-        await supabaseAdmin
-          .from('payments')
-          .update({ status: 'completed' })
-          .eq('order_id', order.id)
-        if (order.customer_id) {
-          const { processMpLoyalty } = await import('../routes/orders')
-          await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => undefined)
-          recordCustomerOrderStat(supabaseAdmin, order.id, order.customer_id, Number(total || 0))
-        }
-      } else if (isFailedCardStatus(early.status)) {
-        await revertPromotionUsageIfNeeded(
-          order.id,
-          { ...stationBaseMeta },
-          [],
-        ).catch(() => {})
+      const payment = await stationPayment.provider.createPayment({
+        totalAmount: total,
+        externalReference: order.id,
+        description: `Self-checkout - ${items.length} items`,
+        terminalId: stationPayment.terminalId,
+      }, stationPayment.credentials)
+
+      providerOrderId = payment.providerOrderId
+
+      await supabaseAdmin
+        .from('orders')
+        .update({ metadata: buildPaymentMetadata(stationBaseMeta, stationPayment.providerName, providerOrderId, 'created') })
+        .eq('id', order.id)
+
+      await supabaseAdmin
+        .from('payments')
+        .update({ reference: providerOrderId, provider: stationPayment.providerName })
+        .eq('order_id', order.id)
+
+      // Poll the provider immediately — payment may already be processed at the terminal
+      try {
+        const early = await stationPayment.provider.getPayment(providerOrderId, stationPayment.credentials)
+        if (early.status === 'processed') {
+          await supabaseAdmin
+            .from('orders')
+            .update({
+              status: 'paid',
+              payment_status: 'paid',
+              metadata: buildPaymentMetadata({ ...order.metadata, ...stationBaseMeta }, stationPayment.providerName, providerOrderId, 'processed', early.paymentDetail),
+            })
+            .eq('id', order.id)
+          await supabaseAdmin
+            .from('payments')
+            .update({ status: 'completed' })
+            .eq('order_id', order.id)
+          if (order.customer_id) {
+            const { processMpLoyalty } = await import('../routes/orders')
+            await processMpLoyalty(supabaseAdmin, order.id, storeId).catch(() => undefined)
+            recordCustomerOrderStat(supabaseAdmin, order.id, order.customer_id, Number(total || 0))
+          }
+        } else if (isFailedCardStatus(early.status)) {
+          await revertPromotionUsageIfNeeded(
+            order.id,
+            { ...stationBaseMeta },
+            [],
+          ).catch(() => {})
           await revertRedemption(order.id).catch(() => {})
 
           await supabaseAdmin
-          .from('orders')
-          .update({
-            status: 'cancelled',
-            payment_status: 'unpaid',
-            metadata: buildPaymentMetadata(
-              { ...order.metadata, ...stationBaseMeta, promotionUsageReverted: true },
-              stationPayment.providerName,
-              providerOrderId,
-              early.status,
-              early.paymentDetail,
-            ),
-          })
-          .eq('id', order.id)
-        await supabaseAdmin
-          .from('payments')
-          .update({ status: 'failed' })
-          .eq('order_id', order.id)
+            .from('orders')
+            .update({
+              status: 'cancelled',
+              payment_status: 'unpaid',
+              metadata: buildPaymentMetadata(
+                { ...order.metadata, ...stationBaseMeta, promotionUsageReverted: true },
+                stationPayment.providerName,
+                providerOrderId,
+                early.status,
+                early.paymentDetail,
+              ),
+            })
+            .eq('id', order.id)
+          await supabaseAdmin
+            .from('payments')
+            .update({ status: 'failed' })
+            .eq('order_id', order.id)
+        }
+      } catch {
+        // Not yet processed — client polling will catch it
       }
-    } catch {
-      // Not yet processed — client polling will catch it
-    }
-  } catch (err: unknown) {
-    const payErr = err as { message?: string; body?: unknown }
-    const detail = JSON.stringify(payErr?.body || payErr?.message || `${cardProviderDisplayName(stationPayment.providerName)} error`)
+    } catch (err: unknown) {
+      const payErr = err as { message?: string; body?: unknown }
+      const detail = JSON.stringify(payErr?.body || payErr?.message || `${cardProviderDisplayName(stationPayment.providerName)} error`)
 
-    await revertPromotionUsageIfNeeded(
-      order.id,
-      { ...stationBaseMeta },
-      [],
-    ).catch(() => {})
+      await revertPromotionUsageIfNeeded(
+        order.id,
+        { ...stationBaseMeta },
+        [],
+      ).catch(() => {})
       await revertRedemption(order.id).catch(() => {})
 
       await supabaseAdmin
-      .from('orders')
-      .update({
-        status: 'cancelled',
-        metadata: {
-          ...stationBaseMeta,
-          mpError: detail,
-          promotionUsageReverted: true,
-        },
-      })
-      .eq('id', order.id)
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          metadata: {
+            ...stationBaseMeta,
+            mpError: detail,
+            promotionUsageReverted: true,
+          },
+        })
+        .eq('id', order.id)
 
-    await supabaseAdmin
-      .from('payments')
-      .update({ status: 'failed' })
-      .eq('order_id', order.id)
+      await supabaseAdmin
+        .from('payments')
+        .update({ status: 'failed' })
+        .eq('order_id', order.id)
 
-    unrecordCustomerOrderStat(supabaseAdmin, order.id)
+      unrecordCustomerOrderStat(supabaseAdmin, order.id)
 
-    throw badRequest(`Payment error: ${payErr?.message || 'Could not connect to terminal'}`)
+      throw badRequest(`Payment error: ${payErr?.message || 'Could not connect to terminal'}`)
+    }
   }
 
   const { data: fullOrder } = await supabaseAdmin
@@ -694,7 +729,9 @@ selfCheckoutRouter.post('/orders', async (c) => {
     ...fullOrder,
     customer_name: (fullOrder as Record<string, unknown>).customer ? ((fullOrder as Record<string, unknown>).customer as Record<string, unknown>).name : null,
     customer: undefined,
-    metadata: { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId: providerOrderId, mpOrderStatus: providerStatus },
+    metadata: paymentMethod === 'cash'
+      ? ((fullOrder.metadata as Record<string, unknown>) || {})
+      : { ...((fullOrder.metadata as Record<string, unknown>) || {}), mpOrderId: providerOrderId, mpOrderStatus: providerStatus },
   } : null
 
   if (enriched) {
