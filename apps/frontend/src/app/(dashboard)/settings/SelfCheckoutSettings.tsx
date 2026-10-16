@@ -8,7 +8,7 @@ import { useAppSelector } from '@/store/hooks'
 import { api } from '@/lib/api/client'
 import {
   Plus, Copy, RefreshCw, Trash2, Terminal, Link as LinkIcon, Check,
-  Circle, AlertTriangle, Info,
+  Circle, AlertTriangle, Info, Banknote, EyeOff,
 } from 'lucide-react'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
 import type { CardPaymentProviderName } from '@ultimate-pos/shared'
@@ -65,6 +65,8 @@ export function SelfCheckoutSettings() {
   const [newName, setNewName] = useState('')
   const [newTerminalId, setNewTerminalId] = useState('')
   const [newProvider, setNewProvider] = useState<CardPaymentProviderName>('mercado_pago')
+  const [newAcceptsCash, setNewAcceptsCash] = useState(false)
+  const [newShowWelcome, setNewShowWelcome] = useState(true)
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null)
@@ -125,11 +127,15 @@ export function SelfCheckoutSettings() {
         name: newName.trim(),
         terminalId: newTerminalId.trim(),
         provider: newProvider,
+        acceptsCash: newAcceptsCash,
+        showWelcome: newShowWelcome,
       })
       setStations((prev) => [...prev, res.data])
       setShowForm(false)
       setNewName('')
       setNewTerminalId('')
+      setNewAcceptsCash(false)
+      setNewShowWelcome(true)
       setTerminals(null)
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error creating station')
@@ -325,6 +331,40 @@ export function SelfCheckoutSettings() {
                 </p>
               </div>
 
+              <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newAcceptsCash}
+                    onChange={(e) => setNewAcceptsCash(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Acepta pagos en efectivo</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">
+                      La estación preguntará al cliente si paga en efectivo o con tarjeta, como el POS.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newShowWelcome}
+                    onChange={(e) => setNewShowWelcome(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Mostrar mensaje de bienvenida</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">
+                      La estación mostrará la pantalla de bienvenida con el código QR de registro antes de empezar.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               <div className="flex gap-2">
                 <Button onClick={createStation} isLoading={creating} disabled={!newName.trim() || !newTerminalId.trim()}>
                   Create Station
@@ -336,6 +376,8 @@ export function SelfCheckoutSettings() {
                     setNewName('')
                     setNewTerminalId('')
                     setNewProvider(getActiveCardProvider(store?.settings))
+                    setNewAcceptsCash(false)
+                    setNewShowWelcome(true)
                     setTerminals(null)
                   }}
                 >
@@ -380,6 +422,18 @@ export function SelfCheckoutSettings() {
                       <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
                         {cardProviderDisplayName(station.provider ?? 'mercado_pago')}
                       </span>
+                      {station.acceptsCash && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          <Banknote className="h-3 w-3" />
+                          Efectivo
+                        </span>
+                      )}
+                      {station.showWelcome === false && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
+                          <EyeOff className="h-3 w-3" />
+                          Sin bienvenida
+                        </span>
+                      )}
                     </div>
 
                     {/* Conflict indicators */}

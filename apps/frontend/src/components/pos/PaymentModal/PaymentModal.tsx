@@ -13,6 +13,20 @@ import { formatCurrency, cn } from '@/lib/utils'
 import { Bolt, Banknote, BadgeCheck, Loader2 } from 'lucide-react'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
+interface PaymentModalLabels {
+  title?: string
+  amountGiven?: string
+  changeDue?: string
+  insufficient?: string
+  shortfallSuffix?: string
+  processing?: string
+  selectMethod?: string
+  chargePrefix?: string
+  payPrefix?: string
+  card?: string
+  transfer?: string
+}
+
 interface PaymentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -22,9 +36,11 @@ interface PaymentModalProps {
   mpPointEnabled?: boolean
   cardProviderLabel?: string
   isLoading?: boolean
+  labels?: PaymentModalLabels
+  methodLabels?: Partial<Record<PaymentMethod, string>>
 }
 
-export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, cardProviderLabel, isLoading }: PaymentModalProps) {
+export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, cardProviderLabel, isLoading, labels, methodLabels }: PaymentModalProps) {
   const [selected, setSelected] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState('')
   const autoConfirmed = useRef(false)
@@ -70,7 +86,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
     <Modal open={open} onOpenChange={handleOpenChange}>
       <ModalContent className="max-w-sm">
         <ModalHeader>
-          <ModalTitle>Select Payment Method</ModalTitle>
+          <ModalTitle>{labels?.title ?? 'Select Payment Method'}</ModalTitle>
           <ModalDescription>
             Total: {formatCurrency(total)}
           </ModalDescription>
@@ -85,6 +101,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             layout="vertical"
             mpPointEnabled={mpPointEnabled}
             cardProviderLabel={cardProviderLabel}
+            methodLabels={methodLabels}
           />
         </div>
 
@@ -93,7 +110,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             <label className="block">
               <span className="font-label font-bold text-xs uppercase tracking-wider text-on-surface-variant mb-2 flex items-center gap-1.5">
                 <Banknote className="h-3.5 w-3.5" />
-                Amount Given
+                {labels?.amountGiven ?? 'Amount Given'}
               </span>
               <div className="relative mt-1.5">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold text-lg">
@@ -130,15 +147,15 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
               )}>
                 <span className="font-label font-bold text-xs flex items-center gap-1.5">
                   {cashValid ? (
-                    <><BadgeCheck className="h-4 w-4" /> Change Due</>
+                    <><BadgeCheck className="h-4 w-4" /> {labels?.changeDue ?? 'Change Due'}</>
                   ) : (
-                    <><Banknote className="h-4 w-4" /> Insufficient</>
+                    <><Banknote className="h-4 w-4" /> {labels?.insufficient ?? 'Insufficient'}</>
                   )}
                 </span>
                 <span className="font-headline font-bold text-lg">
                   {cashValid
                     ? formatCurrency(changeDue)
-                    : formatCurrency(Math.abs(total - parsedCashGiven)) + ' short'}
+                    : formatCurrency(Math.abs(total - parsedCashGiven)) + (labels?.shortfallSuffix ?? ' short')}
                 </span>
               </div>
             )}
@@ -158,12 +175,12 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             <Bolt className="h-5 w-5" />
           )}
           {isLoading
-            ? 'Processing…'
+            ? (labels?.processing ?? 'Processing…')
             : !selected
-              ? 'Select a method'
+              ? (labels?.selectMethod ?? 'Select a method')
               : isCash
-                ? `Charge ${formatCurrency(total)}`
-                : `Pay ${formatCurrency(total)} with ${selected === 'card' ? 'Card' : 'Transfer'}`}
+                ? `${labels?.chargePrefix ?? 'Charge'} ${formatCurrency(total)}`
+                : `${labels?.payPrefix ?? 'Pay'} ${formatCurrency(total)} with ${selected === 'card' ? (labels?.card ?? 'Card') : (labels?.transfer ?? 'Transfer')}`}
         </button>
       </ModalContent>
     </Modal>

@@ -12,6 +12,7 @@ import { ProductCard } from '@/components/pos/ProductCard'
 import { OrderSummary } from '@/components/pos/OrderSummary'
 import { QuantityStepper } from '@/components/pos/QuantityStepper'
 import { MPPointPayment } from '@/components/pos/MPPointPayment'
+import { PaymentModal } from '@/components/pos/PaymentModal'
 import { getActiveCardProvider, cardProviderDisplayName } from '@/lib/card-payments'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { RewardsPanel } from '@/components/pos/RewardsPanel'
@@ -21,7 +22,7 @@ import { CustomizeProduct as SelfCheckoutCustomizeProduct } from '@/components/s
 import { QRCodeSVG } from 'qrcode.react';
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection'
 import { PhoneInput } from '@/components/ui/PhoneInput'
-import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse, CardPaymentProviderName } from '@ultimate-pos/shared'
+import type { Promotion, Product, ProductCategory, ScanLoyaltyResult, Customer, LoyaltyCardData, LoyaltyReward, PromotionValidationResponse, CardPaymentProviderName, PaymentMethod } from '@ultimate-pos/shared'
 import {
   ShoppingBag,
   X,
@@ -47,6 +48,7 @@ import {
   RotateCcw,
   User,
   CreditCard,
+  Banknote,
 } from 'lucide-react'
 interface CartItem {
   product_id: string
@@ -98,6 +100,7 @@ export default function SelfCheckoutPage() {
   const [discount, setDiscount] = useState(0)
   const [discountLabel, setDiscountLabel] = useState('')
   const [dismissedWelcome, setDismissedWelcome] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(true)
   const [customizeProduct, setCustomizeProduct] = useState<Product | null>(null)
 
   // ─── Promotions ───────────────────────────────────────────────────────────
@@ -167,6 +170,8 @@ export default function SelfCheckoutPage() {
   // ─── Order / payment ──────────────────────────────────────────────────────
   const [orderId, setOrderId] = useState<string | null>(null)
   const [isCreatingOrder, setIsCreatingOrder] = useState(false)
+  const [acceptsCash, setAcceptsCash] = useState(false)
+  const [showPaymentChooser, setShowPaymentChooser] = useState(false)
   const [lastOrder, setLastOrder] = useState<{
     total: number
     items: { name: string; quantity: number; price: number }[]
@@ -180,6 +185,7 @@ export default function SelfCheckoutPage() {
     rewardDiscount?: number
     rewardLabel?: string
     appliedPromotions?: { promotion_id: string; name: string; discount_amount: number }[]
+    paymentMethod?: PaymentMethod
   } | null>(null)
 
   // ─── Init ─────────────────────────────────────────────────────────────────
@@ -193,7 +199,7 @@ export default function SelfCheckoutPage() {
   async function loadData() {
     try {
       const [verifyRes, productsRes, categoriesRes, promosRes] = await Promise.all([
-        api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string; provider?: CardPaymentProviderName } } }>('/self-checkout/verify'),
+        api.get<{ data: { store: { name: string; slug: string; tax_rate?: number; settings?: Record<string, unknown> }; station: { name: string; provider?: CardPaymentProviderName; acceptsCash?: boolean; showWelcome?: boolean } } }>('/self-checkout/verify'),
         api.get<{ data: Product[] }>('/self-checkout/products'),
         api.get<{ data: ProductCategory[] }>('/self-checkout/categories'),
         api.get<{ data: Promotion[] }>('/promotions').catch(() => ({ data: [] })),
@@ -205,6 +211,8 @@ export default function SelfCheckoutPage() {
       setStoreSlug(storeData.slug)
       setStationName(verifyRes.data.station.name)
       setStationProvider(verifyRes.data.station.provider ?? getActiveCardProvider(settings))
+      setAcceptsCash(Boolean(verifyRes.data.station.acceptsCash))
+      setShowWelcome(verifyRes.data.station.showWelcome !== false)
       setTaxRate(storeData.tax_rate ? Number(storeData.tax_rate) / 100 : 0)
       setTaxEnabled((settings?.taxEnabled as boolean) ?? false)
       setTaxLabel((settings?.taxLabel as string) ?? 'Tax')
@@ -705,11 +713,11 @@ export default function SelfCheckoutPage() {
   }
 
   // ─── Checkout / payment ───────────────────────────────────────────────────
-  async function handleCheckout() {
+  async function handleCheckout(method: PaymentMethod = 'card', cashGiven?: number) {
     if (cartItems.length === 0) return
     setIsCreatingOrder(true)
     try {
-      const json = await apiFetch<{ data: { id: string; metadata?: unknown } }>(
+      const json = await apiFetch<{ data: { id: string } }>(
         '/orders',
         {
           method: 'POST',
@@ -733,11 +741,18 @@ export default function SelfCheckoutPage() {
                 }))
               : undefined,
             redeemed_reward_id: redeemedRewardId || undefined,
+            payment_method: method,
+            cash_amount_given: method === 'cash' ? cashGiven : undefined,
           }),
         },
       )
       setOrderId(json.data.id)
-      setPageState('payment')
+      if (method === 'cash') {
+        // Cash is settled synchronously by the backend — no terminal polling needed.
+        handlePaid(undefined, 'cash')
+      } else {
+        setPageState('payment')
+      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error creating order')
     } finally {
@@ -745,7 +760,7 @@ export default function SelfCheckoutPage() {
     }
   }
 
-  function handlePaid(loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }) {
+  function handlePaid(loyalty?: { pointsEarned: number; pointsBefore: number; pointsAfter: number }, method: PaymentMethod = 'card') {
     const totalDiscount = discount + promoDiscount + rewardDiscount
     const tax = !taxEnabled ? 0 : taxInclusive
       ? Math.round((actualSubtotal - actualSubtotal / (1 + taxRate)) * 100) / 100
@@ -765,6 +780,7 @@ export default function SelfCheckoutPage() {
       appliedPromotions,
       loyalty,
       customerName: customerProfile?.customer?.name,
+      paymentMethod: method,
     })
     setPageState('success')
   }
@@ -787,6 +803,7 @@ export default function SelfCheckoutPage() {
     setQrExpanded(true)
     setCameraExpanded(true)
     setCustomizeProduct(null)
+    setMobileView('products')
     setPageState('browsing')
   }
 
@@ -955,10 +972,18 @@ export default function SelfCheckoutPage() {
           <div className="border-t border-outline-variant/40 px-5 py-3">
             <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
-                <CreditCard className="h-3.5 w-3.5 text-primary" />
+                {lastOrder?.paymentMethod === 'cash' ? (
+                  <Banknote className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <CreditCard className="h-3.5 w-3.5 text-primary" />
+                )}
               </div>
               <div>
-                <p className="text-[11px] font-label font-bold text-on-surface">Pago con {cardProviderDisplayName(stationProvider)}</p>
+                <p className="text-[11px] font-label font-bold text-on-surface">
+                  {lastOrder?.paymentMethod === 'cash'
+                    ? 'Pago en efectivo'
+                    : `Pago con ${cardProviderDisplayName(stationProvider)}`}
+                </p>
                 <p className="text-[10px] text-on-surface-variant">{stationName}</p>
               </div>
             </div>
@@ -1042,7 +1067,7 @@ export default function SelfCheckoutPage() {
 
         {/* Products grid or welcome hero */}
         <div className="flex-1 overflow-y-auto px-3 pb-40 lg:pb-6">
-          {!customerProfile && cartItems.length === 0 && !dismissedWelcome ? (
+          {showWelcome && !customerProfile && cartItems.length === 0 && !dismissedWelcome ? (
             <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
               <div className="relative mb-8">
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -1677,7 +1702,13 @@ export default function SelfCheckoutPage() {
           </div>
 
           <button
-            onClick={handleCheckout}
+            onClick={() => {
+              if (acceptsCash) {
+                setShowPaymentChooser(true)
+              } else {
+                void handleCheckout('card')
+              }
+            }}
             disabled={cartItems.length === 0 || isCreatingOrder}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-label font-bold text-primary-on hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
@@ -2099,6 +2130,39 @@ export default function SelfCheckoutPage() {
           </div>
         </div>
       )}
+
+      {/* ── Payment method chooser (cash-enabled stations) ──────────── */}
+      <PaymentModal
+        open={showPaymentChooser}
+        onOpenChange={setShowPaymentChooser}
+        total={
+          taxInclusive
+            ? Math.round((actualSubtotal - (discount + promoDiscount + rewardDiscount)) * 100) / 100
+            : Math.round((actualSubtotal * (1 + (taxEnabled ? taxRate : 0)) - (discount + promoDiscount + rewardDiscount)) * 100) / 100
+        }
+        acceptedMethods={['cash', 'card']}
+        mpPointEnabled
+        cardProviderLabel={cardProviderDisplayName(stationProvider)}
+        isLoading={isCreatingOrder}
+        onConfirm={(method, cashGiven) => {
+          setShowPaymentChooser(false)
+          void handleCheckout(method, cashGiven)
+        }}
+        methodLabels={{ cash: 'Efectivo', card: 'Tarjeta' }}
+        labels={{
+          title: 'Selecciona el método de pago',
+          amountGiven: 'Monto recibido',
+          changeDue: 'Cambio',
+          insufficient: 'Insuficiente',
+          shortfallSuffix: ' faltante',
+          processing: 'Procesando…',
+          selectMethod: 'Selecciona un método',
+          chargePrefix: 'Cobrar',
+          payPrefix: 'Pagar',
+          card: 'Tarjeta',
+          transfer: 'Transferencia',
+        }}
+      />
 
       {/* ── MP Point payment modal ──────────────────────────────────── */}
       <MPPointPayment
