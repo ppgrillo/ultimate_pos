@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy, HandCoins } from 'lucide-react'
 
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,13 @@ import { setStore } from '@/store/slices/storeSlice'
 const isStepRequired = (status: KitchenWorkflowStepStatus) => status === 'pending' || status === 'served' || status === 'paid'
 
 const isOptionalKitchenStep = (status: KitchenWorkflowStepStatus) => status === 'preparing' || status === 'ready'
+
+const DEFAULT_TIP_PRESETS = [10, 15, 18, 20]
+const parseTipPresets = (raw: string): number[] =>
+  raw
+    .split(',')
+    .map((value) => parseFloat(value.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0)
 
 export default function SettingsPage() {
   const dispatch = useAppDispatch()
@@ -75,6 +82,12 @@ export default function SettingsPage() {
   const [signupBonusPoints, setSignupBonusPoints] = useState(0)
   const [pointsExpirationDays, setPointsExpirationDays] = useState(0)
   const [promoPin, setPromoPin] = useState('')
+  const [tipsEnabled, setTipsEnabled] = useState(false)
+  const [tipLabel, setTipLabel] = useState('Tip')
+  const [tipPresetsInput, setTipPresetsInput] = useState(DEFAULT_TIP_PRESETS.join(', '))
+  const [tipAllowCustom, setTipAllowCustom] = useState(true)
+  const [tipMaxPercent, setTipMaxPercent] = useState(100)
+  const [tipAppliesTo, setTipAppliesTo] = useState<'all' | 'dine-in'>('all')
 
   const hydrated = useRef(false)
   const [mounted, setMounted] = useState(false)
@@ -155,6 +168,12 @@ export default function SettingsPage() {
     setSignupBonusPoints((settings?.signupBonusPoints as number) ?? 0)
     setPointsExpirationDays((settings?.pointsExpirationDays as number) ?? 0)
     setPromoPin((settings?.promoPin as string) ?? '')
+    setTipsEnabled(settings?.tipsEnabled ?? false)
+    setTipLabel(settings?.tipLabel ?? 'Tip')
+    setTipPresetsInput((settings?.tipPresets ?? DEFAULT_TIP_PRESETS).join(', '))
+    setTipAllowCustom(settings?.tipAllowCustom ?? true)
+    setTipMaxPercent(settings?.tipMaxPercent ?? 100)
+    setTipAppliesTo(settings?.tipAppliesTo ?? 'all')
 
     const design = (settings?.walletPassDesign as Record<string, unknown>) || {}
     setWalletPassDesignHexColor((design?.hexColor as string) ?? '#1F1F1F')
@@ -223,6 +242,12 @@ export default function SettingsPage() {
     signupBonusPoints !== ((settings?.signupBonusPoints as number) ?? 0) ||
     pointsExpirationDays !== ((settings?.pointsExpirationDays as number) ?? 0) ||
     promoPin !== ((settings?.promoPin as string) ?? '') ||
+    tipsEnabled !== (settings?.tipsEnabled ?? false) ||
+    tipLabel !== (settings?.tipLabel ?? 'Tip') ||
+    JSON.stringify(parseTipPresets(tipPresetsInput)) !== JSON.stringify(settings?.tipPresets ?? DEFAULT_TIP_PRESETS) ||
+    tipAllowCustom !== (settings?.tipAllowCustom ?? true) ||
+    tipMaxPercent !== (settings?.tipMaxPercent ?? 100) ||
+    tipAppliesTo !== (settings?.tipAppliesTo ?? 'all') ||
     timezone !== ((settings?.timezone as string) ?? 'America/Mexico_City') ||
 
     walletPassDesignHexColor !== (((settings?.walletPassDesign as Record<string, unknown>)?.hexColor as string) ?? '#1F1F1F') ||
@@ -302,6 +327,12 @@ export default function SettingsPage() {
         signupBonusPoints,
         pointsExpirationDays,
         promoPin: promoPin || undefined,
+        tipsEnabled,
+        tipLabel,
+        tipPresets: parseTipPresets(tipPresetsInput),
+        tipAllowCustom,
+        tipMaxPercent,
+        tipAppliesTo,
         timezone,
 
         name: designIssuerName,
@@ -1219,6 +1250,122 @@ export default function SettingsPage() {
                     Déjalo vacío para permitir descuentos sin PIN
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tips</CardTitle>
+                <CardDescription>Let staff and customers add a gratuity on top of the order total</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={tipsEnabled}
+                    onChange={(e) => setTipsEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <HandCoins className="h-5 w-5 text-on-surface-variant" />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Enable Tips</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Show a tip selector at checkout</span>
+                  </div>
+                </label>
+
+                {tipsEnabled && (
+                  <>
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Tip Label
+                      </label>
+                      <input
+                        type="text"
+                        value={tipLabel}
+                        onChange={(e) => setTipLabel(e.target.value)}
+                        placeholder="e.g. Tip, Propina, Gratuity"
+                        className="w-full bg-transparent border-none p-0 font-headline font-bold text-2xl text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                      />
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Preset Percentages
+                      </label>
+                      <input
+                        type="text"
+                        value={tipPresetsInput}
+                        onChange={(e) => setTipPresetsInput(e.target.value)}
+                        placeholder="10, 15, 18, 20"
+                        className="w-full bg-transparent border-none p-0 font-headline font-bold text-2xl text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                      />
+                      <p className="mt-2 text-xs text-on-surface-variant">Comma-separated percentages shown as quick buttons</p>
+                    </div>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Maximum Tip (%)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={tipMaxPercent}
+                        onChange={(e) => setTipMaxPercent(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                        className="w-full bg-transparent border-none p-0 font-headline font-bold text-2xl text-on-surface focus:ring-0"
+                      />
+                      <p className="mt-2 text-xs text-on-surface-variant">Cap for a custom tip percentage</p>
+                    </div>
+
+                    <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={tipAllowCustom}
+                        onChange={(e) => setTipAllowCustom(e.target.checked)}
+                        className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <span className="block text-sm font-bold text-on-surface">Allow custom amount</span>
+                        <span className="block text-xs text-on-surface-variant mt-0.5">Let the operator enter any tip percentage</span>
+                      </div>
+                    </label>
+
+                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                        Applies To
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setTipAppliesTo('all')}
+                          className={cn(
+                            'flex-1 rounded-xl border p-4 text-left transition-all',
+                            tipAppliesTo === 'all'
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
+                          )}
+                        >
+                          <span className="block text-sm font-bold">All Orders</span>
+                          <span className="block text-xs mt-1 opacity-70">Offer tips on every order</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTipAppliesTo('dine-in')}
+                          className={cn(
+                            'flex-1 rounded-xl border p-4 text-left transition-all',
+                            tipAppliesTo === 'dine-in'
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
+                          )}
+                        >
+                          <span className="block text-sm font-bold">Dine-in Only</span>
+                          <span className="block text-xs mt-1 opacity-70">Only for dine-in / table service</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

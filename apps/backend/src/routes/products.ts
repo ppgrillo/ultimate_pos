@@ -290,7 +290,7 @@ productsRouter.post('/import', requireRole('admin'), async (c) => {
       const costStr = row.cost?.trim()
       const cost = costStr ? parseFloat(costStr) : null
       const stockQtyStr = row.stock_qty?.trim()
-      const stockQty = stockQtyStr ? parseInt(stockQtyStr, 10) : null
+      const stockQty = stockQtyStr ? parseFloat(stockQtyStr) : null
       const lowStockStr = row.low_stock_threshold?.trim()
       const lowStock = lowStockStr ? parseInt(lowStockStr, 10) : null
 

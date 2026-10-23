@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars, Gift } from 'lucide-react'
+import { CheckCircle2, Receipt, Banknote, CreditCard, Building, ArrowLeftRight, Stars, Gift, HandCoins } from 'lucide-react'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
 
@@ -23,6 +23,7 @@ function ReceiptPageContent() {
   const searchParams = useSearchParams()
   const paymentMethod = searchParams.get('paymentMethod')
   const total = searchParams.get('total')
+  const tip = searchParams.get('tip')
   const changeDue = searchParams.get('changeDue')
   const pointsEarned = searchParams.get('pointsEarned')
   const pointsRedeemed = searchParams.get('pointsRedeemed')
@@ -69,6 +70,15 @@ function ReceiptPageContent() {
                   Paid with <span className="font-bold text-on-surface">{methodLabels[paymentMethod] || paymentMethod}</span>
                 </p>
                 <p className="text-lg font-headline font-bold text-on-surface">{formatCurrency(parseFloat(total))}</p>
+              </div>
+            </div>
+          )}
+          {!checkOpen && tip && Number(tip) > 0 && (
+            <div className="flex items-center gap-3 mb-3 rounded-lg bg-surface-container/80 p-3">
+              <HandCoins className="h-5 w-5 text-primary" />
+              <div className="text-left">
+                <p className="text-xs text-on-surface-variant">Tip</p>
+                <p className="text-lg font-headline font-bold text-on-surface">{formatCurrency(parseFloat(tip))}</p>
               </div>
             </div>
           )}

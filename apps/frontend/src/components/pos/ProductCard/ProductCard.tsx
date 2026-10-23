@@ -20,6 +20,7 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
   const salePrice = activePromotion && !hasPromoConditions(activePromotion)
     ? getSalePrice(product.price, activePromotion.discount_type, activePromotion.discount_value)
     : null
+  const bulkUnit = product.is_bulk && product.bulk_unit ? product.bulk_unit : null
 
   if (variant === 'dense') {
     // Entire card is clickable for faster POS interactions. Add button still works and stops propagation.
@@ -69,6 +70,9 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
             )}>
               {salePrice !== null ? formatCurrency(salePrice) : formatCurrency(product.price)}
             </p>
+            {bulkUnit && (
+              <span className="font-label text-[9px] text-on-surface-variant">/{bulkUnit}</span>
+            )}
           </div>
         </div>
         <button
@@ -126,6 +130,9 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
                 )}>
                   {salePrice !== null ? formatCurrency(salePrice) : formatCurrency(product.price)}
                 </span>
+                {bulkUnit && (
+                  <span className="block font-label text-[10px] text-on-surface-variant">per {bulkUnit}</span>
+                )}
               </div>
             </div>
           </div>
@@ -176,6 +183,9 @@ export function ProductCard({ product, onAdd, variant = 'compact', activePromoti
           )}>
             {salePrice !== null ? formatCurrency(salePrice) : formatCurrency(product.price)}
           </p>
+          {bulkUnit && (
+            <span className="font-label text-[10px] text-on-surface-variant">/{bulkUnit}</span>
+          )}
         </div>
         {(product.points ?? 0) > 0 && (
           <span className="inline-flex items-center gap-0.5 mt-0.5 text-[10px] font-label font-bold text-secondary">

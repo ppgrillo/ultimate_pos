@@ -88,4 +88,42 @@ describe('CartItemRow', () => {
     const minusBtn = screen.getAllByRole('button')[0]
     await userEvent.click(minusBtn)
   })
+
+  const bulkProduct = {
+    ...productWithImage,
+    id: 'apples',
+    name: 'Apples',
+    price: 2.5,
+    is_bulk: true,
+    bulk_unit: 'kg',
+    bulk_step: 0.5,
+  }
+
+  const bulkItem: CartItem = {
+    product_id: 'apples',
+    name: 'Apples',
+    price: 2.5,
+    quantity: 1.5,
+    variant_label: '',
+    modifiers: [],
+    notes: null,
+  }
+
+  it('shows the fractional quantity with its unit when not editable', () => {
+    render(<CartItemRow item={bulkItem} editable={false} />, {
+      preloadedState: {
+        products: { items: [bulkProduct], categories: [] },
+      },
+    })
+    expect(screen.getByText('1.5 kg')).toBeInTheDocument()
+  })
+
+  it('shows the price per bulk unit', () => {
+    render(<CartItemRow item={bulkItem} />, {
+      preloadedState: {
+        products: { items: [bulkProduct], categories: [] },
+      },
+    })
+    expect(screen.getByText('$2.50 / kg')).toBeInTheDocument()
+  })
 })

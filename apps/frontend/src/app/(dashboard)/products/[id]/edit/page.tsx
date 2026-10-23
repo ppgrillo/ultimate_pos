@@ -53,6 +53,9 @@ export default function EditProductPage() {
         track_inventory: resolved.track_inventory,
         low_stock_threshold: resolved.low_stock_threshold,
         tax_exempt: resolved.tax_exempt,
+        is_bulk: resolved.is_bulk ?? false,
+        bulk_unit: resolved.bulk_unit ?? null,
+        bulk_step: resolved.bulk_step ?? null,
       }}
     />
   )

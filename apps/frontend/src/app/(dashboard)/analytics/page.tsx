@@ -7,7 +7,8 @@ import { useGetAnalyticsSalesQuery, useGetAnalyticsProductsQuery, useGetAnalytic
 import type { AnalyticsPeriod } from '@/store/api'
 import { useAppSelector } from '@/store/hooks'
 import { formatCurrency } from '@/lib/utils'
-import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Clock } from 'lucide-react'
+import { formatQuantity } from '@ultimate-pos/shared'
+import { DollarSign, ShoppingCart, TrendingUp, Users, ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Clock, HandCoins } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -238,6 +239,13 @@ export default function AnalyticsPage() {
           value={String(overview?.newCustomers ?? 0)}
           icon={Users}
         />
+        {settings?.tipsEnabled && (
+          <KPICard
+            label={settings?.tipLabel || 'Tips'}
+            value={formatCurrency(overview?.tipsCollected ?? 0)}
+            icon={HandCoins}
+          />
+        )}
         {(sales?.pendingOrderCount ?? 0) > 0 && (
           <KPICard
             label="Pending Payment"
@@ -247,7 +255,7 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      <MetricGlossary overview={overview} taxLabel={taxLabel} taxInclusive={taxInclusive} />
+      <MetricGlossary overview={overview} taxLabel={taxLabel} taxInclusive={taxInclusive} tipsEnabled={settings?.tipsEnabled} />
 
       <div className="rounded-xl bg-surface-container/50 border border-outline-variant/30 p-5">
           <h2 className="font-label font-bold text-xs text-on-surface-variant uppercase tracking-wider mb-4">Revenue Trend</h2>
@@ -430,7 +438,7 @@ export default function AnalyticsPage() {
                         <span className="text-sm text-on-surface truncate">{p.name}</span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 text-right text-sm text-on-surface-variant">{p.quantitySold}</td>
+                    <td className="py-2.5 px-4 text-right text-sm text-on-surface-variant">{formatQuantity(p.quantitySold)}</td>
                     <td className="py-2.5 pl-4 text-right text-sm font-bold text-on-surface">{formatCurrency(p.revenue)}</td>
                   </tr>
                 ))}

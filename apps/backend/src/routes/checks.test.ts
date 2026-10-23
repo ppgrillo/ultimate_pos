@@ -7,15 +7,33 @@ const USER_ID = '22222222-2222-2222-2222-222222222222'
 const CHECK_ID = '33333333-3333-3333-3333-333333333333'
 const PRODUCT_ID = '44444444-4444-4444-4444-444444444444'
 
-const { fromMock, emitMock } = vi.hoisted(() => ({
+const { fromMock, emitMock, paymentsMock } = vi.hoisted(() => ({
   fromMock: vi.fn(),
   emitMock: vi.fn(),
+  paymentsMock: {
+    cardConfigured: false,
+    createPayment: vi.fn(),
+    providerName: 'mercado_pago' as const,
+  },
 }))
 
 vi.mock('../lib/supabase/admin', () => ({
   supabaseAdmin: {
     from: fromMock,
   },
+}))
+
+vi.mock('../services/payments', () => ({
+  isCardPaymentConfigured: () => paymentsMock.cardConfigured,
+  getActiveCardProvider: () => paymentsMock.providerName,
+  getCardProvider: () => ({
+    createPayment: paymentsMock.createPayment,
+    getPayment: vi.fn(),
+    cancelPayment: vi.fn(),
+  }),
+  getProviderCredentials: () => ({ accessToken: 'token' }),
+  getProviderTerminalId: () => 'term-1',
+  cardProviderDisplayName: () => 'Mercado Pago',
 }))
 
 vi.mock('../events', () => ({
@@ -102,6 +120,7 @@ describe('checks routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    paymentsMock.cardConfigured = false
   })
 
   afterAll(() => {
@@ -289,6 +308,12 @@ describe('checks routes', () => {
         },
       },
       {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({ data: { settings: {} }, error: null })),
+        },
+      },
+      {
         table: 'orders',
         value: {
           select: vi.fn(() => selectQuery({
@@ -349,6 +374,12 @@ describe('checks routes', () => {
         },
       },
       {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({ data: { settings: {} }, error: null })),
+        },
+      },
+      {
         table: 'orders',
         value: {
           select: vi.fn(() => selectQuery({
@@ -371,5 +402,253 @@ describe('checks routes', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error).toContain('kitchen tickets are still active')
+  })
+
+  it('adds a tip to the check total and payment when tips are enabled', async () => {
+    const paymentsInsert = vi.fn(() => insertQuery({ data: null, error: null }))
+    const ordersUpdate = vi.fn(() => updateQuery({ data: null, error: null }))
+    const checksUpdate = vi.fn(() => updateQuery({ data: { id: CHECK_ID, status: 'closed' }, error: null }))
+
+    queueFromCalls([
+      {
+        table: 'checks',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: { id: CHECK_ID, status: 'open', store_id: STORE_ID },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: { settings: { tipsEnabled: true, tipMaxPercent: 50 } },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: [{ id: 'order-1', store_id: STORE_ID, status: 'served', payment_status: 'unpaid', total: 80 }],
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'payments',
+        value: {
+          insert: paymentsInsert,
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          update: ordersUpdate,
+        },
+      },
+      {
+        table: 'checks',
+        value: {
+          update: checksUpdate,
+        },
+      },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/checks/${CHECK_ID}/close`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ payment_method: 'cash', tip: 10 }),
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.total).toBe(90)
+    expect(body.data.tip_amount).toBe(10)
+    expect(paymentsInsert).toHaveBeenCalledWith(expect.objectContaining({ amount: 90, tip_amount: 10 }))
+    expect(checksUpdate).toHaveBeenCalledWith(expect.objectContaining({ tip_amount: 10 }))
+  })
+
+  it('ignores a tip when tips are disabled', async () => {
+    const paymentsInsert = vi.fn(() => insertQuery({ data: null, error: null }))
+    const ordersUpdate = vi.fn(() => updateQuery({ data: null, error: null }))
+    const checksUpdate = vi.fn(() => updateQuery({ data: { id: CHECK_ID, status: 'closed' }, error: null }))
+
+    queueFromCalls([
+      {
+        table: 'checks',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: { id: CHECK_ID, status: 'open', store_id: STORE_ID },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({ data: { settings: {} }, error: null })),
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: [{ id: 'order-1', store_id: STORE_ID, status: 'served', payment_status: 'unpaid', total: 80 }],
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'payments',
+        value: {
+          insert: paymentsInsert,
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          update: ordersUpdate,
+        },
+      },
+      {
+        table: 'checks',
+        value: {
+          update: checksUpdate,
+        },
+      },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/checks/${CHECK_ID}/close`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ payment_method: 'cash', tip: 10 }),
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.total).toBe(80)
+    expect(body.data.tip_amount).toBe(0)
+    expect(paymentsInsert).toHaveBeenCalledWith(expect.objectContaining({ amount: 80, tip_amount: 0 }))
+  })
+
+  it('sends a card check to the terminal without closing it', async () => {
+    paymentsMock.cardConfigured = true
+    paymentsMock.createPayment.mockResolvedValue({ providerOrderId: 'MP_1' })
+    const checksUpdate = vi.fn(() => updateQuery({ data: { id: CHECK_ID, status: 'open' }, error: null }))
+
+    queueFromCalls([
+      {
+        table: 'checks',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: { id: CHECK_ID, status: 'open', store_id: STORE_ID, metadata: {} },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: { settings: { mpPointEnabled: true } },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: [{ id: 'order-1', store_id: STORE_ID, status: 'served', payment_status: 'unpaid', total: 80 }],
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'checks',
+        value: { update: checksUpdate },
+      },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/checks/${CHECK_ID}/close`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ payment_method: 'card' }),
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.providerOrderId).toBe('MP_1')
+    expect(body.data.awaiting_payment).toBe(true)
+    expect(body.data.status).toBe('open')
+    expect(paymentsMock.createPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ totalAmount: 80, terminalId: 'term-1', externalReference: CHECK_ID }),
+      expect.anything(),
+    )
+    expect(checksUpdate).toHaveBeenCalledTimes(1)
+    expect(emitMock).toHaveBeenCalledWith('order:status-changed', expect.objectContaining({ type: 'check:payment-pending' }))
+  })
+
+  it('reuses a pending card intent instead of charging the terminal twice', async () => {
+    paymentsMock.cardConfigured = true
+
+    queueFromCalls([
+      {
+        table: 'checks',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: {
+              id: CHECK_ID,
+              status: 'open',
+              store_id: STORE_ID,
+              metadata: { payment: { provider: 'mercado_pago', providerOrderId: 'MP_1', providerStatus: 'at_terminal' } },
+            },
+            error: null,
+          })),
+        },
+      },
+      {
+        table: 'stores',
+        value: {
+          select: vi.fn(() => selectQuery({ data: { settings: { mpPointEnabled: true } }, error: null })),
+        },
+      },
+      {
+        table: 'orders',
+        value: {
+          select: vi.fn(() => selectQuery({
+            data: [{ id: 'order-1', store_id: STORE_ID, status: 'served', payment_status: 'unpaid', total: 80 }],
+            error: null,
+          })),
+        },
+      },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/checks/${CHECK_ID}/close`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer test',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ payment_method: 'card' }),
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.providerOrderId).toBe('MP_1')
+    expect(body.data.awaiting_payment).toBe(true)
+    expect(paymentsMock.createPayment).not.toHaveBeenCalled()
   })
 })

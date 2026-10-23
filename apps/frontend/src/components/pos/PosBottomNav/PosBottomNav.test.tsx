@@ -26,9 +26,15 @@ describe('PosBottomNav', () => {
     })
     expect(screen.getByText('Menu')).toBeInTheDocument()
     expect(screen.getByText('Mesas')).toBeInTheDocument()
-    expect(screen.getByText('Carrito')).toBeInTheDocument()
+    expect(screen.getByText('Orden')).toBeInTheDocument()
     expect(screen.getByText('Escanear')).toBeInTheDocument()
     expect(screen.getByText('Clientes')).toBeInTheDocument()
+  })
+
+  it('labels the cart tab "Carrito" when the store has no kitchen', () => {
+    render(<PosBottomNav />)
+    expect(screen.getByText('Carrito')).toBeInTheDocument()
+    expect(screen.queryByText('Orden')).not.toBeInTheDocument()
   })
 
   it('highlights menu as active by default', () => {

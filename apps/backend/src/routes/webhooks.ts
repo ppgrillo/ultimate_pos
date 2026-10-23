@@ -7,6 +7,7 @@ import {
   getActiveCardProvider,
 } from '../services/payments'
 import { applyCardPaymentOutcome, enrichOrder } from '../services/payments/apply-outcome'
+import { applyCheckCardOutcome } from '../services/check-payment'
 import type { CardOrderStatus } from '../services/payments/types'
 
 export const webhooksRouter = new Hono()
@@ -77,6 +78,14 @@ async function getOrderByMpOrderId(mpOrderId: string) {
     .single()
 }
 
+async function getCheckByMpOrderId(mpOrderId: string) {
+  return supabaseAdmin
+    .from('checks')
+    .select('*')
+    .filter('metadata->>mpOrderId', 'eq', mpOrderId)
+    .single()
+}
+
 const STATUS_MAP: Record<string, { orderStatus?: string; paymentStatus?: string; mpStatus: CardOrderStatus }> = {
   'order.created': { mpStatus: 'created' },
   'order.at_terminal': { mpStatus: 'at_terminal' },
@@ -112,23 +121,28 @@ webhooksRouter.post('/mp-point', async (c) => {
     return c.json({ message: 'Accepted' }, 200)
   }
 
-  const { data: orderData, error: orderError } = await getOrderByMpOrderId(mpOrderId)
-  if (orderError || !orderData) {
-    console.warn(`[mp-point-webhook] Order not found for mpOrderId=${mpOrderId}`)
+  const { data: orderData } = await getOrderByMpOrderId(mpOrderId)
+
+  let checkData: Record<string, unknown> | null = null
+  if (!orderData) {
+    const { data: check } = await getCheckByMpOrderId(mpOrderId)
+    checkData = check
+  }
+
+  const target = (orderData || checkData) as Record<string, unknown> | null
+  if (!target) {
+    console.warn(`[mp-point-webhook] No order or check found for mpOrderId=${mpOrderId}`)
     return c.json({ message: 'Accepted' }, 200)
   }
 
-  const storeId = orderData.store_id
-  let storeSettings: Record<string, unknown> = {}
-  if (storeId) {
-    const { data: store } = await supabaseAdmin
-      .from('stores')
-      .select('settings')
-      .eq('id', storeId)
-      .single()
+  const storeId = target.store_id as string
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
 
-    storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  }
+  const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
 
   // The signature is recorded but no longer gates the update. MP signs Point/QR
   // notifications with a dedicated webhook key from the developers panel, not
@@ -172,24 +186,36 @@ webhooksRouter.post('/mp-point', async (c) => {
     return c.json({ message: 'Accepted' }, 200)
   }
 
-  const currentMetadata = (orderData.metadata as Record<string, unknown>) || {}
+  const currentMetadata = (target.metadata as Record<string, unknown>) || {}
+  const existingStatus = (currentMetadata.payment as { providerStatus?: string } | undefined)?.providerStatus ?? currentMetadata.mpOrderStatus
 
-  if (currentMetadata.mpOrderStatus === mapping.mpStatus) {
+  if (existingStatus === mapping.mpStatus) {
     return c.json({ message: 'Already processed' }, 200)
   }
 
   try {
-    await applyCardPaymentOutcome({
-      order: orderData,
-      currentMetadata,
-      provider: getActiveCardProvider(storeSettings),
-      providerOrderId: mpOrderId,
-      status: mapping.mpStatus,
-      detail: mpPaymentDetail || mapping.mpStatus,
-      paymentStatusOverride: mpPaymentStatus === 'approved' ? 'completed' : mapping.paymentStatus,
-    })
+    if (checkData) {
+      await applyCheckCardOutcome({
+        check: { id: checkData.id as string, store_id: storeId, metadata: currentMetadata },
+        currentMetadata,
+        provider: getActiveCardProvider(storeSettings),
+        providerOrderId: mpOrderId,
+        status: mapping.mpStatus,
+        detail: mpPaymentDetail || mapping.mpStatus,
+      })
+    } else {
+      await applyCardPaymentOutcome({
+        order: orderData!,
+        currentMetadata,
+        provider: getActiveCardProvider(storeSettings),
+        providerOrderId: mpOrderId,
+        status: mapping.mpStatus,
+        detail: mpPaymentDetail || mapping.mpStatus,
+        paymentStatusOverride: mpPaymentStatus === 'approved' ? 'completed' : mapping.paymentStatus,
+      })
+    }
   } catch (err: unknown) {
-    console.error(`[mp-point-webhook] Failed to update order: ${(err as Error).message}`)
+    console.error(`[mp-point-webhook] Failed to update ${checkData ? 'check' : 'order'}: ${(err as Error).message}`)
     return c.json({ message: 'Update failed' }, 500)
   }
 
@@ -215,23 +241,28 @@ webhooksRouter.post('/clip-pinpad', async (c) => {
 
   const pinpadRequestId = id
 
-  const { data: orderData, error: orderError } = await getOrderByMpOrderId(pinpadRequestId)
-  if (orderError || !orderData) {
-    console.warn(`[clip-pinpad-webhook] Order not found for pinpadRequestId=${pinpadRequestId}`)
+  const { data: orderData } = await getOrderByMpOrderId(pinpadRequestId)
+
+  let checkData: Record<string, unknown> | null = null
+  if (!orderData) {
+    const { data: check } = await getCheckByMpOrderId(pinpadRequestId)
+    checkData = check
+  }
+
+  const target = (orderData || checkData) as Record<string, unknown> | null
+  if (!target) {
+    console.warn(`[clip-pinpad-webhook] No order or check found for pinpadRequestId=${pinpadRequestId}`)
     return c.json({ message: 'Accepted' }, 200)
   }
 
-  const storeId = orderData.store_id
-  let storeSettings: Record<string, unknown> = {}
-  if (storeId) {
-    const { data: store } = await supabaseAdmin
-      .from('stores')
-      .select('settings')
-      .eq('id', storeId)
-      .single()
+  const storeId = target.store_id as string
+  const { data: store } = await supabaseAdmin
+    .from('stores')
+    .select('settings')
+    .eq('id', storeId)
+    .single()
 
-    storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
-  }
+  const storeSettings = decryptSettings((store?.settings as Record<string, unknown>) || {})
 
   const provider = getCardProvider('clip')
   const credentials = getProviderCredentials(storeSettings, 'clip')
@@ -245,7 +276,7 @@ webhooksRouter.post('/clip-pinpad', async (c) => {
     return c.json({ message: 'Accepted' }, 200)
   }
 
-  const currentMetadata = (orderData.metadata as Record<string, unknown>) || {}
+  const currentMetadata = (target.metadata as Record<string, unknown>) || {}
   const currentStatus = (currentMetadata.payment as { providerStatus?: string } | undefined)?.providerStatus ?? currentMetadata.mpOrderStatus
 
   if (currentStatus === payment.status) {
@@ -253,16 +284,27 @@ webhooksRouter.post('/clip-pinpad', async (c) => {
   }
 
   try {
-    await applyCardPaymentOutcome({
-      order: orderData,
-      currentMetadata,
-      provider: 'clip',
-      providerOrderId: pinpadRequestId,
-      status: payment.status,
-      detail: payment.paymentDetail,
-    })
+    if (checkData) {
+      await applyCheckCardOutcome({
+        check: { id: checkData.id as string, store_id: storeId, metadata: currentMetadata },
+        currentMetadata,
+        provider: 'clip',
+        providerOrderId: pinpadRequestId,
+        status: payment.status,
+        detail: payment.paymentDetail,
+      })
+    } else {
+      await applyCardPaymentOutcome({
+        order: orderData!,
+        currentMetadata,
+        provider: 'clip',
+        providerOrderId: pinpadRequestId,
+        status: payment.status,
+        detail: payment.paymentDetail,
+      })
+    }
   } catch (err: unknown) {
-    console.error(`[clip-pinpad-webhook] Failed to update order: ${(err as Error).message}`)
+    console.error(`[clip-pinpad-webhook] Failed to update ${checkData ? 'check' : 'order'}: ${(err as Error).message}`)
     return c.json({ message: 'Update failed' }, 500)
   }
 

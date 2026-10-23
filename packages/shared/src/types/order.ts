@@ -27,6 +27,7 @@ export interface Order {
   promo_discount: number
   applied_promotions: AppliedPromotion[]
   total: number
+  tip_amount?: number
   items: OrderItem[]
   payments?: Payment[]
   customer_name?: string | null

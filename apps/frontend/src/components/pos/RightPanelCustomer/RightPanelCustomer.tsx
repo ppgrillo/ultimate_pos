@@ -8,6 +8,8 @@ import { setCustomer } from '@/store/slices/cartSlice'
 import { cn } from '@/lib/utils'
 import { useGetCustomersQuery, useGetCustomerSummaryQuery, useGetLoyaltyCardQuery, useGetGoogleWalletSaveUrlQuery } from '@/store/api'
 import { QRScannerPopover } from '@/components/pos/QRScannerPopover'
+import { formatQuantity } from '@ultimate-pos/shared'
+import { useBulkUnit } from '@/hooks/useBulkUnit'
 import { QuickCustomerRegister } from '@/components/pos/QuickCustomerRegister'
 import { SendWhatsAppButton } from '@/components/pos/SendWhatsAppButton'
 import type { CustomerWithLoyalty } from '@/store/api'
@@ -34,6 +36,7 @@ export function RightPanelCustomer() {
   const { data: googleWalletData, isLoading: googleLoading } = useGetGoogleWalletSaveUrlQuery(passId ?? '', { skip: !passId })
   const googleSaveUrl = googleWalletData?.jwtUrl
   const customers: CustomerWithLoyalty[] = queryCustomers.length > 0 ? queryCustomers : sliceCustomers
+  const bulkUnitOf = useBulkUnit()
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -279,7 +282,13 @@ export function RightPanelCustomer() {
                             {(order.items || []).map((item: any, i: number) => (
                               <span key={i} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
                                 {item.product_name || 'Product'}
-                                {item.quantity > 1 && <span className="text-primary/50">x{item.quantity}</span>}
+                                {Number(item.quantity) !== 1 && (
+                                  <span className="text-primary/50">
+                                    {bulkUnitOf(item.product_id)
+                                      ? formatQuantity(Number(item.quantity), bulkUnitOf(item.product_id))
+                                      : `x${formatQuantity(Number(item.quantity))}`}
+                                  </span>
+                                )}
                               </span>
                             ))}
                           </div>

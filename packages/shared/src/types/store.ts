@@ -21,6 +21,13 @@ export interface StoreSettings {
   taxLabel: string
   taxInclusive: boolean
   taxExemptEnabled: boolean
+  // Tips — captured at checkout / account close, added on top of the total
+  tipsEnabled?: boolean
+  tipLabel?: string
+  tipPresets?: number[]
+  tipAllowCustom?: boolean
+  tipMaxPercent?: number
+  tipAppliesTo?: 'all' | 'dine-in'
   specialInstructionsEnabled: boolean
   checkoutMode: 'order-only' | 'payment-required' | 'order-first-pay-later'
   acceptedPaymentMethods: PaymentMethod[]

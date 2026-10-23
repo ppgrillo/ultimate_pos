@@ -3,6 +3,7 @@
 import { type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { PosHeader } from '@/components/pos/PosHeader'
+import { ActiveTableBar } from '@/components/pos/ActiveTableBar'
 import { CustomerQuickBar } from '@/components/pos/CustomerQuickBar'
 import { FloatingCartBar } from '@/components/pos/FloatingCartBar'
 import { PosBottomNav } from '@/components/pos/PosBottomNav'
@@ -40,6 +41,8 @@ export function PosLayout({
       <PosHeader
         onMenuClick={() => dispatch(openDrawer())}
       />
+
+      <ActiveTableBar />
 
       <div className={cn(
         'flex flex-1 lg:flex-row',

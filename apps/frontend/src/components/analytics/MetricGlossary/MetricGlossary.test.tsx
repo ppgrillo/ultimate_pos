@@ -14,6 +14,7 @@ const overview: AnalyticsOverview = {
   grossSales: 70350,
   discounts: 2798,
   taxCollected: 1200,
+  tipsCollected: 0,
   itemsSold: 187,
   cogs: 12000,
   grossProfit: 55552,

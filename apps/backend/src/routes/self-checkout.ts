@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase/admin'
 import { selfCheckoutAuth } from '../middleware/self-checkout'
 import { notFound, badRequest } from '../middleware/error'
 import type { SelfCheckoutStation } from '@ultimate-pos/shared'
+import { computeOrderTotals, resolveTip, round2 } from '@ultimate-pos/shared'
 import { decryptSettings } from '../lib/settings'
 import {
   isPromotionActive,
@@ -353,7 +354,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
       ? Math.min(incomingUnitPrice, expectedPromotionalPrice)
       : expectedPromotionalPrice
 
-    const itemTotal = unitPrice * item.quantity
+    const itemTotal = round2(unitPrice * item.quantity)
     subtotal += itemTotal
     const isExempt = taxExemptEnabled && product?.tax_exempt === true
     if (!isExempt) taxableSubtotal += itemTotal
@@ -410,20 +411,36 @@ selfCheckoutRouter.post('/orders', async (c) => {
     }
   }
 
-  const totalDiscount = disc + promoDisc + rewardDiscount
+  const interim = computeOrderTotals({
+    subtotal,
+    taxableSubtotal,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount: disc,
+    promoDiscount: promoDisc,
+    rewardDiscount,
+  })
 
-  let tax = 0
-  if (taxEnabled && taxRate > 0) {
-    if (taxInclusive) {
-      tax = Math.round((taxableSubtotal - taxableSubtotal / (1 + taxRate)) * 100) / 100
-    } else {
-      tax = Math.round(taxableSubtotal * taxRate * 100) / 100
-    }
-  }
+  const tip = resolveTip(body.tip, {
+    tipEnabled: (settings.tipsEnabled as boolean) ?? false,
+    tipAppliesTo: (settings.tipAppliesTo as 'all' | 'dine-in') ?? 'all',
+    orderType: 'takeaway',
+    tipMaxPercent: settings.tipMaxPercent as number | undefined,
+    tipBase: interim.baseTotal,
+  })
 
-  const total = taxInclusive
-    ? Math.round((subtotal - totalDiscount) * 100) / 100
-    : Math.round((subtotal + tax - totalDiscount) * 100) / 100
+  const { tax, total } = computeOrderTotals({
+    subtotal,
+    taxableSubtotal,
+    taxRate,
+    taxEnabled,
+    taxInclusive,
+    discount: disc,
+    promoDiscount: promoDisc,
+    rewardDiscount,
+    tip,
+  })
 
   const tz = (settings?.timezone as string) || 'UTC'
   const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -464,6 +481,7 @@ selfCheckoutRouter.post('/orders', async (c) => {
       discount_label: disc > 0 ? (discount_label || 'Discount') : null,
       promo_discount: promoDisc,
       applied_promotions: validatedCartPromotions,
+      tip_amount: tip,
       total,
       notes: null,
       metadata: { stationId: station.id, stationName: station.name, source: 'self-checkout' },

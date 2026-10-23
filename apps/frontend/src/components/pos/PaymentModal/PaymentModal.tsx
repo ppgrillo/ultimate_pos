@@ -9,7 +9,9 @@ import {
   ModalDescription,
 } from '@/components/ui/Modal'
 import { PaymentMethodSelector } from '@/components/pos/PaymentMethodSelector'
+import { TipSelector } from '@/components/pos/TipSelector'
 import { formatCurrency, cn } from '@/lib/utils'
+import { round2 } from '@ultimate-pos/shared'
 import { Bolt, Banknote, BadgeCheck, Loader2 } from 'lucide-react'
 import type { PaymentMethod } from '@ultimate-pos/shared'
 
@@ -27,23 +29,38 @@ interface PaymentModalLabels {
   transfer?: string
 }
 
+export interface PaymentModalTipConfig {
+  enabled: boolean
+  label?: string
+  presets?: number[]
+  allowCustom?: boolean
+  maxPercent?: number
+}
+
 interface PaymentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   total: number
-  onConfirm: (method: PaymentMethod, cashGiven?: number) => void
+  onConfirm: (method: PaymentMethod, cashGiven?: number, tip?: number) => void
   acceptedMethods?: PaymentMethod[]
   mpPointEnabled?: boolean
   cardProviderLabel?: string
   isLoading?: boolean
   labels?: PaymentModalLabels
   methodLabels?: Partial<Record<PaymentMethod, string>>
+  tipConfig?: PaymentModalTipConfig
+  errorMessage?: string | null
 }
 
-export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, cardProviderLabel, isLoading, labels, methodLabels }: PaymentModalProps) {
+export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMethods, mpPointEnabled, cardProviderLabel, isLoading, labels, methodLabels, tipConfig, errorMessage }: PaymentModalProps) {
   const [selected, setSelected] = useState<PaymentMethod | null>(null)
   const [cashGiven, setCashGiven] = useState('')
+  const [tip, setTip] = useState(0)
   const autoConfirmed = useRef(false)
+
+  const tipEnabled = tipConfig?.enabled ?? false
+  const effectiveTip = tipEnabled ? tip : 0
+  const grandTotal = round2(total + effectiveTip)
 
   useEffect(() => {
     if (open) {
@@ -65,20 +82,21 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
 
   const isCash = selected === 'cash'
   const parsedCashGiven = parseFloat(cashGiven) || 0
-  const changeDue = isCash ? Math.max(0, Math.round((parsedCashGiven - total) * 100) / 100) : 0
-  const cashValid = parsedCashGiven >= total
+  const changeDue = isCash ? Math.max(0, round2(parsedCashGiven - grandTotal)) : 0
+  const cashValid = parsedCashGiven >= grandTotal
 
   const handleConfirm = () => {
     if (!selected) return
     if (isCash && !cashValid) return
-    onConfirm(selected, isCash ? parsedCashGiven : undefined)
+    onConfirm(selected, isCash ? parsedCashGiven : undefined, effectiveTip > 0 ? effectiveTip : undefined)
     setSelected(null)
     setCashGiven('')
+    setTip(0)
   }
 
   const handleOpenChange = (v: boolean) => {
     if (isLoading) return // block closing while processing
-    if (!v) { setSelected(null); setCashGiven('') }
+    if (!v) { setSelected(null); setCashGiven(''); setTip(0) }
     onOpenChange(v)
   }
 
@@ -88,16 +106,30 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
         <ModalHeader>
           <ModalTitle>{labels?.title ?? 'Select Payment Method'}</ModalTitle>
           <ModalDescription>
-            Total: {formatCurrency(total)}
+            Total: {formatCurrency(grandTotal)}
           </ModalDescription>
         </ModalHeader>
+
+        {tipEnabled && (
+          <div className="py-2">
+            <TipSelector
+              tip={tip}
+              base={total}
+              onChange={setTip}
+              label={tipConfig?.label}
+              presets={tipConfig?.presets}
+              allowCustom={tipConfig?.allowCustom}
+              maxPercent={tipConfig?.maxPercent}
+            />
+          </div>
+        )}
 
         <div className="py-2">
           <PaymentMethodSelector
             selected={selected}
             onSelect={setSelected}
             acceptedMethods={acceptedMethods}
-            amount={total}
+            amount={grandTotal}
             layout="vertical"
             mpPointEnabled={mpPointEnabled}
             cardProviderLabel={cardProviderLabel}
@@ -123,7 +155,7 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
                   step={0.01}
                   value={cashGiven}
                   onChange={(e) => setCashGiven(e.target.value)}
-                  placeholder={formatCurrency(total)}
+                  placeholder={formatCurrency(grandTotal)}
                   className={cn(
                     'w-full rounded-lg border bg-surface-container-high py-3 pl-8 pr-3 text-lg font-headline font-bold text-on-surface placeholder:text-on-surface-variant/30 transition-all',
                     'focus-visible:outline-none focus-visible:ring-2',
@@ -155,11 +187,17 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
                 <span className="font-headline font-bold text-lg">
                   {cashValid
                     ? formatCurrency(changeDue)
-                    : formatCurrency(Math.abs(total - parsedCashGiven)) + (labels?.shortfallSuffix ?? ' short')}
+                    : formatCurrency(Math.abs(grandTotal - parsedCashGiven)) + (labels?.shortfallSuffix ?? ' short')}
                 </span>
               </div>
             )}
           </div>
+        )}
+
+        {errorMessage && (
+          <p className="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-label font-bold text-error">
+            {errorMessage}
+          </p>
         )}
 
         <button
@@ -179,8 +217,8 @@ export function PaymentModal({ open, onOpenChange, total, onConfirm, acceptedMet
             : !selected
               ? (labels?.selectMethod ?? 'Select a method')
               : isCash
-                ? `${labels?.chargePrefix ?? 'Charge'} ${formatCurrency(total)}`
-                : `${labels?.payPrefix ?? 'Pay'} ${formatCurrency(total)} with ${selected === 'card' ? (labels?.card ?? 'Card') : (labels?.transfer ?? 'Transfer')}`}
+                ? `${labels?.chargePrefix ?? 'Charge'} ${formatCurrency(grandTotal)}`
+                : `${labels?.payPrefix ?? 'Pay'} ${formatCurrency(grandTotal)} with ${selected === 'card' ? (labels?.card ?? 'Card') : (labels?.transfer ?? 'Transfer')}`}
         </button>
       </ModalContent>
     </Modal>

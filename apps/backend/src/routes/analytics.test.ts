@@ -122,7 +122,9 @@ describe('analytics routes', () => {
     const currentQuery = listQuery({ data: [PAID_ORDER], error: null })
     queueFromCalls([
       { table: 'orders', value: currentQuery },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       { table: 'orders', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
     ])
 
     const res = await app.fetch(new Request(`http://localhost/analytics/sales?${CUSTOM_PARAMS}`, {
@@ -140,6 +142,39 @@ describe('analytics routes', () => {
     expect(body.data.revenueChange).toBeNull()
   })
 
+  it('GET /sales adds kitchen check tips to revenue and the trend', async () => {
+    const currentQuery = listQuery({ data: [PAID_ORDER], error: null })
+    queueFromCalls([
+      { table: 'orders', value: currentQuery },
+      {
+        table: 'checks',
+        value: listQuery({ data: [{ tip_amount: '12.50', created_at: '2026-07-31T19:45:00.000Z' }], error: null }),
+      },
+      { table: 'orders', value: listQuery({ data: [PAID_ORDER], error: null }) },
+      {
+        table: 'checks',
+        value: listQuery({ data: [{ tip_amount: '2.50', created_at: '2026-07-30T19:45:00.000Z' }], error: null }),
+      },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/analytics/sales?${CUSTOM_PARAMS}`, {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+
+    // 350 (order) + 12.50 (check tip) — matches Σ payments.amount
+    expect(body.data.revenue).toBe(362.5)
+    // prev: 350 + 2.50 → (362.5 - 352.5) / 352.5 * 100
+    expect(body.data.revenueChange).toBeCloseTo(2.8, 3)
+
+    // the tip lands on the same hour as the order but adds no order count
+    const hour = body.data.revenueByTime.find((b: any) => b.label === '19:00')
+    expect(hour.revenue).toBe(362.5)
+    expect(hour.count).toBe(1)
+  })
+
   it('GET /overview filters out cancelled orders and ignores failed payments', async () => {
     const currentQuery = listQuery({ data: [PAID_ORDER], error: null })
     const prevQuery = listQuery({ data: [], error: null })
@@ -148,6 +183,8 @@ describe('analytics routes', () => {
       { table: 'orders', value: prevQuery },
       { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
       { table: 'expenses', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       { table: 'order_items', value: listQuery({ data: [], error: null }) },
     ])
 
@@ -167,6 +204,7 @@ describe('analytics routes', () => {
     expect(body.data.grossSales).toBe(350)
     expect(body.data.discounts).toBe(0)
     expect(body.data.taxCollected).toBe(0)
+    expect(body.data.tipsCollected).toBe(0)
     expect(body.data.itemsSold).toBe(0)
     expect(body.data.cogs).toBe(0)
     expect(body.data.grossProfit).toBe(350)
@@ -191,6 +229,8 @@ describe('analytics routes', () => {
       { table: 'orders', value: listQuery({ data: [], error: null }) },
       { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
       { table: 'expenses', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       { table: 'order_items', value: listQuery({ data: [], error: null }) },
     ])
 
@@ -216,11 +256,36 @@ describe('analytics routes', () => {
     expect(body.data.paymentStatusBreakdown).toEqual({ paid: 1, unpaid: 1 })
   })
 
+  it('GET /overview sums tips from orders and closed checks', async () => {
+    const tippedOrder = { ...PAID_ORDER, id: 'tipped-1', tip_amount: '5.00', total: '355.00' }
+    queueFromCalls([
+      { table: 'orders', value: listQuery({ data: [tippedOrder], error: null }) },
+      { table: 'orders', value: listQuery({ data: [], error: null }) },
+      { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
+      { table: 'expenses', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [{ tip_amount: '12.50' }], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+      { table: 'order_items', value: listQuery({ data: [], error: null }) },
+    ])
+
+    const res = await app.fetch(new Request(`http://localhost/analytics/overview?${CUSTOM_PARAMS}`, {
+      headers: { Authorization: 'Bearer test' },
+    }))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.data.tipsCollected).toBe(17.5)
+    // 355 (order total already carries its 5.00 tip) + 12.50 (check tip) — matches Σ payments.amount
+    expect(body.data.revenue).toBe(367.5)
+  })
+
   it('GET /sales excludes unpaid orders from revenue and from the trend series', async () => {
     const currentQuery = listQuery({ data: [PAID_ORDER, UNPAID_ORDER], error: null })
     queueFromCalls([
       { table: 'orders', value: currentQuery },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       { table: 'orders', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
     ])
 
     const res = await app.fetch(new Request(`http://localhost/analytics/sales?${CUSTOM_PARAMS}`, {
@@ -264,6 +329,8 @@ describe('analytics routes', () => {
       { table: 'orders', value: listQuery({ data: [], error: null }) },
       { table: 'customers', value: listQuery({ data: [], count: 0, error: null }) },
       { table: 'expenses', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       {
         table: 'order_items',
         value: listQuery({
@@ -335,6 +402,8 @@ describe('analytics routes', () => {
           error: null,
         }),
       },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
       { table: 'order_items', value: listQuery({ data: [], error: null }) },
     ])
 
@@ -404,7 +473,10 @@ describe('analytics routes', () => {
       ],
       error: null,
     })
-    queueFromCalls([{ table: 'orders', value: currentQuery }])
+    queueFromCalls([
+      { table: 'orders', value: currentQuery },
+      { table: 'checks', value: listQuery({ data: [], error: null }) },
+    ])
 
     const res = await app.fetch(new Request('http://localhost/analytics/dashboard-stats?tz=UTC', {
       headers: { Authorization: 'Bearer test' },

@@ -13,6 +13,7 @@ import { ProductMobileCard } from '@/components/products/ProductMobileCard'
 import { ImportModal } from '@/components/products/ImportModal'
 import { BulkImageUpload } from '@/components/products/BulkImageUpload'
 import { formatCurrency } from '@/lib/utils'
+import { formatQuantity } from '@ultimate-pos/shared'
 import { useAppSelector } from '@/store/hooks'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useDeleteProductsBatchMutation, useGetCategoriesQuery, useGetProductsQuery, useToggleProductPinMutation, usePrefetch } from '@/store/api'
@@ -29,6 +30,8 @@ interface ProductRow {
   stock_qty: number | null
   track_inventory: boolean
   low_stock_threshold: number | null
+  is_bulk: boolean
+  bulk_unit: string | null
 }
 
 function ProductAvatar({ imageUrl }: { imageUrl: string | null }) {
@@ -105,6 +108,8 @@ export default function ProductsPage() {
         stock_qty: p.stock_qty,
         track_inventory: p.track_inventory,
         low_stock_threshold: p.low_stock_threshold,
+        is_bulk: p.is_bulk ?? false,
+        bulk_unit: p.bulk_unit ?? null,
       })),
     [products, categoryMap],
   )
@@ -244,7 +249,7 @@ export default function ProductsPage() {
               return (
                 <div className="flex items-center gap-2">
                   <span className={isLow ? 'text-error font-bold' : ''}>
-                    {p.stock_qty ?? 0}
+                    {formatQuantity(p.stock_qty ?? 0, p.is_bulk ? p.bulk_unit : null)}
                   </span>
                   {isLow && (
                     <span className="inline-flex items-center rounded-full bg-error/15 px-2 py-0.5 text-[10px] font-bold text-error">

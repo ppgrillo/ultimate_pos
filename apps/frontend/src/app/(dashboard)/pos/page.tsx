@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { setCustomizeProductId, setQuickSaleOpen } from '@/store/slices/posSlice'
+import { setCustomizeProductId, setBulkProductId, setQuickSaleOpen } from '@/store/slices/posSlice'
 import { addItem } from '@/store/slices/cartSlice'
 import { clearAutoPromotions } from '@/store/slices/cartSlice'
 import { PosLayout } from '@/components/pos/PosLayout'
@@ -12,9 +12,11 @@ import { PosCart } from '@/components/pos/PosCart'
 import { CheckoutPanel } from '@/components/pos/CheckoutPanel'
 import { CustomerDrawer } from '@/components/pos/CustomerDrawer'
 import { CustomizeProduct } from '@/components/pos/CustomizeProduct'
+import { BulkQuantityModal } from '@/components/pos/BulkQuantityModal'
 import { QuickSaleModal } from '@/components/pos/QuickSaleModal'
 import { ProductCard } from '@/components/pos/ProductCard'
 import { FeaturedProductCard } from '@/components/pos/FeaturedProductCard'
+import { TablesWorkspace } from '@/components/pos/TablesWorkspace'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PackageOpen } from 'lucide-react'
 import type { Product } from '@ultimate-pos/shared'
@@ -35,6 +37,7 @@ export default function PosPage() {
   const searchQuery = useAppSelector((s) => s.pos.searchQuery)
   const quickSaleOpen = useAppSelector((s) => s.pos.quickSaleOpen)
   const autoPromotions = useAppSelector((s) => s.cart.autoPromotions)
+  const hasKitchen = useAppSelector((s) => s.storeConfig.currentStore?.settings?.hasKitchen)
   const { data: products = [], isLoading } = useGetProductsQuery()
   const { data: categories = [] } = useGetCategoriesQuery()
   const { getPromotionForProduct } = usePromotions()
@@ -54,6 +57,10 @@ export default function PosPage() {
   const featured = products.find((p) => p.points && p.points > 50)
 
   const handleAdd = useCallback((product: Product) => {
+    if (product.is_bulk) {
+      dispatch(setBulkProductId(product.id))
+      return
+    }
     if (product.modifiers && product.modifiers.length > 0) {
       dispatch(setCustomizeProductId(product.id))
       return
@@ -73,7 +80,12 @@ export default function PosPage() {
     }))
   }, [dispatch, getPromotionForProduct, autoPromotions])
 
-  const customizeModal = <CustomizeProduct />
+  const customizeModal = (
+    <>
+      <CustomizeProduct />
+      <BulkQuantityModal />
+    </>
+  )
 
   return (
     <>
@@ -87,15 +99,18 @@ export default function PosPage() {
       <div className="lg:hidden">
         <PosLayout
           menu={<PosMenu />}
+          tables={<TablesWorkspace />}
           cart={<PosCart />}
           checkout={<CheckoutPanel />}
           customerDrawer={<CustomerDrawer />}
+          enableTablesView={!!hasKitchen}
         />
       </div>
 
       {/* Desktop layout */}
       <div className="hidden h-full lg:block">
         <PosDesktopLayout
+          enableTablesView={!!hasKitchen}
           categories={categories}
           featuredProduct={featured ? (
             <FeaturedProductCard

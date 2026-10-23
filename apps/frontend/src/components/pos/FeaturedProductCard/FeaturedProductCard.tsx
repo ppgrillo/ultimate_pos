@@ -43,7 +43,12 @@ export function FeaturedProductCard({ product, onQuickBuy }: FeaturedProductCard
             )}
           </div>
           <div className="mt-auto pt-3 flex items-center justify-between">
-            <span className="font-headline font-bold text-xl text-primary">{formatCurrency(product.price)}</span>
+            <span className="font-headline font-bold text-xl text-primary">
+              {formatCurrency(product.price)}
+              {product.is_bulk && product.bulk_unit ? (
+                <span className="ml-1 font-label text-xs font-semibold text-on-surface-variant">/ {product.bulk_unit}</span>
+              ) : null}
+            </span>
             <button
               onClick={() => onQuickBuy(product)}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-label font-bold text-primary-on hover:bg-primary/90 transition-colors"
