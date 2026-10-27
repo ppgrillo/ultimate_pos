@@ -35,7 +35,7 @@ function ReceiptPageContent() {
   const checkOpen = searchParams.get('checkOpen') === '1'
   const table = searchParams.get('table')
   const store = useAppSelector((s) => s.storeConfig.currentStore)
-  const hasKitchen = store?.settings?.hasKitchen ?? true
+  const hasKitchen = store?.settings?.hasKitchen ?? false
   const hasLoyalty = store?.settings?.hasLoyalty ?? false
   const Icon = paymentMethod ? methodIcons[paymentMethod as keyof typeof methodIcons] : null
 

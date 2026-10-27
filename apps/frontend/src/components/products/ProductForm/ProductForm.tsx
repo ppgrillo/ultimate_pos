@@ -379,6 +379,11 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
             <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
               Base Price ($)
               <span className="ml-1.5 inline-flex items-center rounded-full bg-error/15 px-2 py-0.5 text-[10px] font-bold text-error">Required</span>
+              {form.is_bulk && (
+                <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary normal-case tracking-normal">
+                  per {form.bulk_unit || 'unit'}
+                </span>
+              )}
             </label>
             <div className="flex items-center gap-2">
               <span className="text-primary font-headline text-lg font-bold">$</span>
@@ -412,6 +417,11 @@ export function ProductForm({ productId, initialData }: ProductFormProps) {
           <div className="rounded-xl bg-surface-container/50 border border-outline-variant p-4">
             <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
               Cost ($)
+              {form.is_bulk && (
+                <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary normal-case tracking-normal">
+                  per {form.bulk_unit || 'unit'}
+                </span>
+              )}
             </label>
             <div className="flex items-center gap-2">
               <span className="text-on-surface-variant font-headline text-lg font-bold">$</span>

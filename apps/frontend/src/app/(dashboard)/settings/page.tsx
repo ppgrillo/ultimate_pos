@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
-import { Save, Check, X, Banknote, CreditCard, Building, CookingPot, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy, HandCoins } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy, HandCoins } from 'lucide-react'
 
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
@@ -16,13 +16,7 @@ import { getActiveCardProvider } from '@/lib/card-payments'
 import type { CardPaymentProviderName } from '@ultimate-pos/shared'
 import { SelfCheckoutSettings } from './SelfCheckoutSettings'
 import { SubscriptionStatus } from '@/components/billing/SubscriptionStatus'
-import type { KitchenWorkflowConfig, KitchenWorkflowStepStatus } from '@ultimate-pos/shared'
-import { resolveKitchenWorkflow } from '@ultimate-pos/shared'
 import { setStore } from '@/store/slices/storeSlice'
-
-const isStepRequired = (status: KitchenWorkflowStepStatus) => status === 'pending' || status === 'served' || status === 'paid'
-
-const isOptionalKitchenStep = (status: KitchenWorkflowStepStatus) => status === 'preparing' || status === 'ready'
 
 const DEFAULT_TIP_PRESETS = [10, 15, 18, 20]
 const parseTipPresets = (raw: string): number[] =>
@@ -46,9 +40,7 @@ export default function SettingsPage() {
   const [taxInclusive, setTaxInclusive] = useState(false)
   const [taxExemptEnabled, setTaxExemptEnabled] = useState(false)
   const [specialInstructionsEnabled, setSpecialInstructionsEnabled] = useState(false)
-  const [hasKitchen, setHasKitchen] = useState(true)
   const [checkoutMode, setCheckoutMode] = useState<'order-only' | 'payment-required' | 'order-first-pay-later'>('order-only')
-  const [kitchenWorkflow, setKitchenWorkflow] = useState<KitchenWorkflowConfig>(resolveKitchenWorkflow())
   const [cashEnabled, setCashEnabled] = useState(true)
   const [cardEnabled, setCardEnabled] = useState(true)
   const [transferEnabled, setTransferEnabled] = useState(true)
@@ -144,9 +136,7 @@ export default function SettingsPage() {
     setTaxInclusive(settings?.taxInclusive ?? false)
     setTaxExemptEnabled(settings?.taxExemptEnabled ?? false)
     setSpecialInstructionsEnabled(settings?.specialInstructionsEnabled ?? true)
-    setHasKitchen(settings?.hasKitchen ?? true)
     setCheckoutMode(settings?.checkoutMode ?? 'order-only')
-    setKitchenWorkflow(resolveKitchenWorkflow(settings?.kitchenWorkflow))
     const methods = settings?.acceptedPaymentMethods ?? ['cash', 'card', 'transfer']
     setCashEnabled(methods.includes('cash'))
     setCardEnabled(methods.includes('card'))
@@ -218,9 +208,7 @@ export default function SettingsPage() {
     taxInclusive !== (settings?.taxInclusive ?? false) ||
     taxExemptEnabled !== (settings?.taxExemptEnabled ?? false) ||
     specialInstructionsEnabled !== (settings?.specialInstructionsEnabled ?? true) ||
-    hasKitchen !== (settings?.hasKitchen ?? true) ||
     checkoutMode !== (settings?.checkoutMode ?? 'order-only') ||
-    JSON.stringify(kitchenWorkflow) !== JSON.stringify(resolveKitchenWorkflow(settings?.kitchenWorkflow)) ||
     JSON.stringify(enabledMethods) !== JSON.stringify(currentMethods) ||
     mpPointEnabled !== (settings?.mpPointEnabled ?? false) ||
     mpPointTerminalId !== (settings?.mpPointTerminalId ?? '') ||
@@ -273,20 +261,6 @@ export default function SettingsPage() {
     designHeroImageUrl !== (((settings?.walletPassDesign as Record<string, unknown>)?.heroImageUrl as string) ?? '') ||
     businessAddress !== ((settings?.address as string) ?? '')
 
-  const updateWorkflowStep = (
-    status: KitchenWorkflowStepStatus,
-    patch: Partial<KitchenWorkflowConfig[number]>,
-  ) => {
-    setKitchenWorkflow((prev) => prev.map((step) => {
-      if (step.status !== status) return step
-      const next = { ...step, ...patch }
-      if (isStepRequired(status)) {
-        next.enabled = true
-      }
-      return next
-    }))
-  }
-
   const handleSave = async () => {
     try {
       await updateStoreSettings({
@@ -300,9 +274,7 @@ export default function SettingsPage() {
         taxInclusive,
         taxExemptEnabled,
         specialInstructionsEnabled,
-        hasKitchen,
         checkoutMode,
-        kitchenWorkflow,
         acceptedPaymentMethods: enabledMethods,
         mpPointEnabled,
         mpPointTerminalId,
@@ -361,8 +333,6 @@ export default function SettingsPage() {
         },
       }).unwrap()
 
-      const normalizedWorkflow = resolveKitchenWorkflow(kitchenWorkflow)
-      setKitchenWorkflow(normalizedWorkflow)
       const refreshed = await refetchStore()
       if (refreshed.data) {
         dispatch(setStore(refreshed.data))
@@ -604,68 +574,6 @@ export default function SettingsPage() {
                     <span className="block text-xs text-on-surface-variant mt-0.5">Allow customers to add notes or special requests when customizing products</span>
                   </div>
                 </label>
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hasKitchen}
-                    onChange={(e) => setHasKitchen(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <CookingPot className="h-5 w-5 text-on-surface-variant" />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Has Kitchen / Food Service</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Show kitchen-related messaging — disable for retail or service-based businesses</span>
-                  </div>
-                </label>
-
-                {hasKitchen && (
-                  <div className="rounded-xl border border-outline-variant/50 bg-surface-container/20 p-4">
-                    <div className="mb-3">
-                      <h4 className="text-sm font-bold text-on-surface">Kitchen Workflow</h4>
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        Rename each step and enable/disable optional steps. Enabled steps appear in timeline and flow actions.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      {kitchenWorkflow.map((step) => {
-                        const required = isStepRequired(step.status)
-
-                        return (
-                          <div key={step.status} className="rounded-lg border border-outline-variant/40 bg-surface-container/40 p-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[10px] uppercase tracking-wider text-on-surface-variant">{step.status}</p>
-                              <input
-                                value={step.label}
-                                onChange={(e) => updateWorkflowStep(step.status, { label: e.target.value })}
-                                className="mt-1 h-9 w-full rounded-md border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/50"
-                                placeholder="Step label"
-                              />
-                            </div>
-
-                            <div className="mt-3 grid grid-cols-1 gap-2">
-                              <label className="flex items-center gap-2 text-xs text-on-surface-variant">
-                                <input
-                                  type="checkbox"
-                                  checked={step.enabled}
-                                  disabled={required}
-                                  onChange={(e) => updateWorkflowStep(step.status, { enabled: e.target.checked })}
-                                  className="h-4 w-4 rounded border-outline-variant bg-surface-container text-primary"
-                                />
-                                Enabled
-                              </label>
-                              {!required && isOptionalKitchenStep(step.status) && (
-                                <p className="text-[10px] text-on-surface-variant/80">
-                                  Optional step in kitchen flow. Disable to skip this stage.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -869,8 +777,7 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="checkout">
           <div className="space-y-4">
-            {!hasKitchen && (
-              <>
+            <>
                 <Card>
                   <CardHeader>
                     <CardTitle>Checkout Mode</CardTitle>
@@ -967,8 +874,7 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 )}
-              </>
-            )}
+            </>
 
             <Card>
               <CardHeader>
