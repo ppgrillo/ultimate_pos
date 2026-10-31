@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { useCancelQueuedMpOrdersMutation, useGetCurrentStoreQuery, useLazyGetTerminalsQuery, useSetupPdvMutation, useUpdateStoreSettingsMutation, useSyncGoogleWalletClassMutation } from '@/store/api'
-import { Save, Check, X, Banknote, CreditCard, Building, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy, HandCoins } from 'lucide-react'
+import { Save, Check, X, Banknote, CreditCard, Building, Smartphone, List, AlertCircle, ImageIcon, ExternalLink, Store, Globe, RefreshCw, Copy, HandCoins, ChevronDown } from 'lucide-react'
 
 import { ImageUpload } from '@/components/products/ImageUpload'
 import { cn } from '@/lib/utils'
@@ -115,7 +115,8 @@ export default function SettingsPage() {
   const [businessAddress, setBusinessAddress] = useState('')
   const [timezone, setTimezone] = useState('America/Mexico_City')
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [activeTab, setActiveTab] = useState('store')
+  const [activeTab, setActiveTab] = useState('general')
+  const [credentialsExpanded, setCredentialsExpanded] = useState(false)
   const { refetch: refetchStore } = useGetCurrentStoreQuery()
   const [triggerTerminals] = useLazyGetTerminalsQuery()
   const [updateStoreSettings, { isLoading: settingsLoading }] = useUpdateStoreSettingsMutation()
@@ -461,19 +462,19 @@ export default function SettingsPage() {
       </div>
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="store">Store</TabsTrigger>
-          <TabsTrigger value="checkout">Checkout</TabsTrigger>
-          <TabsTrigger value="business">Business</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-            <TabsTrigger value="loyalty">Loyalty</TabsTrigger>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="catalog">Catálogo</TabsTrigger>
+          <TabsTrigger value="sales">Ventas</TabsTrigger>
+          <TabsTrigger value="loyalty">Lealtad</TabsTrigger>
           <TabsTrigger value="self-checkout">Self-Checkout</TabsTrigger>
+          <TabsTrigger value="billing">Suscripción</TabsTrigger>
         </TabsList>
-        <TabsContent value="store">
+        <TabsContent value="general">
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> Store Timezone</CardTitle>
-                <CardDescription>All reports, analytics, and order timestamps use this timezone</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> Zona horaria de la tienda</CardTitle>
+                <CardDescription>Todos los reportes, análisis y marcas de tiempo usarán esta zona horaria</CardDescription>
               </CardHeader>
               <CardContent>
                 <select
@@ -522,58 +523,72 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Product Defaults</CardTitle>
-                <CardDescription>Configure default product features</CardDescription>
+                <CardTitle>Datos de la tienda</CardTitle>
+                <CardDescription>Identidad de tu tienda — nombre, logo, contacto y ubicación</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hasVariants}
-                    onChange={(e) => setHasVariants(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Has Variants & Extras</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Add customization options like size, milk choice, or toppings</span>
+              <CardContent className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Logotipo de la tienda</label>
+                  <div
+                    onClick={() => document.getElementById('logo-upload')?.click()}
+                    className="flex items-center justify-center rounded-xl border-2 border-dashed border-outline-variant/50 p-8 cursor-pointer hover:border-primary/50 transition-colors"
+                  >
+                    {uploadingLogo ? (
+                      <div className="text-center">
+                        <div className="h-10 w-10 mx-auto animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <p className="text-sm text-on-surface-variant mt-3">Subiendo logotipo...</p>
+                      </div>
+                    ) : walletPassDesignLogoImageUrl ? (
+                      <div className="relative">
+                        <img src={proxyImageUrl(walletPassDesignLogoImageUrl) ?? ''} alt="Logo" className="h-24 w-24 rounded-lg object-cover border border-outline-variant/30" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setWalletPassDesignLogoImageUrl('') }}
+                          className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-error text-white text-xs shadow-lg hover:bg-error/90 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <ImageIcon className="h-10 w-10 mx-auto text-on-surface-variant/40" />
+                        <p className="text-sm text-on-surface-variant mt-3">Haz clic para subir logotipo</p>
+                        <p className="text-xs text-on-surface-variant/40 mt-1">PNG, JPEG, WebP o AVIF · Máx 3 MB</p>
+                      </div>
+                    )}
+                    <input id="logo-upload" type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="hidden" onChange={handleLogoUpload} />
                   </div>
-                </label>
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hasLoyalty}
-                    onChange={(e) => setHasLoyalty(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Enable Loyalty Points</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Assign loyalty points per sale</span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Nombre de la tienda</label>
+                  <input type="text" value={designIssuerName} onChange={(e) => { setDesignIssuerName(e.target.value); setDesignProgramName(e.target.value) }} placeholder="Mi Tienda" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
+                  <p className="text-[10px] text-on-surface-variant/60 mt-1">Usado como emisor y nombre del programa en billeteras digitales</p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Dirección física</label>
+                  <input type="text" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} placeholder="Calle, Ciudad, País" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
+                  <p className="text-[10px] text-on-surface-variant/60 mt-1">Ubicación de la tienda</p>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-on-surface mb-4">Información de contacto</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Correo electrónico</label>
+                      <input type="text" value={designContactEmail} onChange={(e) => setDesignContactEmail(e.target.value)} placeholder="hola@mitienda.com" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Teléfono</label>
+                      <input type="tel" value={designContactPhone} onChange={(e) => setDesignContactPhone(e.target.value)} placeholder="+52 555 123 4567" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Sitio web</label>
+                      <input type="text" value={designContactWebsite} onChange={(e) => setDesignContactWebsite(e.target.value)} placeholder="https://mitienda.com" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 font-mono" />
+                    </div>
                   </div>
-                </label>
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={trackInventory}
-                    onChange={(e) => setTrackInventory(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Track Inventory</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Enable stock tracking and low-stock alerts per product</span>
-                  </div>
-                </label>
-                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={specialInstructionsEnabled}
-                    onChange={(e) => setSpecialInstructionsEnabled(e.target.checked)}
-                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <span className="block text-sm font-bold text-on-surface">Special Instructions</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Allow customers to add notes or special requests when customizing products</span>
-                  </div>
-                </label>
+                </div>
               </CardContent>
             </Card>
 
@@ -693,95 +708,75 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
-
+          </div>
+        </TabsContent>
+        <TabsContent value="catalog">
+          <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Tax Configuration</CardTitle>
-                <CardDescription>Configure sales tax rates and behavior</CardDescription>
+                <CardTitle>Comportamiento por defecto de productos</CardTitle>
+                <CardDescription>Configura las opciones por defecto al crear productos</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
                   <input
                     type="checkbox"
-                    checked={taxEnabled}
-                    onChange={(e) => setTaxEnabled(e.target.checked)}
+                    checked={hasVariants}
+                    onChange={(e) => setHasVariants(e.target.checked)}
                     className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
                   />
                   <div>
-                    <span className="block text-sm font-bold text-on-surface">Enable Tax</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Apply sales tax to orders</span>
+                    <span className="block text-sm font-bold text-on-surface">Variantes y extras</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Permitir agregar opciones como tamaño, tipo de leche o toppings</span>
                   </div>
                 </label>
-
-                {taxEnabled && (
-                  <>
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                        Tax Rate (%)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.01}
-                        value={taxRateLocal}
-                        onChange={(e) => setTaxRateLocal(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-transparent border-none p-0 font-headline font-bold text-2xl text-on-surface focus:ring-0"
-                      />
-                    </div>
-
-                    <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                        Tax Label
-                      </label>
-                      <input
-                        type="text"
-                        value={taxLabel}
-                        onChange={(e) => setTaxLabel(e.target.value)}
-                        placeholder="e.g. IVA, VAT, Sales Tax"
-                        className="w-full bg-transparent border-none p-0 font-headline font-bold text-2xl text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                      />
-                    </div>
-
-                    <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={taxInclusive}
-                        onChange={(e) => setTaxInclusive(e.target.checked)}
-                        className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                      />
-                      <div>
-                        <span className="block text-sm font-bold text-on-surface">Prices include tax</span>
-                        <span className="block text-xs text-on-surface-variant mt-0.5">Tax is extracted from the price rather than added on top</span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={taxExemptEnabled}
-                        onChange={(e) => setTaxExemptEnabled(e.target.checked)}
-                        className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
-                      />
-                      <div>
-                        <span className="block text-sm font-bold text-on-surface">Per-Product Tax Exemption</span>
-                        <span className="block text-xs text-on-surface-variant mt-0.5">Allow marking individual products as tax-exempt</span>
-                      </div>
-                    </label>
-                  </>
-                )}
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={hasLoyalty}
+                    onChange={(e) => setHasLoyalty(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Puntos de lealtad</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Asignar puntos de lealtad por venta por defecto</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={trackInventory}
+                    onChange={(e) => setTrackInventory(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Control de inventario</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Habilitar seguimiento de stock y alertas de bajo inventario</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={specialInstructionsEnabled}
+                    onChange={(e) => setSpecialInstructionsEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <span className="block text-sm font-bold text-on-surface">Instrucciones especiales</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Permitir agregar notas o solicitudes especiales al personalizar productos</span>
+                  </div>
+                </label>
               </CardContent>
             </Card>
-
           </div>
         </TabsContent>
-        <TabsContent value="checkout">
+        <TabsContent value="sales">
           <div className="space-y-4">
             <>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Checkout Mode</CardTitle>
-                    <CardDescription>Control whether payment is required when completing an order</CardDescription>
+                    <CardTitle>Modo de cobro</CardTitle>
+                    <CardDescription>Controla si se requiere pago al completar una orden</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex gap-3">
@@ -794,8 +789,8 @@ export default function SettingsPage() {
                             : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
                         )}
                       >
-                        <span className="block text-sm font-bold">Order Only</span>
-                        <span className="block text-xs mt-1 opacity-70">Create orders without payment — for tracking or kitchen tickets</span>
+                        <span className="block text-sm font-bold">Solo orden</span>
+                        <span className="block text-xs mt-1 opacity-70">Crear órdenes sin pago — para seguimiento o comandas</span>
                       </button>
                       <button
                         onClick={() => setCheckoutMode('order-first-pay-later')}
@@ -806,8 +801,8 @@ export default function SettingsPage() {
                             : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
                         )}
                       >
-                        <span className="block text-sm font-bold">Order First, Pay Later</span>
-                        <span className="block text-xs mt-1 opacity-70">Create orders now, collect payment later from the sales list</span>
+                        <span className="block text-sm font-bold">Orden primero, pagar después</span>
+                        <span className="block text-xs mt-1 opacity-70">Crear orden ahora y cobrar después desde el listado de ventas</span>
                       </button>
                       <button
                         onClick={() => setCheckoutMode('payment-required')}
@@ -818,8 +813,8 @@ export default function SettingsPage() {
                             : 'border-outline-variant/50 text-on-surface-variant hover:border-on-surface-variant',
                         )}
                       >
-                        <span className="block text-sm font-bold">Payment Required</span>
-                        <span className="block text-xs mt-1 opacity-70">Require a payment method before completing each order</span>
+                        <span className="block text-sm font-bold">Pago obligatorio</span>
+                        <span className="block text-xs mt-1 opacity-70">Requiere método de pago para completar cada orden</span>
                       </button>
                     </div>
                   </CardContent>
@@ -828,8 +823,8 @@ export default function SettingsPage() {
                 {checkoutMode === 'payment-required' && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Accepted Payment Methods</CardTitle>
-                      <CardDescription>Choose which payment methods are available at checkout</CardDescription>
+                      <CardTitle>Métodos de pago aceptados</CardTitle>
+                      <CardDescription>Selecciona qué métodos de pago estarán disponibles al cobrar</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
@@ -841,8 +836,8 @@ export default function SettingsPage() {
                         />
                         <Banknote className="h-5 w-5 text-on-surface-variant" />
                         <div>
-                          <span className="block text-sm font-bold text-on-surface">Cash</span>
-                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept cash payments</span>
+                          <span className="block text-sm font-bold text-on-surface">Efectivo</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Aceptar pagos en efectivo</span>
                         </div>
                       </label>
                       <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
@@ -854,8 +849,8 @@ export default function SettingsPage() {
                         />
                         <CreditCard className="h-5 w-5 text-on-surface-variant" />
                         <div>
-                          <span className="block text-sm font-bold text-on-surface">Card</span>
-                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept credit and debit card payments</span>
+                          <span className="block text-sm font-bold text-on-surface">Tarjeta</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Aceptar pagos con tarjeta de crédito/débito</span>
                         </div>
                       </label>
                       <label className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5 cursor-pointer hover:bg-surface-container/60 transition-colors">
@@ -867,8 +862,8 @@ export default function SettingsPage() {
                         />
                         <Building className="h-5 w-5 text-on-surface-variant" />
                         <div>
-                          <span className="block text-sm font-bold text-on-surface">Transfer</span>
-                          <span className="block text-xs text-on-surface-variant mt-0.5">Accept bank transfers and deposits</span>
+                          <span className="block text-sm font-bold text-on-surface">Transferencia</span>
+                          <span className="block text-xs text-on-surface-variant mt-0.5">Aceptar transferencias y depósitos bancarios</span>
                         </div>
                       </label>
                     </CardContent>
@@ -878,13 +873,13 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Card Terminal Payments</CardTitle>
-                <CardDescription>Accept in-person credit and debit card payments via a terminal provider</CardDescription>
+                <CardTitle>Pagos con terminal</CardTitle>
+                <CardDescription>Acepta pagos con tarjeta presencial mediante un proveedor de terminales</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                    Active provider
+                    Proveedor activo
                   </label>
                   <select
                     value={activeCardProvider}
@@ -895,7 +890,7 @@ export default function SettingsPage() {
                     <option value="clip">Clip PinPad</option>
                   </select>
                   <p className="text-[10px] text-on-surface-variant/50 mt-2">
-                    Your store uses this provider for all in-person card payments. Configure its credentials below.
+                    Tu tienda usará este proveedor para todos los pagos con tarjeta presencial.
                   </p>
                 </div>
 
@@ -910,8 +905,8 @@ export default function SettingsPage() {
                   />
                   <Smartphone className="h-5 w-5 text-on-surface-variant" />
                   <div>
-                    <span className="block text-sm font-bold text-on-surface">Enable MP Point</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Mercado Pago Point Smart 2 terminal for in-person processing</span>
+                    <span className="block text-sm font-bold text-on-surface">Habilitar MP Point</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Enviar pagos con tarjeta a una terminal Mercado Pago Point</span>
                   </div>
                 </label>
                 </>)}
@@ -927,8 +922,8 @@ export default function SettingsPage() {
                   />
                   <CreditCard className="h-5 w-5 text-on-surface-variant" />
                   <div>
-                    <span className="block text-sm font-bold text-on-surface">Enable Clip PinPad</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Send card payments to a Clip PinPad / Total 3 / Ultra terminal for in-person processing</span>
+                    <span className="block text-sm font-bold text-on-surface">Habilitar Clip PinPad</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Enviar pagos con tarjeta a una terminal Clip</span>
                   </div>
                 </label>
                 </>)}
@@ -938,7 +933,7 @@ export default function SettingsPage() {
                     <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-                          Terminal ID
+                          ID de terminal
                         </label>
                         <Button
                           onClick={handleListTerminals}
@@ -955,7 +950,7 @@ export default function SettingsPage() {
                         type="text"
                         value={activeCardProvider === 'clip' ? clipTerminalId : mpPointTerminalId}
                         onChange={(e) => (activeCardProvider === 'clip' ? setClipTerminalId(e.target.value) : setMpPointTerminalId(e.target.value))}
-                        placeholder="Seleccioná una terminal de la lista"
+                        placeholder="Selecciona una terminal de la lista"
                         className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
                       />
                     </div>
@@ -978,7 +973,7 @@ export default function SettingsPage() {
                             <div>
                               <p className="text-sm font-mono text-on-surface">{t.id}</p>
                               <p className="text-[10px] text-on-surface-variant mt-0.5">
-                                {t.model} &middot; {t.operating_mode}
+                                {t.model} · {t.operating_mode}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -990,7 +985,7 @@ export default function SettingsPage() {
                                   onClick={() => handleSetupPdv(t.id)}
                                   className="text-[10px]"
                                 >
-                                  Set PDV
+                                  Configurar PDV
                                 </Button>
                               )}
                               <Button
@@ -998,7 +993,7 @@ export default function SettingsPage() {
                                 size="sm"
                                 onClick={() => handleSelectTerminal(t.id)}
                               >
-                                Use
+                                Usar
                               </Button>
                             </div>
                           </div>
@@ -1006,97 +1001,97 @@ export default function SettingsPage() {
                       </div>
                     )}
 
-                    {activeCardProvider === 'mercado_pago' && (
-                      <>
-                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                            Access Token
-                          </label>
-                          <input
-                            type="password"
-                            value={mpPointAccessToken}
-                            onChange={(e) => setMpPointAccessToken(e.target.value)}
-                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current token' : 'Enter your Mercado Pago access token'}
-                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                          />
-                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                            Your access token is stored securely and never exposed to the frontend.
-                            {settings?.mpPointEnabled && ' Leave empty to keep the existing token.'}
-                          </p>
+                    <div className="rounded-xl border border-outline-variant/50 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setCredentialsExpanded(!credentialsExpanded)}
+                        className="flex w-full items-center justify-between p-4 hover:bg-surface-container/40 transition-colors"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-on-surface text-left">Credenciales del proveedor</p>
+                          <p className="text-xs text-on-surface-variant mt-0.5 text-left">Tokens y claves (se guardan cifrados)</p>
                         </div>
+                        <ChevronDown className={cn('h-4 w-4 text-on-surface-variant transition-transform', credentialsExpanded && 'rotate-180')} />
+                      </button>
+                      {credentialsExpanded && (
+                        <div className="p-4 pt-0 space-y-3 border-t border-outline-variant/30">
+                          {activeCardProvider === 'mercado_pago' && (
+                            <>
+                              <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                                  Access Token
+                                </label>
+                                <input
+                                  type="password"
+                                  value={mpPointAccessToken}
+                                  onChange={(e) => setMpPointAccessToken(e.target.value)}
+                                  placeholder={settings?.mpPointEnabled ? 'Dejar vacío para mantener el token actual' : 'Ingresa tu access token de Mercado Pago'}
+                                  className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                                />
+                                <p className="text-[10px] text-on-surface-variant/50 mt-1">
+                                  Se almacena de forma segura y nunca se expone al frontend.
+                                </p>
+                              </div>
 
-                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                            Client Secret (Webhook HMAC)
-                          </label>
-                          <input
-                            type="password"
-                            value={mpClientSecret}
-                            onChange={(e) => setMpClientSecret(e.target.value)}
-                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago client secret'}
-                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                          />
-                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                            Used to verify webhook signatures. Stored encrypted and never exposed to the frontend.
-                            {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                            Webhook Signing Secret
-                          </label>
-                          <input
-                            type="password"
-                            value={mpWebhookSecret}
-                            onChange={(e) => setMpWebhookSecret(e.target.value)}
-                            placeholder={settings?.mpPointEnabled ? 'Leave empty to keep current secret' : 'Enter your Mercado Pago webhook signing secret'}
-                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                          />
-                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                            Used to verify webhook signatures (HMAC). Stored encrypted and never exposed to the frontend.
-                            {settings?.mpPointEnabled && ' Leave empty to keep the existing secret.'}
-                          </p>
-                        </div>
-                      </>
-                    )}
+                              <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                                  Client Secret (Webhook HMAC)
+                                </label>
+                                <input
+                                  type="password"
+                                  value={mpClientSecret}
+                                  onChange={(e) => setMpClientSecret(e.target.value)}
+                                  placeholder={settings?.mpPointEnabled ? 'Dejar vacío para mantener el secreto actual' : 'Ingresa tu client secret'}
+                                  className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                                />
+                              </div>
+                              <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                                  Webhook Signing Secret
+                                </label>
+                                <input
+                                  type="password"
+                                  value={mpWebhookSecret}
+                                  onChange={(e) => setMpWebhookSecret(e.target.value)}
+                                  placeholder={settings?.mpPointEnabled ? 'Dejar vacío para mantener el secreto actual' : 'Ingresa tu webhook signing secret'}
+                                  className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                                />
+                              </div>
+                            </>
+                          )}
 
-                    {activeCardProvider === 'clip' && (
-                      <>
-                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                            API Key
-                          </label>
-                          <input
-                            type="password"
-                            value={clipApiKey}
-                            onChange={(e) => setClipApiKey(e.target.value)}
-                            placeholder={settings?.clipEnabled ? 'Leave empty to keep current key' : 'Enter your Clip API key'}
-                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                          />
-                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                            Used to authenticate PinPad intents and refunds. Stored encrypted and never exposed to the frontend.
-                            {settings?.clipEnabled && ' Leave empty to keep the existing key.'}
-                          </p>
-                        </div>
+                          {activeCardProvider === 'clip' && (
+                            <>
+                              <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                                  API Key
+                                </label>
+                                <input
+                                  type="password"
+                                  value={clipApiKey}
+                                  onChange={(e) => setClipApiKey(e.target.value)}
+                                  placeholder={settings?.clipEnabled ? 'Dejar vacío para mantener la clave actual' : 'Ingresa tu API Key de Clip'}
+                                  className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                                />
+                              </div>
 
-                        <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
-                          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                            Clave Secreta (Secret)
-                          </label>
-                          <input
-                            type="password"
-                            value={clipApiSecret}
-                            onChange={(e) => setClipApiSecret(e.target.value)}
-                            placeholder={settings?.clipEnabled ? 'Leave empty to keep current secret' : 'Enter your Clip secret'}
-                            className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
-                          />
-                          <p className="text-[10px] text-on-surface-variant/50 mt-1">
-                            Pair of your Clip API key. Stored encrypted and never exposed to the frontend.
-                            {settings?.clipEnabled && ' Leave empty to keep the existing secret.'}
-                          </p>
+                              <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                                  Clave Secreta
+                                </label>
+                                <input
+                                  type="password"
+                                  value={clipApiSecret}
+                                  onChange={(e) => setClipApiSecret(e.target.value)}
+                                  placeholder={settings?.clipEnabled ? 'Dejar vacío para mantener el secreto actual' : 'Ingresa tu clave secreta de Clip'}
+                                  className="w-full bg-transparent border-none p-0 font-mono text-sm text-on-surface focus:ring-0 placeholder:text-on-surface-variant/30"
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
 
                     {activeCardProvider === 'mercado_pago' && (
                       <>
@@ -1367,8 +1362,8 @@ export default function SettingsPage() {
                       <RefreshCw className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <span>Google Wallet Sync</span>
-                      <p className="text-xs font-normal text-on-surface-variant mt-0.5">Push design changes to all Android wallet passes</p>
+                      <span>Sincronización con Google Wallet</span>
+                      <p className="text-xs font-normal text-on-surface-variant mt-0.5">Actualizar diseño de las tarjetas digitales en Android</p>
                     </div>
                   </div>
                 </CardTitle>
@@ -1386,34 +1381,33 @@ export default function SettingsPage() {
                     </div>
                     <div className="space-y-3">
                       <p className="text-sm font-bold text-on-surface">
-                        Your design changes are saved to the database, but they don&apos;t reach your users yet.
+                        Los cambios en el diseño se guardan, pero aún no llegan a los usuarios.
                       </p>
                       <div className="grid gap-2.5 sm:grid-cols-3">
                         <div className="flex items-center gap-2.5 rounded-lg bg-surface-container/60 border border-outline-variant/30 px-3.5 py-2.5">
                           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-[10px] font-bold text-primary">1</div>
                           <div>
-                            <p className="text-xs font-bold text-on-surface">Design</p>
-                            <p className="text-[10px] text-on-surface-variant/70">Configure above</p>
+                            <p className="text-xs font-bold text-on-surface">Diseñar</p>
+                            <p className="text-[10px] text-on-surface-variant/70">Configurar abajo</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2.5 rounded-lg bg-surface-container/60 border border-outline-variant/30 px-3.5 py-2.5">
                           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-[10px] font-bold text-primary">2</div>
                           <div>
-                            <p className="text-xs font-bold text-on-surface">Save</p>
-                            <p className="text-[10px] text-on-surface-variant/70">Store settings</p>
+                            <p className="text-xs font-bold text-on-surface">Guardar</p>
+                            <p className="text-[10px] text-on-surface-variant/70">Guardar configuración</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2.5 rounded-lg bg-surface-container/60 border border-outline-variant/30 px-3.5 py-2.5">
                           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-[10px] font-bold text-primary">3</div>
                           <div>
-                            <p className="text-xs font-bold text-on-surface">Push</p>
-                            <p className="text-[10px] text-on-surface-variant/70">Update Google class</p>
+                            <p className="text-xs font-bold text-on-surface">Sincronizar</p>
+                            <p className="text-[10px] text-on-surface-variant/70">Actualizar clase Google</p>
                           </div>
                         </div>
                       </div>
                       <p className="text-xs text-on-surface-variant/80 leading-relaxed">
-                        Click the button below <strong className="text-primary">after saving</strong> to push the latest design
-                        to Google. Android users get the update automatically — no action needed on their end.
+                        Presiona el botón <strong className="text-primary">después de guardar</strong> para enviar los cambios a Google. Los usuarios de Android recibirán la actualización automáticamente.
                       </p>
                     </div>
                   </div>
@@ -1433,52 +1427,49 @@ export default function SettingsPage() {
                     ) : (
                       <RefreshCw className="h-4 w-4" />
                     )}
-                    {syncingGoogleClass ? 'Syncing…' : googleClassSynced ? 'Class synced' : googleClassError ? 'Retry sync' : 'Push to Google Wallet'}
+                    {syncingGoogleClass ? 'Sincronizando...' : googleClassSynced ? 'Sincronizado' : googleClassError ? 'Reintentar' : 'Sincronizar con Google Wallet'}
                   </button>
                   {googleClassError && (
                     <p className="flex items-center gap-1.5 text-xs text-error">
                       <AlertCircle className="h-3.5 w-3.5" />
-                      Sync failed — check issuer ID and service account credentials.
+                      Error al sincronizar — verifica credenciales.
                     </p>
                   )}
-                  <span className="text-[11px] text-on-surface-variant/50 hidden sm:inline">
-                    {googleClassSynced ? 'Last push was successful' : 'Apple Wallet updates separately on download'}
-                  </span>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Program Info</CardTitle>
-                <CardDescription>How your loyalty card appears in Google Wallet and Apple Wallet</CardDescription>
+                <CardTitle>Vista previa del programa</CardTitle>
+                <CardDescription>Datos que aparecerán en las tarjetas digitales</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 divide-y divide-outline-variant/20">
                   <div className="flex items-center justify-between p-4">
-                    <span className="text-xs text-on-surface-variant">Business name</span>
-                    <span className="text-sm font-medium text-on-surface">{designIssuerName || <span className="text-on-surface-variant/40 italic">Not set</span>}</span>
+                    <span className="text-xs text-on-surface-variant">Nombre de la tienda</span>
+                    <span className="text-sm font-medium text-on-surface">{designIssuerName || <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</span>
                   </div>
                   <div className="flex items-center justify-between p-4">
-                    <span className="text-xs text-on-surface-variant">Logo image</span>
-                    <span className="text-sm font-medium text-on-surface">{walletPassDesignLogoImageUrl ? <span className="text-primary truncate max-w-[200px] inline-block align-middle">Uploaded</span> : <span className="text-on-surface-variant/40 italic">Not set</span>}</span>
+                    <span className="text-xs text-on-surface-variant">Logotipo</span>
+                    <span className="text-sm font-medium text-on-surface">{walletPassDesignLogoImageUrl ? <span className="text-primary">Cargado</span> : <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</span>
                   </div>
                   <div className="flex items-center justify-between p-4">
-                    <span className="text-xs text-on-surface-variant">Email</span>
-                    <span className="text-sm font-medium text-on-surface">{designContactEmail || <span className="text-on-surface-variant/40 italic">Not set</span>}</span>
+                    <span className="text-xs text-on-surface-variant">Correo</span>
+                    <span className="text-sm font-medium text-on-surface">{designContactEmail || <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</span>
                   </div>
                   <div className="flex items-center justify-between p-4">
-                    <span className="text-xs text-on-surface-variant">Phone</span>
-                    <span className="text-sm font-medium text-on-surface">{designContactPhone || <span className="text-on-surface-variant/40 italic">Not set</span>}</span>
+                    <span className="text-xs text-on-surface-variant">Teléfono</span>
+                    <span className="text-sm font-medium text-on-surface">{designContactPhone || <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</span>
                   </div>
                   <div className="flex items-center justify-between p-4">
-                    <span className="text-xs text-on-surface-variant">Website</span>
-                    <span className="text-sm font-medium text-on-surface">{designContactWebsite || <span className="text-on-surface-variant/40 italic">Not set</span>}</span>
+                    <span className="text-xs text-on-surface-variant">Sitio web</span>
+                    <span className="text-sm font-medium text-on-surface">{designContactWebsite || <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</span>
                   </div>
                 </div>
-                <button onClick={() => setActiveTab('business')} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
+                <button onClick={() => setActiveTab('general')} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
                   <Store className="h-3.5 w-3.5" />
-                  Edit business info in Business Settings
+                  Editar datos de la tienda en General
                   <ExternalLink className="h-3 w-3" />
                 </button>
               </CardContent>
@@ -1486,37 +1477,35 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Earning Rules</CardTitle>
-                <CardDescription>How customers earn and redeem points</CardDescription>
+                <CardTitle>Reglas de acumulación</CardTitle>
+                <CardDescription>Cómo se ganan y expiran los puntos</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Points per currency unit</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Puntos por unidad monetaria</label>
                     <input type="number" min={0} step={1} value={pointsPerCurrency} onChange={(e) => setPointsPerCurrency(parseFloat(e.target.value) || 0)} className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Points earned per $1 spent</p>
+                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Puntos ganados por cada unidad gastada</p>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Signup bonus</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Bono de registro</label>
                     <input type="number" min={0} step={1} value={signupBonusPoints} onChange={(e) => setSignupBonusPoints(parseInt(e.target.value) || 0)} className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Points awarded on enrollment</p>
+                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Puntos al registrarse</p>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Expiration (days)</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Expiración (días)</label>
                     <input type="number" min={0} step={1} value={pointsExpirationDays} onChange={(e) => setPointsExpirationDays(parseInt(e.target.value) || 0)} className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">0 = no expiration</p>
+                    <p className="text-[10px] text-on-surface-variant/60 mt-1">0 = sin expiración</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Points label on pass</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Etiqueta de puntos en la tarjeta</label>
                     <input type="text" value={designPointsLabel} onChange={(e) => setDesignPointsLabel(e.target.value)} placeholder="PUNTOS" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">What points are called on the wallet pass (e.g. PUNTOS, STARS)</p>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Points unit name (POS)</label>
-                    <input type="text" value={currencyUnit} onChange={(e) => setCurrencyUnit(e.target.value)} placeholder="points" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Display name in the POS (e.g. &ldquo;points&rdquo;, &ldquo;stars&rdquo;)</p>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Nombre de puntos en POS</label>
+                    <input type="text" value={currencyUnit} onChange={(e) => setCurrencyUnit(e.target.value)} placeholder="puntos" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                   </div>
                 </div>
               </CardContent>
@@ -1524,36 +1513,34 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Branding & Design</CardTitle>
-                <CardDescription>Wallet-specific visual settings</CardDescription>
+                <CardTitle>Diseño de la tarjeta digital</CardTitle>
+                <CardDescription>Configuración visual para Google Wallet y Apple Wallet</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Logo text (Apple Wallet)</label>
-                    <input type="text" value={walletPassDesignLogoText} onChange={(e) => setWalletPassDesignLogoText(e.target.value)} placeholder="Store name" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Text shown next to the logo in Apple Wallet</p>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Texto junto al logotipo (Apple Wallet)</label>
+                    <input type="text" value={walletPassDesignLogoText} onChange={(e) => setWalletPassDesignLogoText(e.target.value)} placeholder="Nombre de la tienda" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Hero image</label>
-                    <ImageUpload value={designHeroImageUrl} onChange={(v) => setDesignHeroImageUrl(v ?? '')} uploadLabel="Upload Hero Image" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Banner image for the pass, ideally 1200&times;800px</p>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Imagen hero</label>
+                    <ImageUpload value={designHeroImageUrl} onChange={(v) => setDesignHeroImageUrl(v ?? '')} uploadLabel="Subir imagen hero" />
+                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Recomendado 1200 × 800 px</p>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Pass background color</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Color de fondo de la tarjeta</label>
                     <div className="flex items-center gap-3">
                       <input type="text" value={walletPassDesignHexColor} onChange={(e) => setWalletPassDesignHexColor(e.target.value)} placeholder="#1F1F1F" className="h-10 flex-1 rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 font-mono" />
                       <div className="h-10 w-10 shrink-0 rounded-lg border border-outline-variant" style={{ backgroundColor: walletPassDesignHexColor }} />
                     </div>
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">Hex color for the pass background</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
                   <input type="checkbox" id="foilShimmer" checked={designFoilShimmer} onChange={(e) => setDesignFoilShimmer(e.target.checked)} className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary" />
                   <label htmlFor="foilShimmer" className="cursor-pointer">
-                    <span className="block text-sm font-bold text-on-surface">Foil Shimmer (Google Wallet)</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Holographic shimmer animation — makes the pass stand out in Google Wallet</span>
+                    <span className="block text-sm font-bold text-on-surface">Efecto holográfico (Google Wallet)</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Añade brillo animado para destacar la tarjeta</span>
                   </label>
                 </div>
               </CardContent>
@@ -1561,39 +1548,37 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Tiers</CardTitle>
-                <CardDescription>Loyalty levels shown on the pass</CardDescription>
+                <CardTitle>Niveles de lealtad</CardTitle>
+                <CardDescription>Niveles mostrados en la tarjeta digital</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Tier label</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Etiqueta del nivel</label>
                     <input type="text" value={designTierLabel} onChange={(e) => setDesignTierLabel(e.target.value)} placeholder="NIVEL" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">e.g. &ldquo;NIVEL&rdquo;, &ldquo;TIER&rdquo;, &ldquo;LEVEL&rdquo;</p>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Default tier (new members)</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Nivel por defecto (nuevos miembros)</label>
                     <input type="text" value={designDefaultTier} onChange={(e) => setDesignDefaultTier(e.target.value)} placeholder="BRONCE" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
-                    <p className="text-[10px] text-on-surface-variant/60 mt-1">The tier assigned when a customer first enrolls</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
                   <input type="checkbox" id="secTier" checked={designSecondaryTierEnabled} onChange={(e) => setDesignSecondaryTierEnabled(e.target.checked)} className="h-5 w-5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary" />
                   <label htmlFor="secTier" className="cursor-pointer">
-                    <span className="block text-sm font-bold text-on-surface">Enable secondary tier</span>
-                    <span className="block text-xs text-on-surface-variant mt-0.5">Show a second tier field on the pass (e.g. for sub-levels)</span>
+                    <span className="block text-sm font-bold text-on-surface">Habilitar nivel secundario</span>
+                    <span className="block text-xs text-on-surface-variant mt-0.5">Mostrar un segundo campo de nivel en la tarjeta</span>
                   </label>
                 </div>
 
                 {designSecondaryTierEnabled && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pl-8">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Secondary tier label</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Etiqueta del nivel secundario</label>
                       <input type="text" value={designSecondaryTierLabel} onChange={(e) => setDesignSecondaryTierLabel(e.target.value)} placeholder="NIVEL 2" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Secondary tier value</label>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Valor del nivel secundario</label>
                       <input type="text" value={designSecondaryTierValue} onChange={(e) => setDesignSecondaryTierValue(e.target.value)} placeholder="PLATA" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                     </div>
                   </div>
@@ -1603,36 +1588,59 @@ export default function SettingsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Pass Layout</CardTitle>
-                <CardDescription>Labels and information shown on the digital pass</CardDescription>
+                <CardTitle>Diseño y códigos</CardTitle>
+                <CardDescription>Etiquetas y elementos mostrados en la tarjeta</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Member name label</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Etiqueta "Miembro"</label>
                     <input type="text" value={designMemberNameLabel} onChange={(e) => setDesignMemberNameLabel(e.target.value)} placeholder="MIEMBRO" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Member ID label</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Etiqueta "ID Miembro"</label>
                     <input type="text" value={designMemberIdLabel} onChange={(e) => setDesignMemberIdLabel(e.target.value)} placeholder="ID MIEMBRO" className="h-10 w-full rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Barcode type</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Tipo de código de barras</label>
                   <select value={designBarcodeType} onChange={(e) => setDesignBarcodeType(e.target.value)} className="h-10 w-full max-w-xs rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
-                    <option value="QR_CODE">QR Code</option>
+                    <option value="QR_CODE">Código QR</option>
                     <option value="CODE_128">Code 128</option>
                     <option value="AZTEC">Aztec</option>
                     <option value="PDF_417">PDF 417</option>
                   </select>
-                  <p className="text-[10px] text-on-surface-variant/60 mt-1">Used for scanning loyalty cards at checkout</p>
+                  <p className="text-[10px] text-on-surface-variant/60 mt-1">Usado para escanear en caja</p>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Rewards plan (shown on pass back)</label>
-                  <textarea value={designPromotions} onChange={(e) => setDesignPromotions(e.target.value)} placeholder="Describe how customers earn and redeem points..." rows={3} className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
-                  <p className="text-[10px] text-on-surface-variant/60 mt-1">Appears on the back of the pass in both wallets</p>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Programa de recompensas (reverso de la tarjeta)</label>
+                  <textarea value={designPromotions} onChange={(e) => setDesignPromotions(e.target.value)} placeholder="Describe cómo se ganan y canjean puntos..." rows={3} className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Contacto y enlaces</CardTitle>
+                <CardDescription>Información mostrada en el reverso de la tarjeta digital</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Sitio web de la tienda</label>
+                  <input type="text" value={designHomepageUrl} onChange={(e) => setDesignHomepageUrl(e.target.value)} placeholder="https://mitienda.com" className="h-10 w-full max-w-md rounded-lg border border-outline-variant bg-surface-container px-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 font-mono" />
+                </div>
+                <div className="rounded-xl bg-surface-container/30 border border-outline-variant/50 p-5">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Globe className="h-4 w-4 text-on-surface-variant" />
+                    <p className="text-xs text-on-surface-variant">Correo: {designContactEmail || <span className="text-on-surface-variant/40 italic">Sin configurar</span>} · Teléfono: {designContactPhone || <span className="text-on-surface-variant/40 italic">Sin configurar</span>} · Sitio web: {designContactWebsite || <span className="text-on-surface-variant/40 italic">Sin configurar</span>}</p>
+                  </div>
+                  <button onClick={() => setActiveTab('general')} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
+                    <Store className="h-3.5 w-3.5" />
+                    Editar datos de la tienda en General
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
                 </div>
               </CardContent>
             </Card>
@@ -1653,9 +1661,9 @@ export default function SettingsPage() {
                     <Globe className="h-4 w-4 text-on-surface-variant" />
                     <p className="text-xs text-on-surface-variant">Email: {designContactEmail || <span className="text-on-surface-variant/40 italic">Not set</span>} &middot; Phone: {designContactPhone || <span className="text-on-surface-variant/40 italic">Not set</span>} &middot; Website: {designContactWebsite || <span className="text-on-surface-variant/40 italic">Not set</span>}</p>
                   </div>
-                  <button onClick={() => setActiveTab('business')} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
+                  <button onClick={() => setActiveTab('general')} className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors">
                     <Store className="h-3.5 w-3.5" />
-                    Edit contact info in Business Settings
+                    Editar datos de la tienda en General
                     <ExternalLink className="h-3 w-3" />
                   </button>
                 </div>
